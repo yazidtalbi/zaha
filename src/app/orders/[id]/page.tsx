@@ -1,3 +1,4 @@
+// app/orders/[id]/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -5,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import RequireAuth from "@/components/RequireAuth";
+import { Clock, CheckCircle2, Truck, PackageCheck, Ban } from "lucide-react";
 
 export default function BuyerOrderPage() {
   return (
@@ -14,22 +16,78 @@ export default function BuyerOrderPage() {
   );
 }
 
+type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
+type Product = {
+  id: string;
+  title: string;
+  photos: string[] | null;
+  price_mad: number;
+};
+
+type Order = {
+  id: string;
+  created_at: string;
+  qty: number;
+  amount_mad: number;
+  status: OrderStatus;
+  city: string | null;
+  phone: string | null;
+  address: string | null;
+  product_id: string | null;
+  products?: Product | null;
+};
+
+type OrderEvent = {
+  id: string;
+  order_id: string;
+  type:
+    | "status_changed"
+    | "payment_confirmed"
+    | "created"
+    | "note_updated"
+    | "tracking_updated";
+  payload: Record<string, any> | null;
+  created_at: string;
+};
+
 function OrderInner() {
   const { id } = useParams<{ id: string }>();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<Order | null>(null);
+  const [events, setEvents] = useState<OrderEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
     if (!_id) return;
     (async () => {
+      setLoading(true);
       const { data, error } = await supabase
         .from("orders")
         .select("*, products(*)")
         .eq("id", _id)
         .maybeSingle();
 
-      if (!error) setOrder(data);
+      if (!error) {
+        setOrder(data as Order);
+        // Try to load timeline events if table exists
+        try {
+          const { data: ev, error: evErr } = await supabase
+            .from("order_events")
+            .select("*")
+            .eq("order_id", _id)
+            .order("created_at", { ascending: true });
+          if (!evErr && ev) setEvents(ev as OrderEvent[]);
+          else setEvents(null);
+        } catch {
+          setEvents(null);
+        }
+      }
       setLoading(false);
     })();
   }, [id]);
@@ -37,7 +95,7 @@ function OrderInner() {
   if (loading) return <main className="p-4">Loading…</main>;
   if (!order) return <main className="p-4">Order not found.</main>;
 
-  const p = order.products;
+  const p = order.products ?? null;
   const img = Array.isArray(p?.photos) ? p.photos[0] : undefined;
 
   return (
@@ -48,14 +106,14 @@ function OrderInner() {
         {img ? (
           <img
             src={img}
-            alt={p?.title}
+            alt={p?.title ?? "Product"}
             className="w-16 h-16 rounded-lg object-cover"
           />
         ) : (
           <div className="w-16 h-16 bg-neutral-100 rounded-lg" />
         )}
         <div>
-          <div className="font-medium">{p?.title}</div>
+          <div className="font-medium">{p?.title ?? "Product"}</div>
           <div className="text-sm text-ink/70">
             {order.qty} × MAD {p?.price_mad}
           </div>
@@ -64,16 +122,16 @@ function OrderInner() {
 
       <div className="space-y-1 text-sm">
         <p>
-          <span className="font-medium">City:</span> {order.city}
+          <span className="font-medium">City:</span> {order.city ?? "—"}
         </p>
         <p>
-          <span className="font-medium">Address:</span> {order.address}
+          <span className="font-medium">Address:</span> {order.address ?? "—"}
         </p>
         <p>
           <span className="font-medium">Payment:</span> Cash on Delivery
         </p>
-        <p>
-          <span className="font-medium">Status:</span>{" "}
+        <p className="flex items-center gap-1">
+          <span className="font-medium">Status:</span>
           <StatusBadge status={order.status} />
         </p>
       </div>
@@ -91,7 +149,9 @@ function OrderInner() {
               /\D/g,
               ""
             )}?text=${encodeURIComponent(
-              `Salam! I'm contacting you about my order for "${p?.title}" (MAD ${p?.price_mad}).`
+              `Salam! I'm contacting you about my order for "${
+                p?.title ?? ""
+              }" (MAD ${p?.price_mad ?? ""}).`
             )}`}
             target="_blank"
             rel="noreferrer"
@@ -101,6 +161,64 @@ function OrderInner() {
           </a>
         </div>
       )}
+
+      {/* Activity timeline */}
+      <div className="mt-4 rounded-xl border p-4">
+        <h2 className="text-base font-semibold mb-3">Activity timeline</h2>
+        <ul className="space-y-3 text-sm">
+          {/* Always show creation */}
+          <li className="flex items-start gap-2">
+            <Clock className="h-4 w-4 mt-0.5" />
+            <div>
+              Order placed
+              <div className="text-xs text-ink/70">
+                {new Date(order.created_at).toLocaleString()}
+              </div>
+            </div>
+          </li>
+
+          {/* Status + payment events (if events table is available) */}
+          {events && events.length > 0 ? (
+            events
+              .filter(
+                (ev) =>
+                  ev.type === "status_changed" ||
+                  ev.type === "payment_confirmed"
+              )
+              .map((ev) => (
+                <li key={ev.id} className="flex items-start gap-2">
+                  {ev.type === "status_changed" ? (
+                    statusIcon((ev.payload?.to as OrderStatus) || "pending")
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                  )}
+                  <div>
+                    {ev.type === "status_changed" ? (
+                      <>
+                        Status changed to{" "}
+                        <span className="capitalize font-medium">
+                          {String(ev.payload?.to ?? "")}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Payment marked as{" "}
+                        <span className="font-medium text-green-700">
+                          confirmed
+                        </span>
+                      </>
+                    )}
+                    <div className="text-xs text-ink/70">
+                      {new Date(ev.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </li>
+              ))
+          ) : (
+            <li className="text-ink/70">No updates yet.</li>
+          )}
+        </ul>
+      </div>
 
       <Link
         href="/orders"
@@ -124,8 +242,25 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-green-200 text-green-900"
       : "bg-rose-200 text-rose-900";
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] ${color}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] capitalize ${color}`}
+    >
       {status}
     </span>
   );
+}
+
+function statusIcon(s: OrderStatus) {
+  switch (s) {
+    case "pending":
+      return <Clock className="h-4 w-4 mt-0.5" />;
+    case "confirmed":
+      return <CheckCircle2 className="h-4 w-4 mt-0.5" />;
+    case "shipped":
+      return <Truck className="h-4 w-4 mt-0.5" />;
+    case "delivered":
+      return <PackageCheck className="h-4 w-4 mt-0.5" />;
+    case "cancelled":
+      return <Ban className="h-4 w-4 mt-0.5" />;
+  }
 }

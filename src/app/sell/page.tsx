@@ -1,8 +1,17 @@
+// app/sell/page.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+
+type OptionValue = { id: string; label: string; price_delta_mad?: number };
+type OptionGroup = {
+  id: string;
+  name: string;
+  required?: boolean;
+  values: OptionValue[];
+};
 
 type NewProductInsert = {
   title: string;
@@ -10,8 +19,22 @@ type NewProductInsert = {
   city: string | null;
   active: boolean;
   photos: string[];
-  shop_id: string; // 👈 REQUIRED for RLS
+  shop_id: string;
+  promo_price_mad: number | null;
+  promo_starts_at: string | null;
+  promo_ends_at: string | null;
+  options_config: OptionGroup[];
 };
+
+// we'll add shop_owner at insert time
+type NewProductInsertWithOwner = NewProductInsert & { shop_owner: string };
+
+function uid() {
+  // compact UUID
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
 
 export default function SellPage() {
   const router = useRouter();
@@ -22,6 +45,79 @@ export default function SellPage() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Promo
+  const [promoPrice, setPromoPrice] = useState<string>("");
+  const [promoStart, setPromoStart] = useState<string>("");
+  const [promoEnd, setPromoEnd] = useState<string>("");
+
+  // Options Builder
+  const [groups, setGroups] = useState<OptionGroup[]>([]);
+
+  function addGroup() {
+    setGroups((gs) => [
+      ...gs,
+      {
+        id: uid(),
+        name: "Size",
+        required: true,
+        values: [{ id: uid(), label: "S", price_delta_mad: 0 }],
+      },
+    ]);
+  }
+  function removeGroup(id: string) {
+    setGroups((gs) => gs.filter((g) => g.id !== id));
+  }
+  function setGroupName(id: string, name: string) {
+    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name } : g)));
+  }
+  function toggleRequired(id: string) {
+    setGroups((gs) =>
+      gs.map((g) => (g.id === id ? { ...g, required: !g.required } : g))
+    );
+  }
+  function addValue(groupId: string) {
+    setGroups((gs) =>
+      gs.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              values: [
+                ...g.values,
+                { id: uid(), label: "New option", price_delta_mad: 0 },
+              ],
+            }
+          : g
+      )
+    );
+  }
+  function removeValue(groupId: string, valueId: string) {
+    setGroups((gs) =>
+      gs.map((g) =>
+        g.id === groupId
+          ? { ...g, values: g.values.filter((v) => v.id !== valueId) }
+          : g
+      )
+    );
+  }
+  function updateValue(
+    groupId: string,
+    valueId: string,
+    patch: Partial<OptionValue>
+  ) {
+    setGroups((gs) =>
+      gs.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              values: g.values.map((v) =>
+                v.id === valueId ? { ...v, ...patch } : v
+              ),
+            }
+          : g
+      )
+    );
+  }
 
   async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -35,20 +131,16 @@ export default function SellPage() {
       if (!user) throw new Error("Not signed in");
 
       const urls: string[] = [];
-
       for (const file of files) {
         const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
         const key = `u_${user.id}/${crypto.randomUUID()}.${ext}`;
-
         const { error: upErr } = await supabase.storage
           .from("products")
           .upload(key, file, { cacheControl: "3600", upsert: true });
         if (upErr) throw upErr;
-
         const { data } = supabase.storage.from("products").getPublicUrl(key);
         urls.push(data.publicUrl);
       }
-
       setPhotos((prev) => [...prev, ...urls]);
     } catch (err) {
       alert((err as Error).message);
@@ -61,7 +153,6 @@ export default function SellPage() {
     setPhotos((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  /** Ensure the current user has a shop and return its id */
   async function getOrCreateMyShop(): Promise<string> {
     const {
       data: { user },
@@ -87,26 +178,79 @@ export default function SellPage() {
     return created!.id;
   }
 
+  function toISO(dtLocal: string): string | null {
+    if (!dtLocal) return null;
+    const ms = Date.parse(dtLocal.replace(" ", "T"));
+    if (Number.isNaN(ms)) return null;
+    return new Date(ms).toISOString();
+  }
+
   async function handleSave() {
     try {
-      // Basic client validation
-      const priceNumber = Number(price);
+      const base = Number(price);
       if (!title.trim()) throw new Error("Title is required");
-      if (!Number.isFinite(priceNumber) || priceNumber <= 0)
+      if (!Number.isFinite(base) || base <= 0)
         throw new Error("Enter a valid price");
       if (!photos.length) throw new Error("Add at least one photo");
 
+      // validate options
+      for (const g of groups) {
+        if (!g.name.trim()) throw new Error("Option group needs a name");
+        if (!g.values.length)
+          throw new Error(`"${g.name}" needs at least one value`);
+        for (const v of g.values) {
+          if (!v.label.trim())
+            throw new Error(`A value in "${g.name}" is missing a label`);
+          if (
+            v.price_delta_mad != null &&
+            !Number.isFinite(Number(v.price_delta_mad))
+          )
+            throw new Error(`Invalid price delta in "${g.name}"`);
+        }
+      }
+
+      // promo
+      let promo_price_mad: number | null = null;
+      let promo_starts_at: string | null = null;
+      let promo_ends_at: string | null = null;
+      if (promoPrice || promoStart || promoEnd) {
+        const p = Number(promoPrice);
+        if (!Number.isFinite(p) || p <= 0)
+          throw new Error("Enter a valid promo price");
+        if (p >= base)
+          throw new Error("Promo price must be lower than base price");
+        if (!promoStart || !promoEnd)
+          throw new Error("Select both promo start and end");
+        const sISO = toISO(promoStart)!;
+        const eISO = toISO(promoEnd)!;
+        if (new Date(eISO).getTime() <= new Date(sISO).getTime())
+          throw new Error("Promo end must be after start");
+        promo_price_mad = Math.round(p);
+        promo_starts_at = sISO;
+        promo_ends_at = eISO;
+      }
+
       setSaving(true);
 
-      const shopId = await getOrCreateMyShop(); // 👈 owner-scoped
+      // need both: shop id AND owner id
+      const shopId = await getOrCreateMyShop();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
 
-      const payload: NewProductInsert = {
+      const payload: NewProductInsertWithOwner = {
         title: title.trim(),
-        price_mad: Math.round(priceNumber),
+        price_mad: Math.round(base),
         city: city.trim() || null,
         active: true,
         photos,
-        shop_id: shopId, // 👈 REQUIRED
+        shop_id: shopId,
+        shop_owner: user.id, // ← ensure products.shop_owner is set
+        promo_price_mad,
+        promo_starts_at,
+        promo_ends_at,
+        options_config: groups,
       };
 
       const { data, error } = await supabase
@@ -116,7 +260,6 @@ export default function SellPage() {
         .maybeSingle();
 
       if (error) throw error;
-
       alert("Product created!");
       if (data?.id) router.push(`/product/${data.id}`);
     } catch (err) {
@@ -140,6 +283,7 @@ export default function SellPage() {
         <div className="grid grid-cols-3 gap-2">
           {photos.map((src, i) => (
             <div key={src} className="relative rounded-lg overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={src} alt="" className="w-full h-28 object-cover" />
               <button
                 type="button"
@@ -164,7 +308,7 @@ export default function SellPage() {
       </label>
 
       <label className="block">
-        <div className="text-sm mb-1">Price (MAD)</div>
+        <div className="text-sm mb-1">Base Price (MAD)</div>
         <input
           type="number"
           min={0}
@@ -175,6 +319,48 @@ export default function SellPage() {
         />
       </label>
 
+      {/* Promo */}
+      <div className="rounded-xl border p-3 space-y-3">
+        <div className="text-sm font-medium">Promo (optional)</div>
+        <label className="block">
+          <div className="text-sm mb-1">Promo Price (MAD)</div>
+          <input
+            type="number"
+            min={0}
+            value={promoPrice}
+            onChange={(e) => setPromoPrice(e.target.value)}
+            className="w-full rounded border px-3 py-2"
+            inputMode="numeric"
+            placeholder="e.g., 199"
+          />
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <div className="text-sm mb-1">Promo starts</div>
+            <input
+              type="datetime-local"
+              value={promoStart}
+              onChange={(e) => setPromoStart(e.target.value)}
+              className="w-full rounded border px-3 py-2"
+            />
+          </label>
+          <label className="block">
+            <div className="text-sm mb-1">Promo ends</div>
+            <input
+              type="datetime-local"
+              value={promoEnd}
+              onChange={(e) => setPromoEnd(e.target.value)}
+              className="w-full rounded border px-3 py-2"
+            />
+          </label>
+        </div>
+        <p className="text-xs text-neutral-500">
+          If you set a promo price, both start and end are required. The product
+          will automatically revert to the base price when the promo ends.
+        </p>
+      </div>
+
+      {/* City */}
       <label className="block">
         <div className="text-sm mb-1">City</div>
         <input
@@ -184,6 +370,98 @@ export default function SellPage() {
           placeholder="Tetouan"
         />
       </label>
+
+      {/* Options Builder */}
+      <div className="rounded-xl border p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Options (custom dropdowns)</div>
+          <button
+            type="button"
+            onClick={addGroup}
+            className="text-sm rounded bg-black text-white px-3 py-1.5"
+          >
+            + Add option group
+          </button>
+        </div>
+
+        {!groups.length && (
+          <p className="text-sm text-neutral-500">
+            Add groups like <b>Size</b> or <b>Fabric Color</b>. Each value can
+            change the price relative to the base price.
+          </p>
+        )}
+
+        {groups.map((g) => (
+          <div key={g.id} className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                value={g.name}
+                onChange={(e) => setGroupName(g.id, e.target.value)}
+                className="flex-1 rounded border px-3 py-2"
+                placeholder="Group name (e.g., Size)"
+              />
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={g.required ?? true}
+                  onChange={() => toggleRequired(g.id)}
+                />
+                required
+              </label>
+              <button
+                type="button"
+                onClick={() => removeGroup(g.id)}
+                className="text-sm rounded border px-2 py-1"
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {g.values.map((v) => (
+                <div key={v.id} className="grid grid-cols-5 gap-2 items-center">
+                  <input
+                    className="col-span-3 rounded border px-3 py-2"
+                    value={v.label}
+                    onChange={(e) =>
+                      updateValue(g.id, v.id, { label: e.target.value })
+                    }
+                    placeholder="Option label (e.g., M - Hoodie)"
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="col-span-1 rounded border px-3 py-2"
+                    value={String(v.price_delta_mad ?? 0)}
+                    onChange={(e) =>
+                      updateValue(g.id, v.id, {
+                        price_delta_mad: Number(e.target.value || 0),
+                      })
+                    }
+                    placeholder="Δ MAD"
+                    title="Price delta relative to base price (can be 0 or negative)."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeValue(g.id, v.id)}
+                    className="col-span-1 text-sm rounded border px-2 py-2"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => addValue(g.id)}
+              className="text-sm rounded bg-neutral-100 px-3 py-1.5"
+            >
+              + Add value
+            </button>
+          </div>
+        ))}
+      </div>
 
       <button
         onClick={handleSave}

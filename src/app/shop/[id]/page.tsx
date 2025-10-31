@@ -6,15 +6,17 @@ import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
 
+import { useRouter, useSearchParams } from "next/navigation";
+
 type Shop = {
   id: string;
   title: string;
   bio: string | null;
   city: string | null;
   owner: string;
-  avatar_url: string | null; // ✅ new
-  cover_urls: string[] | null; // ✅ new
-  created_at?: string | null; // for “years”
+  avatar_url: string | null;
+  cover_urls: string[] | null;
+  created_at?: string | null;
 };
 
 type Product = {
@@ -27,18 +29,23 @@ type Product = {
   created_at: string;
 };
 
+type Collection = { id: string; title: string; cover_url: string | null };
+
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
   const shopId = (id ?? "").toString().trim();
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [items, setItems] = useState<Product[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [links, setLinks] = useState<Record<string, string[]>>({}); // product_id -> collection_ids[]
+  const [selectedCol, setSelectedCol] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [stats, setStats] = useState<{ sales: number; years: number } | null>(
     null
   );
-
   const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
@@ -55,7 +62,7 @@ export default function ShopPage() {
     (async () => {
       setLoading(true);
 
-      // 1) shop (select explicit fields incl. avatar_url & cover_urls)
+      // 1) shop
       const { data: s } = await supabase
         .from("shops")
         .select("id,title,bio,city,owner,avatar_url,cover_urls,created_at")
@@ -67,18 +74,36 @@ export default function ShopPage() {
         return;
       }
 
-      // 2) products of this shop
+      // 2) products
       const { data: prods } = await supabase
         .from("products")
         .select("*")
         .eq("shop_id", shopId)
         .eq("active", true)
         .order("created_at", { ascending: false });
-
       const products = (prods as any[]) ?? [];
       setItems(products);
 
-      // 3) lightweight stats
+      // 3) collections
+      const { data: cols } = await supabase
+        .from("collections")
+        .select("id,title,cover_url")
+        .eq("shop_id", shopId)
+        .order("title");
+      setCollections((cols as any[]) ?? []);
+
+      // 4) product↔collection links
+      const { data: pcs } = await supabase
+        .from("product_collections")
+        .select("product_id, collection_id");
+      const map: Record<string, string[]> = {};
+      (pcs as any[])?.forEach((l) => {
+        if (!map[l.product_id]) map[l.product_id] = [];
+        map[l.product_id].push(l.collection_id);
+      });
+      setLinks(map);
+
+      // 5) lightweight stats
       let sales = 0;
       if (products.length) {
         const ids = products.map((p) => p.id);
@@ -104,20 +129,27 @@ export default function ShopPage() {
     })();
   }, [shopId]);
 
-  const filtered = useMemo(() => {
+  // ✅ single memo for both search & collection filter
+  const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((p) => p.title.toLowerCase().includes(term));
-  }, [items, q]);
+    return items.filter((p) => {
+      const byText = !term || p.title.toLowerCase().includes(term);
+      const byCol =
+        !selectedCol || (links[p.id]?.includes(selectedCol) ?? false);
+      return byText && byCol;
+    });
+  }, [items, q, selectedCol, links]);
 
   if (!shopId) return <main className="p-4">Invalid shop.</main>;
   if (loading) return <main className="p-4">Loading…</main>;
   if (!shop) return <main className="p-4">Shop not found.</main>;
 
-  // ✅ cover priority: shop.cover_urls[0] → first product photo
+  // cover: shop.cover_urls[0] → fallback to first product photo
   const cover =
     (Array.isArray(shop.cover_urls) && shop.cover_urls[0]) ||
     items.find((p) => Array.isArray(p.photos) && p.photos[0])?.photos?.[0];
+
+  const handleTileClick = (cid: string) => setSelectedCol(cid);
 
   return (
     <main className="pb-24">
@@ -182,27 +214,44 @@ export default function ShopPage() {
         </div>
       </section>
 
-      {/* browse by */}
+      {/* browse by collections */}
       <section className="px-4 mt-4 space-y-3">
-        <h2 className="font-semibold">Browse by</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <BrowseTile
-            title="Featured items"
-            count={Math.min(4, items.length)}
-            img={items[0]?.photos?.[0]}
-            onClick={() =>
-              window.scrollTo({ top: cover ? 300 : 180, behavior: "smooth" })
-            }
-          />
-          <BrowseTile
-            title="New"
-            count={items.length}
-            img={items[1]?.photos?.[0]}
-            onClick={() =>
-              window.scrollTo({ top: cover ? 300 : 180, behavior: "smooth" })
-            }
-          />
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-semibold">Browse by</h2>
+          {selectedCol && (
+            <button
+              onClick={() => setSelectedCol(null)}
+              className="text-xs underline"
+            >
+              Clear
+            </button>
+          )}
         </div>
+
+        {collections.length ? (
+          <div className="grid grid-cols-2 gap-3">
+            {collections.map((c) => {
+              const count = items.filter((p) =>
+                (links[p.id] ?? []).includes(c.id)
+              ).length;
+              const fallbackImg = items.find((p) =>
+                (links[p.id] ?? []).includes(c.id)
+              )?.photos?.[0];
+              const img = c.cover_url || fallbackImg;
+              return (
+                <BrowseTile
+                  key={c.id}
+                  title={c.title}
+                  count={count}
+                  img={img}
+                  onClick={() => handleTileClick(c.id)}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-xs text-ink/60">No collections yet.</div>
+        )}
       </section>
 
       {/* in-shop search */}
@@ -227,10 +276,10 @@ export default function ShopPage() {
 
       {/* product grid */}
       <section className="px-4 mt-4 grid grid-cols-2 gap-3">
-        {filtered.map((p) => (
+        {filteredProducts.map((p) => (
           <ProductCard key={p.id} p={p} variant="carousel" />
         ))}
-        {!filtered.length && (
+        {!filteredProducts.length && (
           <div className="col-span-2 text-sm text-ink/70 py-8 text-center">
             No results.
           </div>
@@ -248,7 +297,7 @@ function BrowseTile({
 }: {
   title: string;
   count: number;
-  img?: string;
+  img?: string | null;
   onClick?: () => void;
 }) {
   return (

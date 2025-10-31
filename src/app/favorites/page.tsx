@@ -8,6 +8,9 @@ export default function FavoritesPage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ————————————————————————————————————
+  // Fetch favorites
+  // ————————————————————————————————————
   useEffect(() => {
     (async () => {
       const {
@@ -28,6 +31,13 @@ export default function FavoritesPage() {
     })();
   }, []);
 
+  // ————————————————————————————————————
+  // Handle removal from local state
+  // ————————————————————————————————————
+  function handleUnfavorite(id: string) {
+    setItems((prev) => prev.filter((p) => p.id !== id));
+  }
+
   if (loading) return <main className="p-4">Loading…</main>;
 
   return (
@@ -38,7 +48,13 @@ export default function FavoritesPage() {
       ) : (
         <section className="grid grid-cols-2 gap-3">
           {items.map((p) => (
-            <ProductCard key={p.id} p={p} />
+            <ProductCard
+              key={p.id}
+              p={p}
+              onUnfavorite={(id) =>
+                setItems((prev) => prev.filter((x) => x.id !== id))
+              }
+            />
           ))}
         </section>
       )}

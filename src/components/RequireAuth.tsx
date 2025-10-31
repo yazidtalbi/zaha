@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
@@ -10,35 +10,35 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
+  const redirectingRef = useRef(false);
+
+  function goLogin() {
+    if (redirectingRef.current) return;
+    redirectingRef.current = true;
+    if (!pathname.startsWith("/login")) {
+      const q = search?.toString();
+      const next = encodeURIComponent(pathname + (q ? `?${q}` : ""));
+      router.replace(`/login?next=${next}`);
+    }
+  }
 
   useEffect(() => {
-    // 1) get current session
-    supabase.auth.getSession().then(({ data }) => {
-      setAuthed(!!data.session);
+    const init = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) console.error("getSession error:", error);
+      setAuthed(!!data?.session);
       setReady(true);
-      if (!data.session) {
-        // keep where the user wanted to go
-        const next = encodeURIComponent(
-          pathname + (search?.toString() ? `?${search}` : "")
-        );
-        router.replace(`/login?next=${next}`);
-      }
-    });
+      if (!data?.session) setTimeout(goLogin, 50);
+    };
 
-    // 2) listen for auth changes (tab-safe)
+    init();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setAuthed(!!session);
-      if (!session) {
-        const next = encodeURIComponent(
-          pathname + (search?.toString() ? `?${search}` : "")
-        );
-        router.replace(`/login?next=${next}`);
-      }
+      if (!session) goLogin();
     });
     return () => sub.subscription.unsubscribe();
-  }, [router, pathname, search]);
+  }, [pathname]); // re-check on route change
 
-  if (!ready) return null; // avoid flash
-  if (!authed) return null; // redirected to /login
+  if (!ready || !authed) return null;
   return <>{children}</>;
 }

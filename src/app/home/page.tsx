@@ -8,6 +8,7 @@ import HeroCard from "@/components/HeroCard";
 import HeroCarousel from "@/components/HeroCarousel";
 
 import Link from "next/link";
+import Header from "@/components/Header";
 
 const slides = [
   {
@@ -64,14 +65,8 @@ export default function HomePage() {
   return (
     <main className="pb-24 bg-neutral-50 min-h-screen">
       {/* Search */}
-      <div className="p-4">
-        <Link
-          href="/search"
-          className="block rounded-full bg-white px-4 py-3 pl-10 shadow-sm text-sm text-neutral-500"
-        >
-          Search for something special
-        </Link>
-      </div>
+
+      <Header />
       {/* Categories */}
       <CategoryPills active={category} onSelect={setCategory} />
 
