@@ -3,7 +3,7 @@
 
 import RequireAuth from "@/components/RequireAuth";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ type Product = {
   title: string;
   price_mad: number;
   active: boolean;
+  unavailable: boolean; // 👈 NEW
   photos: string[] | null;
   created_at: string;
   shop_id: string;
@@ -88,6 +89,7 @@ function Inner() {
   const [price, setPrice] = useState<number | string>("");
   const [city, setCity] = useState<string>("");
   const [active, setActive] = useState(true);
+  const [unavailable, setUnavailable] = useState(false); // 👈 NEW
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -113,7 +115,7 @@ function Inner() {
         const { data, error } = await supabase
           .from("products")
           .select(
-            "id,title,price_mad,active,photos,created_at,shop_id,deleted_at,city,promo_price_mad,promo_starts_at,promo_ends_at,options_config"
+            "id,title,price_mad,active,unavailable,photos,created_at,shop_id,deleted_at,city,promo_price_mad,promo_starts_at,promo_ends_at,options_config"
           )
           .eq("id", pid)
           .maybeSingle();
@@ -131,6 +133,7 @@ function Inner() {
         setTitle(p.title ?? "");
         setPrice(p.price_mad ?? 0);
         setActive(!!p.active && !p.deleted_at);
+        setUnavailable(Boolean(p.unavailable)); // 👈 NEW
         setCity(p.city ?? "");
         setPhotos(Array.isArray(p.photos) ? p.photos : []);
 
@@ -315,6 +318,7 @@ function Inner() {
         price_mad: Math.round(priceNumber),
         city: city.trim() || null,
         active,
+        unavailable, // 👈 NEW
         photos,
         promo_price_mad,
         promo_starts_at,
@@ -371,7 +375,7 @@ function Inner() {
     );
   }
 
-  const removed = !!product.deleted_at;
+  const removed = !!product.deleted_at; // keep removed tied only to soft-delete
 
   return (
     <main className="p-4 space-y-6">
@@ -464,15 +468,27 @@ function Inner() {
           />
         </label>
 
-        <label className="inline-flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(e) => setActive(e.target.checked)}
-            disabled={removed}
-          />
-          Active (visible in store)
-        </label>
+        <div className="flex flex-col gap-2">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              disabled={removed}
+            />
+            Active (visible in store)
+          </label>
+
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={unavailable}
+              onChange={(e) => setUnavailable(e.target.checked)}
+              disabled={removed}
+            />
+            Temporarily unavailable (visible but can’t be purchased)
+          </label>
+        </div>
       </div>
 
       {/* Promo */}

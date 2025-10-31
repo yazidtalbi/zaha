@@ -20,10 +20,19 @@ type NewProductInsert = {
   active: boolean;
   photos: string[];
   shop_id: string;
+
+  // promo
   promo_price_mad: number | null;
   promo_starts_at: string | null;
   promo_ends_at: string | null;
+
+  // options
   options_config: OptionGroup[];
+
+  // personalization 👇
+  personalization_enabled: boolean;
+  personalization_instructions: string | null;
+  personalization_max_chars: number | null;
 };
 
 // we'll add shop_owner at insert time
@@ -45,6 +54,11 @@ export default function SellPage() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Personalization
+  const [persoEnabled, setPersoEnabled] = useState(false);
+  const [persoInstr, setPersoInstr] = useState("");
+  const [persoMax, setPersoMax] = useState<string>("");
 
   // Promo
   const [promoPrice, setPromoPrice] = useState<string>("");
@@ -230,6 +244,28 @@ export default function SellPage() {
         promo_ends_at = eISO;
       }
 
+      // personalization
+      let personalization_enabled = !!persoEnabled;
+      let personalization_instructions: string | null = null;
+      let personalization_max_chars: number | null = null;
+
+      if (personalization_enabled) {
+        const max = Number(persoMax);
+        if (!Number.isFinite(max) || max <= 0) {
+          throw new Error("Enter a valid max characters for personalization");
+        }
+        if (!persoInstr.trim()) {
+          throw new Error("Add buyer instructions for personalization");
+        }
+        personalization_instructions = persoInstr.trim();
+        personalization_max_chars = Math.round(max);
+      } else {
+        // make sure DB receives explicit "off" values
+        personalization_enabled = false;
+        personalization_instructions = null;
+        personalization_max_chars = null;
+      }
+
       setSaving(true);
 
       // need both: shop id AND owner id
@@ -246,11 +282,20 @@ export default function SellPage() {
         active: true,
         photos,
         shop_id: shopId,
-        shop_owner: user.id, // ← ensure products.shop_owner is set
+        shop_owner: user.id, // ensure products.shop_owner is set
+
+        // promo
         promo_price_mad,
         promo_starts_at,
         promo_ends_at,
+
+        // options
         options_config: groups,
+
+        // personalization 👇 now persisted correctly
+        personalization_enabled,
+        personalization_instructions,
+        personalization_max_chars,
       };
 
       const { data, error } = await supabase
@@ -461,6 +506,55 @@ export default function SellPage() {
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Personalization */}
+      <div className="rounded-xl border p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Personalization</div>
+          <label className="text-sm flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={persoEnabled}
+              onChange={(e) => setPersoEnabled(e.target.checked)}
+            />
+            Enable
+          </label>
+        </div>
+
+        {persoEnabled && (
+          <>
+            <label className="block">
+              <div className="text-sm mb-1">
+                Buyer instructions (shown in sheet)
+              </div>
+              <textarea
+                className="w-full rounded border px-3 py-2"
+                value={persoInstr}
+                onChange={(e) => setPersoInstr(e.target.value)}
+                placeholder="Tell the buyer what to write (e.g., 'Enter the name to engrave…')"
+                rows={3}
+              />
+            </label>
+
+            <label className="block">
+              <div className="text-sm mb-1">Max characters</div>
+              <input
+                type="number"
+                min={1}
+                className="w-full rounded border px-3 py-2"
+                value={persoMax}
+                onChange={(e) => setPersoMax(e.target.value)}
+                inputMode="numeric"
+                placeholder="e.g., 80"
+              />
+            </label>
+            <p className="text-xs text-neutral-500">
+              The “Add a personalization” button appears on the product page
+              only when personalization is enabled.
+            </p>
+          </>
+        )}
       </div>
 
       <button

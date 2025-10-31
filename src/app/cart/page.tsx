@@ -1,3 +1,4 @@
+// app/cart/page.tsx
 "use client";
 
 import RequireAuth from "@/components/RequireAuth";
@@ -6,6 +7,15 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
+// ————————————————————————————
+// Types
+// ————————————————————————————
+type Store = {
+  id: string;
+  title: string | null;
+  avatar_url: string | null;
+};
+
 type Product = {
   id: string;
   title: string;
@@ -13,12 +23,19 @@ type Product = {
   photos: string[] | null;
   active: boolean;
   deleted_at: string | null;
+  shop_id?: string;
+  shops?: Store | null; // nested via FK products.shop_id -> shops.id
 };
 
 type CartRow = {
   id: string;
   qty: number;
   product_id: string;
+
+  // your buyer selections
+  options: any | null; // jsonb
+  personalization: string | null; // text
+
   products: Product | null;
 };
 
@@ -29,9 +46,16 @@ type UiCartRow = {
   title?: string;
   price_mad?: number;
   photos?: string[] | null;
+  store_title?: string | null;
+  store_avatar?: string | null;
+  options_badges?: string[];
+  personalization_text?: string | null;
   removed: boolean;
 };
 
+// ————————————————————————————
+// Component
+// ————————————————————————————
 export default function CartPage() {
   return (
     <RequireAuth>
@@ -45,7 +69,7 @@ function Inner() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Load cart
+  // Load cart with product + shop + buyer selections
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -61,9 +85,24 @@ function Inner() {
         .from("cart_items")
         .select(
           `
-          id, qty, product_id,
+          id,
+          qty,
+          product_id,
+          options,
+          personalization,
           products (
-            id, title, price_mad, photos, active, deleted_at
+            id,
+            title,
+            price_mad,
+            photos,
+            active,
+            deleted_at,
+            shop_id,
+            shops (
+              id,
+              title,
+              avatar_url
+            )
           )
         `
         )
@@ -79,6 +118,22 @@ function Inner() {
       const mapped: UiCartRow[] = (data ?? []).map((row: CartRow) => {
         const p = row.products;
         const removed = !p?.active || !!p?.deleted_at;
+
+        // safe option mapping
+        const badges: string[] = [];
+        const opts = row.options;
+        if (opts) {
+          if (Array.isArray(opts)) {
+            for (const o of opts) {
+              if (o?.group && o?.value) badges.push(`${o.group}: ${o.value}`);
+            }
+          } else if (typeof opts === "object") {
+            for (const [k, v] of Object.entries(opts)) {
+              if (v != null && v !== "") badges.push(`${k}: ${v}`);
+            }
+          }
+        }
+
         return {
           id: row.id,
           qty: row.qty,
@@ -86,6 +141,10 @@ function Inner() {
           title: p?.title,
           price_mad: p?.price_mad,
           photos: p?.photos,
+          store_title: p?.shops?.title ?? null,
+          store_avatar: p?.shops?.avatar_url ?? null,
+          options_badges: badges ?? [],
+          personalization_text: row.personalization ?? null,
           removed,
         };
       });
@@ -95,7 +154,7 @@ function Inner() {
     })();
   }, []);
 
-  // Totals: ignore removed lines in subtotal
+  // Totals
   const totals = useMemo(() => {
     const subtotal = rows.reduce((acc, r) => {
       if (r.removed || !r.price_mad) return acc;
@@ -133,7 +192,7 @@ function Inner() {
     setBusyId(null);
     if (error) {
       toast.error("Failed to remove item", { description: error.message });
-      setRows(old); // revert
+      setRows(old);
     } else {
       toast("Removed from cart");
     }
@@ -151,14 +210,13 @@ function Inner() {
       toast.error("Failed to clear removed items", {
         description: error.message,
       });
-      setRows(old); // revert
+      setRows(old);
     } else {
       toast("Cleared removed items");
     }
   }
 
   async function checkout() {
-    // Guard: no removed lines
     if (totals.removedCount > 0) {
       toast.error("Please remove unavailable items before checkout.");
       return;
@@ -167,10 +225,7 @@ function Inner() {
       toast("Your cart is empty");
       return;
     }
-
-    // Implement your own flow (address, COD/CMI, create orders, etc.)
     toast.success("Proceeding to checkout…");
-    // Example next step: router.push("/checkout");
   }
 
   if (loading) return <main className="p-4">Loading…</main>;
@@ -191,81 +246,132 @@ function Inner() {
           <ul className="space-y-2">
             {rows.map((r) => {
               const img = Array.isArray(r.photos) ? r.photos[0] : undefined;
+              const badges = Array.isArray(r.options_badges)
+                ? r.options_badges
+                : [];
+
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-3 border rounded-xl p-3 bg-sand"
+                  className="flex flex-col gap-2 border rounded-xl p-3 bg-sand"
                 >
-                  <div className="w-14 h-14 rounded-lg bg-white overflow-hidden">
-                    {img ? (
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
-                        No image
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/product/${r.product_id}`}
-                        className="font-medium truncate hover:underline"
-                      >
-                        {r.title ?? "Product"}
-                      </Link>
-                      {r.removed && (
-                        <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                          removed from seller’s store
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-xs text-ink/70">
-                      {typeof r.price_mad === "number" ? (
-                        <>MAD {r.price_mad.toFixed(2)}</>
-                      ) : (
-                        <>MAD —</>
-                      )}
-                    </div>
-                  </div>
-
+                  {/* Store header */}
                   <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-lg border px-2 py-1 text-sm"
-                      onClick={() => updateQty(r.id, r.qty - 1)}
-                      disabled={busyId === r.id || r.removed}
-                      aria-label="Decrease quantity"
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center text-sm">{r.qty}</span>
-                    <button
-                      className="rounded-lg border px-2 py-1 text-sm"
-                      onClick={() => updateQty(r.id, r.qty + 1)}
-                      disabled={busyId === r.id || r.removed}
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </button>
+                    <div className="w-6 h-6 rounded-full overflow-hidden bg-white">
+                      {r.store_avatar ? (
+                        <img
+                          src={r.store_avatar}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
+                          —
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-ink/80">
+                      {r.store_title ?? "Store"}
+                    </div>
                   </div>
 
-                  <button
-                    onClick={() => removeLine(r.id)}
-                    disabled={busyId === r.id}
-                    className="text-xs underline text-rose-600"
-                  >
-                    Remove
-                  </button>
+                  {/* Item */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-lg bg-white overflow-hidden shrink-0">
+                      {img ? (
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
+                          No image
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/product/${r.product_id}`}
+                          className="font-medium truncate hover:underline"
+                        >
+                          {r.title ?? "Product"}
+                        </Link>
+                        {r.removed && (
+                          <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
+                            removed from seller’s store
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Options badges */}
+                      {badges.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {badges.map((b, i) => (
+                            <span
+                              key={`${r.id}-opt-${i}`}
+                              className="text-[11px] rounded-full px-2 py-0.5 bg-white border"
+                            >
+                              {b}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Personalization preview */}
+                      {r.personalization_text && (
+                        <div className="mt-1 text-[11px] px-2 py-1 rounded bg-white border text-ink/80 line-clamp-2">
+                          <span className="font-medium">Personalization: </span>
+                          {r.personalization_text}
+                        </div>
+                      )}
+
+                      <div className="mt-1 text-xs text-ink/70">
+                        {typeof r.price_mad === "number" ? (
+                          <>MAD {r.price_mad.toFixed(2)}</>
+                        ) : (
+                          <>MAD —</>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Qty + remove */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-lg border px-2 py-1 text-sm"
+                        onClick={() => updateQty(r.id, r.qty - 1)}
+                        disabled={busyId === r.id || r.removed}
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <span className="w-6 text-center text-sm">{r.qty}</span>
+                      <button
+                        className="rounded-lg border px-2 py-1 text-sm"
+                        onClick={() => updateQty(r.id, r.qty + 1)}
+                        disabled={busyId === r.id || r.removed}
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => removeLine(r.id)}
+                      disabled={busyId === r.id}
+                      className="text-xs underline text-rose-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </li>
               );
             })}
           </ul>
 
+          {/* Totals */}
           <aside className="rounded-2xl border bg-paper p-4 space-y-3">
             {totals.removedCount > 0 && (
               <div className="rounded-xl bg-amber-50 text-amber-900 px-3 py-2 text-sm flex items-center justify-between">
@@ -286,8 +392,6 @@ function Inner() {
                 MAD {totals.subtotal.toFixed(2)}
               </span>
             </div>
-
-            {/* Taxes / shipping can be added here */}
 
             <button
               onClick={checkout}

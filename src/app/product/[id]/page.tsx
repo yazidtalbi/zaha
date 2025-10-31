@@ -1,3 +1,4 @@
+// app/product/[id]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -92,7 +93,7 @@ function isPromoActive(p: any) {
 function formatEndsShort(iso: string) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" }); // "Nov 02"
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 }
 
 /* -------------------- page -------------------- */
@@ -103,12 +104,7 @@ export default function ProductPage() {
   const [p, setP] = useState<any>(null);
   const [shop, setShop] = useState<any>(null);
   const shopImg = useMemo(
-    () =>
-      shop?.avatar_url ||
-      shop?.avatar_url ||
-      shop?.photo ||
-      shop?.cover ||
-      null,
+    () => shop?.avatar_url || shop?.photo || shop?.cover || null,
     [shop]
   );
 
@@ -157,7 +153,7 @@ export default function ProductPage() {
     if (!emblaApi) return;
     const onSelect = () => setIdx(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSelect);
-    onSelect(); // init
+    onSelect();
     return () => {
       emblaApi.off("select", onSelect);
     };
@@ -221,6 +217,7 @@ export default function ProductPage() {
         .from("products")
         .select("*")
         .eq("active", true)
+        .eq("unavailable", false)
         .neq("id", p.id)
         .limit(8);
       if (p.city) q = q.ilike("city", p.city);
@@ -231,6 +228,7 @@ export default function ProductPage() {
           .from("products")
           .select("*")
           .eq("active", true)
+          .eq("unavailable", false)
           .eq("shop_id", p.shop_id)
           .neq("id", p.id)
           .limit(6);
@@ -284,7 +282,10 @@ export default function ProductPage() {
         )
       : 0;
 
-  const removed: boolean = !!p && (!p.active || !!p.deleted_at);
+  // NEW availability semantics
+  const isUnavailable = Boolean(p?.unavailable);
+  const isRemoved = Boolean(p?.deleted_at);
+  const isInactive = !Boolean(p?.active);
 
   // sticky observe
   useEffect(() => {
@@ -308,8 +309,22 @@ export default function ProductPage() {
     return parts.join("|");
   }
 
+  /** Build a clean options object like { Size: "M", Color: "Blue" } */
+  function selectionsToOptionsObject(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const g of optionGroups) {
+      const vid = selected[g.id];
+      const v = g.values.find((x) => x.id === vid);
+      if (v) out[g.name] = v.label;
+    }
+    return out;
+  }
+
   async function handleAddToCart() {
-    if (removed) return;
+    if (isUnavailable || isInactive || isRemoved) {
+      toast("This item is currently unavailable.");
+      return;
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -323,33 +338,30 @@ export default function ProductPage() {
       return;
     }
 
+    const optionsObject = selectionsToOptionsObject();
+
     try {
-      const maybe = (addToCart as any)(p.id, qty, {
-        variant: selectionsToLabel(),
-        total_mad: promoActive ? (promoTotal as number) : currentTotal,
-        personalization: personalization.trim() || null,
+      // ✅ Use the object signature so personalization + options are saved
+      const res = await addToCart({
+        productId: p.id,
+        qty,
+        options: optionsObject, // jsonb
+        personalization: personalization.trim() || null, // text
       });
-      const res =
-        maybe && typeof maybe.then === "function" ? await maybe : { ok: true };
+
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("cart:changed"));
         toast.success("Added to cart 🛒");
       } else {
         toast.error("Failed to add to cart", { description: res.message });
       }
-    } catch {
-      const res = await (addToCart as any)(p.id, qty);
-      if (res?.ok) {
-        window.dispatchEvent(new CustomEvent("cart:changed"));
-        toast.success("Added to cart 🛒");
-      } else {
-        toast.error("Failed to add to cart");
-      }
+    } catch (e: any) {
+      toast.error("Failed to add to cart", { description: e?.message });
     }
   }
 
   function handleBuyNow() {
-    if (removed) return;
+    if (isUnavailable || isInactive || isRemoved) return;
     const variant = selectionsToLabel();
     const total = promoActive ? promoTotal : currentTotal;
     const params = new URLSearchParams();
@@ -366,473 +378,555 @@ export default function ProductPage() {
   if (!p) return <main className="p-4">Not found.</main>;
 
   return (
-    <main className="pb-10 bg-neutral-50 min-h-screen">
-      {/* top buttons */}
-      <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
-        <button
-          onClick={() => router.back()}
-          className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
-        >
-          <ChevronLeft size={18} />
-        </button>
-      </div>
-      <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <MessageSquare size={16} />
-        </button>
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <Share2 size={16} />
-        </button>
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <Heart size={16} />
-        </button>
-      </div>
-
-      {/* gallery */}
-      {/* gallery (Embla) */}
-      <div className="relative">
-        <div ref={emblaRef} className="embla overflow-hidden">
-          <div className="flex">
-            {(images.length ? images : [undefined]).map((src, i) => (
-              <div
-                key={i}
-                className="min-w-0 flex-[0_0_100%] aspect-[4/3] bg-black/5"
-              >
-                {src ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={src}
-                    alt={p.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full grid place-items-center text-neutral-500">
-                    No image
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* dots */}
-        {images.length > 1 && (
-          <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => emblaApi?.scrollTo(i)}
-                className={`h-2 w-2 rounded-full ${
-                  i === idx ? "bg-black" : "bg-neutral-300"
-                }`}
-                aria-label={`Go to slide ${i + 1}`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* title + price (with promo banner) */}
-      <div className="px-4 pt-1 space-y-2">
-        <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
-
-        {promoActive ? (
-          <div className="flex flex-col gap-1">
-            <div className="text-sm font-medium text-green-400">
-              {percentOff}% off sale ends {formatEndsShort(p.promo_ends_at)}
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="text-xl font-bold text-green-400">
-                MAD{(promoTotal as number).toLocaleString("en-US")}
-              </div>
-              <div className="line-through text-neutral-400">
-                MAD{currentTotal.toLocaleString("en-US")}
-              </div>
-              {(!p.active || !!p.deleted_at) && (
-                <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                  removed from seller’s store
-                </span>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 flex-wrap">
-            {minTotal !== maxTotal ? (
-              <div className="text-xl font-bold">
-                MAD{minTotal.toLocaleString("en-US")} – MAD
-                {maxTotal.toLocaleString("en-US")}
-              </div>
-            ) : (
-              <div className="text-xl font-bold">
-                MAD{currentTotal.toLocaleString("en-US")}
-              </div>
-            )}
-            {(!p.active || !!p.deleted_at) && (
-              <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                removed from seller’s store
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="text-sm text-neutral-500">
-          by{" "}
-          {p.shop_id ? (
-            <Link
-              href={`/shop/${p.shop_id}`}
-              className="inline-flex items-center gap-2 hover:underline"
-            >
-              {shopImg ? (
-                <span className="inline-block h-5 w-5 rounded-full overflow-hidden bg-neutral-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={shopImg}
-                    alt={shop?.title ?? "Shop"}
-                    className="h-full w-full object-cover"
-                  />
-                </span>
-              ) : null}
-              <span className="font-medium">{shop?.title || "shop"}</span>
-            </Link>
-          ) : (
-            <span className="font-medium">
-              {p.shop_title || "a Moroccan maker"}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* OPTIONS (dynamic) */}
-      {optionGroups.map((g) => {
-        const valueId = selected[g.id] ?? "";
-        return (
-          <Section key={g.id} title={g.name}>
-            <div className="rounded-xl border bg-white px-3 py-2">
-              <select
-                className="w-full bg-transparent outline-none py-1"
-                value={valueId}
-                onChange={(e) =>
-                  setSelected((s) => ({ ...s, [g.id]: e.target.value }))
-                }
-              >
-                {g.values.map((v) => {
-                  const delta = Number(v.price_delta_mad ?? 0);
-                  const label =
-                    delta === 0
-                      ? v.label
-                      : `${v.label}  ${
-                          delta > 0
-                            ? `+ MAD${delta}`
-                            : `- MAD${Math.abs(delta)}`
-                        }`;
-                  return (
-                    <option key={v.id} value={v.id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </Section>
-        );
-      })}
-
-      {/* PERSONALization */}
-      {personalizationConfig.enabled && (
-        <Section title="Personalization">
-          {personalization.trim() ? (
-            <div className="rounded-xl border bg-white">
-              <div className="flex items-center justify-between px-3 py-3 border-b">
-                <div className="font-medium">Your personalization</div>
-                <button
-                  type="button"
-                  onClick={() => setPersonalizationOpen(true)}
-                  className="text-sm inline-flex items-center gap-1 underline"
-                >
-                  <Pencil size={14} /> Edit
-                </button>
-              </div>
-              <div className="px-3 py-3 text-sm">
-                <div className="text-neutral-500 mb-1">Personalization</div>
-                <div className="break-words">{personalization}</div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center">
-              <div className="text-sm text-neutral-600 mb-2">
-                Personalize before adding to your cart
-              </div>
-              <button
-                type="button"
-                onClick={() => setPersonalizationOpen(true)}
-                className="w-full rounded-full border bg-white px-4 py-3 font-medium"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span className="inline-block h-4 w-4 rounded border border-dashed" />
-                  Add personalization
-                </span>
-              </button>
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* quantity + CTAs */}
-      <Section title="Quantity">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-full border bg-white">
+    <>
+      {isRemoved ? (
+        <main className="pb-10">
+          {/* Top bar with back arrow */}
+          <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
             <button
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="px-3 py-1.5 text-lg"
-              aria-label="Decrease"
+              onClick={() => router.back()}
+              className="h-9 w-9 rounded-full grid place-items-center"
             >
-              −
-            </button>
-            <div className="min-w-[2.25rem] text-center">{qty}</div>
-            <button
-              onClick={() => setQty((q) => q + 1)}
-              className="px-3 py-1.5 text-lg"
-              aria-label="Increase"
-            >
-              +
+              <ChevronLeft size={18} />
             </button>
           </div>
-        </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-2">
-          <button
-            onClick={handleAddToCart}
-            disabled={!p.active || !!p.deleted_at}
-            className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
-          >
-            {!p.active || !!p.deleted_at ? "Unavailable" : "Add to cart"}
-          </button>
-          <button
-            onClick={handleBuyNow}
-            disabled={!p.active || !!p.deleted_at}
-            className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
-          >
-            {!p.active || !!p.deleted_at ? "Unavailable" : "Buy it now"}
-          </button>
-        </div>
-        <div ref={sentinelRef} className="h-px" />
-      </Section>
-
-      {/* Reviews placeholder */}
-      <Section title="Item reviews and shop ratings">
-        <div className="rounded-xl border bg-white p-3 text-sm text-neutral-600">
-          This item has not been reviewed yet. Buy it now and leave a review.
-        </div>
-      </Section>
-
-      {/* Item details */}
-      <Section title="Item details">
-        <ul className="space-y-3 text-[15px]">
-          <li>
-            <span className="font-medium">Made by</span>{" "}
-            {shop?.title ?? p.shop_title ?? "independent artisan"}
-          </li>
-          <li>
-            <span className="font-medium">Made to order</span>
-          </li>
-          <li>
-            <span className="font-medium">Ships from</span>{" "}
-            {p.city ?? "Morocco"}
-          </li>
-        </ul>
-      </Section>
-
-      {/* Similar */}
-      {!!similar.length && (
-        <Section title="Compare similar items">
-          <div className="grid grid-cols-2 gap-3">
-            {similar.map((x) => (
-              <Link
-                key={x.id}
-                href={`/product/${x.id}`}
-                className="block rounded-xl bg-white border overflow-hidden"
-              >
-                <div className="aspect-[4/3] bg-neutral-100">
-                  {Array.isArray(x.photos) && x.photos[0] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={x.photos[0]}
-                      alt={x.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : null}
-                </div>
-                <div className="p-2">
-                  <div className="text-sm line-clamp-2">{x.title}</div>
-                  <div className="text-xs text-neutral-600 mt-1">
-                    MAD{x.price_mad}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* More from shop */}
-      {!!moreFromShop.length && (
-        <Section title="More from this shop">
-          <div className="grid grid-cols-2 gap-3">
-            {moreFromShop.map((x) => (
-              <Link
-                key={x.id}
-                href={`/product/${x.id}`}
-                className="block rounded-xl bg-white border overflow-hidden"
-              >
-                <div className="aspect-[4/3] bg-neutral-100">
-                  {Array.isArray(x.photos) && x.photos[0] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={x.photos[0]}
-                      alt={x.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : null}
-                </div>
-                <div className="p-2">
-                  <div className="text-sm line-clamp-2">{x.title}</div>
-                  <div className="text-xs text-neutral-600 mt-1">
-                    MAD{x.price_mad}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <div className="h-24" />
-
-      {showStickyAdd && (
-        <div
-          className="fixed inset-x-0 px-4 z-50"
-          style={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
-        >
-          <div className="max-w-screen-sm mx-auto">
-            <button
-              onClick={handleAddToCart}
-              disabled={!p.active || !!p.deleted_at}
-              className="w-full rounded-full bg-black text-white px-4 py-4 font-medium shadow-xl disabled:opacity-60"
-            >
-              {!p.active || !!p.deleted_at ? "Unavailable" : "Add to cart"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ---------- DESCRIPTION: shadcn Sheet ---------- */}
-      <Sheet open={descOpen} onOpenChange={setDescOpen}>
-        <SheetContent side="bottom" className="p-0">
-          <div className="p-4">
-            <SheetHeader className="mb-2">
-              <SheetTitle>Description</SheetTitle>
-              <SheetDescription />
-            </SheetHeader>
-            <div className="space-y-3 text-[15px]">
-              <p className="whitespace-pre-wrap">
-                {p.description ??
-                  "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
-              </p>
-
-              {optionGroups.length > 0 && (
-                <>
-                  <div className="font-semibold mt-2">Available options</div>
-                  <ul className="list-disc ml-4">
-                    {optionGroups.map((g) => (
-                      <li key={g.id}>
-                        <span className="font-medium">{g.name}:</span>{" "}
-                        {g.values.map((v) => v.label).join(", ")}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+          {/* Centered unavailable message */}
+          <div className="flex flex-col items-center justify-center pt-28 pb-8 text-center">
+            <div className="text-lg font-medium mb-1">
+              Sorry, this item is unavailable
+            </div>
+            <div className="text-sm text-neutral-400">
+              The seller has removed this product from their store.
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
 
-      {/* Trigger for description sheet */}
-      <div className="px-4 -mt-2">
-        <button
-          onClick={() => setDescOpen(true)}
-          className="mt-3 text-sm underline"
-        >
-          Read item description
-        </button>
-      </div>
+          {/* More from shop */}
+          <div className="px-4 space-y-8">
+            {!!moreFromShop.length && (
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium">
+                    Discover more from this store →
+                  </h3>
+                </div>
 
-      {/* ---------- PERSONALIZATION: shadcn Sheet ---------- */}
-      {personalizationConfig.enabled && (
-        <Sheet open={personalizationOpen} onOpenChange={setPersonalizationOpen}>
-          <SheetContent side="bottom" className="p-0">
-            <div className="p-4 space-y-3 text-[15px]">
-              <SheetHeader className="mb-1">
-                <SheetTitle>Add personalization</SheetTitle>
-                <SheetDescription />
-              </SheetHeader>
-
-              {images.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {images.slice(0, 4).map((src, i) => (
-                    <div
-                      key={i}
-                      className="h-16 w-16 rounded-md overflow-hidden bg-neutral-100 shrink-0"
+                <div className="grid grid-cols-2 gap-3">
+                  {moreFromShop.map((x) => (
+                    <Link
+                      key={x.id}
+                      href={`/product/${x.id}`}
+                      className="block rounded-xl bg-white border overflow-hidden"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={src}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
+                      <div className="aspect-[4/3] bg-neutral-100">
+                        {Array.isArray(x.photos) && x.photos[0] ? (
+                          <img
+                            src={x.photos[0]}
+                            alt={x.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="p-2">
+                        <div className="text-sm line-clamp-2 text-black">
+                          {x.title}
+                        </div>
+                        <div className="text-xs text-neutral-600 mt-1">
+                          MAD{x.price_mad.toLocaleString("en-US")}
+                        </div>
+                      </div>
+                    </Link>
                   ))}
                 </div>
-              )}
+              </section>
+            )}
+          </div>
+        </main>
+      ) : (
+        <main className="pb-10 bg-neutral-50 min-h-screen">
+          {/* top buttons */}
+          <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
+            <button
+              onClick={() => router.back()}
+              className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <MessageSquare size={16} />
+            </button>
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <Share2 size={16} />
+            </button>
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <Heart size={16} />
+            </button>
+          </div>
 
-              {personalizationConfig.instructions && (
-                <div className="rounded-md bg-neutral-100 p-3 text-[13px] leading-relaxed">
-                  <div className="font-medium mb-1">Personalization</div>
-                  <div className="whitespace-pre-wrap">
-                    {personalizationConfig.instructions}
+          {/* gallery (Embla) */}
+          <div className="relative">
+            <div ref={emblaRef} className="embla overflow-hidden">
+              <div className="flex">
+                {(images.length ? images : [undefined]).map((src, i) => (
+                  <div
+                    key={i}
+                    className="min-w-0 flex-[0_0_100%] aspect-[4/3] bg-black/5"
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={p.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full grid place-items-center text-neutral-500">
+                        No image
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
+            </div>
 
-              <div className="space-y-2">
-                <textarea
-                  value={personalization}
-                  onChange={(e) =>
-                    setPersonalization(
-                      e.target.value.slice(0, personalizationConfig.maxChars)
-                    )
-                  }
-                  className="w-full min-h-[120px] rounded-lg border px-3 py-2 outline-none"
-                  placeholder="Type your personalization here…"
-                  maxLength={personalizationConfig.maxChars}
-                />
-                <div className="text-right text-xs text-neutral-500">
-                  {personalization.length}/{personalizationConfig.maxChars}
+            {/* dots */}
+            {images.length > 1 && (
+              <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1">
+                {images.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => emblaApi?.scrollTo(i)}
+                    className={`h-2 w-2 rounded-full ${
+                      i === idx ? "bg-black" : "bg-neutral-300"
+                    }`}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* title + price */}
+          <div className="px-4 pt-1 space-y-2">
+            <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
+
+            {isUnavailable && (
+              <div className="text-[12px] text-amber-800 bg-amber-100 px-2 py-1 rounded-full inline-block">
+                temporarily unavailable
+              </div>
+            )}
+
+            {promoActive ? (
+              <div className="flex flex-col gap-1">
+                <div className="text-sm font-medium text-green-400">
+                  {percentOff}% off sale ends {formatEndsShort(p.promo_ends_at)}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="text-xl font-bold text-green-400">
+                    MAD{(promoTotal as number).toLocaleString("en-US")}
+                  </div>
+                  <div className="line-through text-neutral-400">
+                    MAD{currentTotal.toLocaleString("en-US")}
+                  </div>
+                  {(isInactive || isRemoved) && !isUnavailable && (
+                    <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
+                      removed from seller’s store
+                    </span>
+                  )}
                 </div>
               </div>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                {minTotal !== maxTotal ? (
+                  <div className="text-xl font-bold">
+                    MAD{minTotal.toLocaleString("en-US")} – MAD
+                    {maxTotal.toLocaleString("en-US")}
+                  </div>
+                ) : (
+                  <div className="text-xl font-bold">
+                    MAD{currentTotal.toLocaleString("en-US")}
+                  </div>
+                )}
+                {(isInactive || isRemoved) && !isUnavailable && (
+                  <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
+                    removed from seller’s store
+                  </span>
+                )}
+              </div>
+            )}
 
+            <div className="text-sm text-neutral-500">
+              by{" "}
+              {p.shop_id ? (
+                <Link
+                  href={`/shop/${p.shop_id}`}
+                  className="inline-flex items-center gap-2 hover:underline"
+                >
+                  {shopImg ? (
+                    <span className="inline-block h-5 w-5 rounded-full overflow-hidden bg-neutral-200">
+                      <img
+                        src={shopImg}
+                        alt={shop?.title ?? "Shop"}
+                        className="h-full w-full object-cover"
+                      />
+                    </span>
+                  ) : null}
+                  <span className="font-medium">{shop?.title || "shop"}</span>
+                </Link>
+              ) : (
+                <span className="font-medium">
+                  {p.shop_title || "a Moroccan maker"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* OPTIONS (dynamic) */}
+          {optionGroups.map((g) => {
+            const valueId = selected[g.id] ?? "";
+            return (
+              <Section key={g.id} title={g.name}>
+                <div className="rounded-xl border bg-white px-3 py-2">
+                  <select
+                    className="w-full bg-transparent outline-none py-1"
+                    value={valueId}
+                    onChange={(e) =>
+                      setSelected((s) => ({ ...s, [g.id]: e.target.value }))
+                    }
+                  >
+                    {g.values.map((v) => {
+                      const delta = Number(v.price_delta_mad ?? 0);
+                      const label =
+                        delta === 0
+                          ? v.label
+                          : `${v.label}  ${
+                              delta > 0
+                                ? `+ MAD${delta}`
+                                : `- MAD${Math.abs(delta)}`
+                            }`;
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </Section>
+            );
+          })}
+
+          {/* PERSONALIZATION */}
+          {personalizationConfig.enabled && (
+            <Section title="Personalization">
+              {personalization.trim() ? (
+                <div className="rounded-xl border bg-white">
+                  <div className="flex items-center justify-between px-3 py-3 border-b">
+                    <div className="font-medium">Your personalization</div>
+                    <button
+                      type="button"
+                      onClick={() => setPersonalizationOpen(true)}
+                      className="text-sm inline-flex items-center gap-1 underline"
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                  </div>
+                  <div className="px-3 py-3 text-sm">
+                    <div className="text-neutral-500 mb-1">Personalization</div>
+                    <div className="break-words">{personalization}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="text-sm text-neutral-600 mb-2">
+                    Personalize before adding to your cart
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPersonalizationOpen(true)}
+                    className="w-full rounded-full border bg-white px-4 py-3 font-medium"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="inline-block h-4 w-4 rounded border border-dashed" />
+                      Add personalization
+                    </span>
+                  </button>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* quantity + CTAs */}
+          <Section title="Quantity">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-full border bg-white">
+                <button
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="px-3 py-1.5 text-lg"
+                  aria-label="Decrease"
+                >
+                  −
+                </button>
+                <div className="min-w-[2.25rem] text-center">{qty}</div>
+                <button
+                  onClick={() => setQty((q) => q + 1)}
+                  className="px-3 py-1.5 text-lg"
+                  aria-label="Increase"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2">
               <button
-                type="button"
-                onClick={() => setPersonalizationOpen(false)}
-                className="w-full rounded-full bg-black text-white px-4 py-3 font-medium"
+                onClick={handleAddToCart}
+                disabled={isUnavailable || isInactive || isRemoved}
+                className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
               >
-                Finish personalization
+                {isUnavailable || isInactive || isRemoved
+                  ? "Unavailable"
+                  : "Add to cart"}
+              </button>
+              <button
+                onClick={handleBuyNow}
+                disabled={isUnavailable || isInactive || isRemoved}
+                className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+              >
+                {isUnavailable || isInactive || isRemoved
+                  ? "Unavailable"
+                  : "Buy it now"}
               </button>
             </div>
-          </SheetContent>
-        </Sheet>
+            <div ref={sentinelRef} className="h-px" />
+          </Section>
+
+          {/* Reviews placeholder */}
+          <Section title="Item reviews and shop ratings">
+            <div className="rounded-xl border bg-white p-3 text-sm text-neutral-600">
+              This item has not been reviewed yet. Buy it now and leave a
+              review.
+            </div>
+          </Section>
+
+          {/* Item details */}
+          <Section title="Item details">
+            <ul className="space-y-3 text-[15px]">
+              <li>
+                <span className="font-medium">Made by</span>{" "}
+                {shop?.title ?? p.shop_title ?? "independent artisan"}
+              </li>
+              <li>
+                <span className="font-medium">Made to order</span>
+              </li>
+              <li>
+                <span className="font-medium">Ships from</span>{" "}
+                {p.city ?? "Morocco"}
+              </li>
+            </ul>
+          </Section>
+
+          {/* Similar */}
+          {!!similar.length && (
+            <Section title="Compare similar items">
+              <div className="grid grid-cols-2 gap-3">
+                {similar.map((x) => (
+                  <Link
+                    key={x.id}
+                    href={`/product/${x.id}`}
+                    className="block rounded-xl bg-white border overflow-hidden"
+                  >
+                    <div className="aspect-[4/3] bg-neutral-100">
+                      {Array.isArray(x.photos) && x.photos[0] ? (
+                        <img
+                          src={x.photos[0]}
+                          alt={x.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="p-2">
+                      <div className="text-sm line-clamp-2">{x.title}</div>
+                      <div className="text-xs text-neutral-600 mt-1">
+                        MAD{x.price_mad}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* More from shop */}
+          {!!moreFromShop.length && (
+            <Section title="More from this shop">
+              <div className="grid grid-cols-2 gap-3">
+                {moreFromShop.map((x) => (
+                  <Link
+                    key={x.id}
+                    href={`/product/${x.id}`}
+                    className="block rounded-xl bg-white border overflow-hidden"
+                  >
+                    <div className="aspect-[4/3] bg-neutral-100">
+                      {Array.isArray(x.photos) && x.photos[0] ? (
+                        <img
+                          src={x.photos[0]}
+                          alt={x.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="p-2">
+                      <div className="text-sm line-clamp-2">{x.title}</div>
+                      <div className="text-xs text-neutral-600 mt-1">
+                        MAD{x.price_mad}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          <div className="h-24" />
+
+          {showStickyAdd && (
+            <div
+              className="fixed inset-x-0 px-4 z-50"
+              style={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
+            >
+              <div className="max-w-screen-sm mx-auto">
+                <button
+                  onClick={handleAddToCart}
+                  disabled={isUnavailable || isInactive || isRemoved}
+                  className="w-full rounded-full bg-black text-white px-4 py-4 font-medium shadow-xl disabled:opacity-60"
+                >
+                  {isUnavailable || isInactive || isRemoved
+                    ? "Unavailable"
+                    : "Add to cart"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- DESCRIPTION: shadcn Sheet ---------- */}
+          <Sheet open={descOpen} onOpenChange={setDescOpen}>
+            <SheetContent side="bottom" className="p-0">
+              <div className="p-4">
+                <SheetHeader className="mb-2">
+                  <SheetTitle>Description</SheetTitle>
+                  <SheetDescription />
+                </SheetHeader>
+                <div className="space-y-3 text-[15px]">
+                  <p className="whitespace-pre-wrap">
+                    {p.description ??
+                      "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
+                  </p>
+
+                  {optionGroups.length > 0 && (
+                    <>
+                      <div className="font-semibold mt-2">
+                        Available options
+                      </div>
+                      <ul className="list-disc ml-4">
+                        {optionGroups.map((g) => (
+                          <li key={g.id}>
+                            <span className="font-medium">{g.name}:</span>{" "}
+                            {g.values.map((v) => v.label).join(", ")}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          {/* Trigger for description sheet */}
+          <div className="px-4 -mt-2">
+            <button
+              onClick={() => setDescOpen(true)}
+              className="mt-3 text-sm underline"
+            >
+              Read item description
+            </button>
+          </div>
+
+          {/* ---------- PERSONALIZATION: shadcn Sheet ---------- */}
+          {personalizationConfig.enabled && (
+            <Sheet
+              open={personalizationOpen}
+              onOpenChange={setPersonalizationOpen}
+            >
+              <SheetContent side="bottom" className="p-0">
+                <div className="p-4 space-y-3 text-[15px]">
+                  <SheetHeader className="mb-1">
+                    <SheetTitle>Add personalization</SheetTitle>
+                    <SheetDescription />
+                  </SheetHeader>
+
+                  {images.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {images.slice(0, 4).map((src, i) => (
+                        <div
+                          key={i}
+                          className="h-16 w-16 rounded-md overflow-hidden bg-neutral-100 shrink-0"
+                        >
+                          <img
+                            src={src}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {personalizationConfig.instructions && (
+                    <div className="rounded-md bg-neutral-100 p-3 text-[13px] leading-relaxed">
+                      <div className="font-medium mb-1">Personalization</div>
+                      <div className="whitespace-pre-wrap">
+                        {personalizationConfig.instructions}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <textarea
+                      value={personalization}
+                      onChange={(e) =>
+                        setPersonalization(
+                          e.target.value.slice(
+                            0,
+                            personalizationConfig.maxChars
+                          )
+                        )
+                      }
+                      className="w-full min-h-[120px] rounded-lg border px-3 py-2 outline-none"
+                      placeholder="Type your personalization here…"
+                      maxLength={personalizationConfig.maxChars}
+                    />
+                    <div className="text-right text-xs text-neutral-500">
+                      {personalization.length}/{personalizationConfig.maxChars}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPersonalizationOpen(false)}
+                    className="w-full rounded-full bg-black text-white px-4 py-3 font-medium"
+                  >
+                    Finish personalization
+                  </button>
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
+        </main>
       )}
-    </main>
+    </>
   );
 }
 
