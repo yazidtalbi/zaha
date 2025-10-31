@@ -1,12 +1,11 @@
+// app/shop/[id]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
-
-import { useRouter, useSearchParams } from "next/navigation";
 
 type Shop = {
   id: string;
@@ -33,6 +32,7 @@ type Collection = { id: string; title: string; cover_url: string | null };
 
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const shopId = (id ?? "").toString().trim();
 
   const [shop, setShop] = useState<Shop | null>(null);
@@ -149,7 +149,10 @@ export default function ShopPage() {
     (Array.isArray(shop.cover_urls) && shop.cover_urls[0]) ||
     items.find((p) => Array.isArray(p.photos) && p.photos[0])?.photos?.[0];
 
-  const handleTileClick = (cid: string) => setSelectedCol(cid);
+  const goToCollection = (cid: string) => {
+    // Navigate to collection page under this shop
+    router.push(`/shop/${shopId}/collection/${cid}`);
+  };
 
   return (
     <main className="pb-24">
@@ -244,7 +247,7 @@ export default function ShopPage() {
                   title={c.title}
                   count={count}
                   img={img}
-                  onClick={() => handleTileClick(c.id)}
+                  onClick={() => goToCollection(c.id)}
                 />
               );
             })}

@@ -1,7 +1,7 @@
 // app/product/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
@@ -11,6 +11,9 @@ import {
   MessageSquare,
   ChevronLeft,
   Pencil,
+  X,
+  ChevronRight,
+  ChevronLeft as ChevronLeftIcon,
 } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { toast } from "sonner";
@@ -21,6 +24,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import useEmblaCarousel from "embla-carousel-react";
 
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
@@ -108,6 +112,58 @@ export default function ProductPage() {
     [shop]
   );
 
+  //cta
+  const [inCart, setInCart] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth.user;
+      if (!user || !p?.id) return;
+      const { count } = await supabase
+        .from("cart_items")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("product_id", p.id);
+      setInCart((count ?? 0) > 0);
+    })();
+  }, [p?.id]);
+
+  async function handleAddToCartMerge() {
+    // same as your current handleAddToCart, but pass mode: "merge"
+    const res = await addToCart({
+      productId: p.id,
+      qty,
+      options: selectionsToOptionsObject(),
+      personalization: personalization.trim() || null,
+      mode: "merge",
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("cart:changed"));
+      setInCart(true);
+      toast.success("Added to cart 🛒");
+    } else {
+      toast.error("Failed to add to cart", { description: res.message });
+    }
+  }
+
+  async function handleAddToCartNew() {
+    const res = await addToCart({
+      productId: p.id,
+      qty,
+      options: selectionsToOptionsObject(),
+      personalization: personalization.trim() || null,
+      mode: "new",
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("cart:changed"));
+      setInCart(true);
+      toast.success("Added as a new item 🛒");
+    } else {
+      toast.error("Failed to add to cart", { description: res.message });
+    }
+  }
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -158,6 +214,40 @@ export default function ProductPage() {
       emblaApi.off("select", onSelect);
     };
   }, [emblaApi]);
+
+  // ---------- Fullscreen viewer state ----------
+  const [fsOpen, setFsOpen] = useState(false);
+  const [startIndex, setStartIndex] = useState(0);
+  const [fsRef, fsApi] = useEmblaCarousel({
+    loop: true,
+    startIndex,
+    speed: 20,
+    align: "start",
+  });
+
+  const openFullscreenAt = useCallback((i: number) => {
+    setStartIndex(i);
+    setFsOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!fsApi) return;
+    fsApi.scrollTo(startIndex, true);
+  }, [fsApi, startIndex]);
+
+  const fsPrev = useCallback(() => fsApi?.scrollPrev(), [fsApi]);
+  const fsNext = useCallback(() => fsApi?.scrollNext(), [fsApi]);
+
+  // keyboard arrows in fullscreen
+  useEffect(() => {
+    if (!fsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") fsPrev();
+      if (e.key === "ArrowRight") fsNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fsOpen, fsPrev, fsNext]);
 
   // sticky CTA
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -470,9 +560,13 @@ export default function ProductPage() {
             <div ref={emblaRef} className="embla overflow-hidden">
               <div className="flex">
                 {(images.length ? images : [undefined]).map((src, i) => (
-                  <div
+                  <button
                     key={i}
                     className="min-w-0 flex-[0_0_100%] aspect-[4/3] bg-black/5"
+                    onClick={() => (src ? openFullscreenAt(i) : undefined)}
+                    aria-label={
+                      src ? `Open image ${i + 1} fullscreen` : "No image"
+                    }
                   >
                     {src ? (
                       <img
@@ -485,7 +579,7 @@ export default function ProductPage() {
                         No image
                       </div>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -517,44 +611,62 @@ export default function ProductPage() {
               </div>
             )}
 
-            {promoActive ? (
-              <div className="flex flex-col gap-1">
-                <div className="text-sm font-medium text-green-400">
-                  {percentOff}% off sale ends {formatEndsShort(p.promo_ends_at)}
+            {/* pricing */}
+            {(() => {
+              const promoActiveLocal = isPromoActive(p);
+              const currentTotalLocal = currentTotal;
+              const promoTotalLocal = promoActiveLocal
+                ? Math.round(Number(p.promo_price_mad)) + selectedDelta
+                : null;
+              const percentOffLocal =
+                promoActiveLocal && currentTotalLocal > 0
+                  ? Math.round(
+                      ((currentTotalLocal - (promoTotalLocal as number)) /
+                        currentTotalLocal) *
+                        100
+                    )
+                  : 0;
+
+              return promoActiveLocal ? (
+                <div className="flex flex-col gap-1">
+                  <div className="text-sm font-medium text-green-400">
+                    {percentOffLocal}% off sale ends{" "}
+                    {formatEndsShort(p.promo_ends_at)}
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="text-xl font-bold text-green-400">
+                      MAD{(promoTotalLocal as number).toLocaleString("en-US")}
+                    </div>
+                    <div className="line-through text-neutral-400">
+                      MAD{currentTotalLocal.toLocaleString("en-US")}
+                    </div>
+                    {(isInactive || isRemoved) && !isUnavailable && (
+                      <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
+                        removed from seller’s store
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="text-xl font-bold text-green-400">
-                    MAD{(promoTotal as number).toLocaleString("en-US")}
-                  </div>
-                  <div className="line-through text-neutral-400">
-                    MAD{currentTotal.toLocaleString("en-US")}
-                  </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {minTotal !== maxTotal ? (
+                    <div className="text-xl font-bold">
+                      MAD{minTotal.toLocaleString("en-US")} – MAD
+                      {maxTotal.toLocaleString("en-US")}
+                    </div>
+                  ) : (
+                    <div className="text-xl font-bold">
+                      MAD{currentTotalLocal.toLocaleString("en-US")}
+                    </div>
+                  )}
                   {(isInactive || isRemoved) && !isUnavailable && (
                     <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
                       removed from seller’s store
                     </span>
                   )}
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 flex-wrap">
-                {minTotal !== maxTotal ? (
-                  <div className="text-xl font-bold">
-                    MAD{minTotal.toLocaleString("en-US")} – MAD
-                    {maxTotal.toLocaleString("en-US")}
-                  </div>
-                ) : (
-                  <div className="text-xl font-bold">
-                    MAD{currentTotal.toLocaleString("en-US")}
-                  </div>
-                )}
-                {(isInactive || isRemoved) && !isUnavailable && (
-                  <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                    removed from seller’s store
-                  </span>
-                )}
-              </div>
-            )}
+              );
+            })()}
 
             <div className="text-sm text-neutral-500">
               by{" "}
@@ -680,25 +792,42 @@ export default function ProductPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-2">
-              <button
-                onClick={handleAddToCart}
-                disabled={isUnavailable || isInactive || isRemoved}
-                className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
-              >
-                {isUnavailable || isInactive || isRemoved
-                  ? "Unavailable"
-                  : "Add to cart"}
-              </button>
-              <button
-                onClick={handleBuyNow}
-                disabled={isUnavailable || isInactive || isRemoved}
-                className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
-              >
-                {isUnavailable || isInactive || isRemoved
-                  ? "Unavailable"
-                  : "Buy it now"}
-              </button>
+              {inCart ? (
+                <>
+                  <Link
+                    href="/cart"
+                    className="rounded-full border bg-white px-4 py-3 text-center font-medium"
+                  >
+                    View in your cart
+                  </Link>
+                  <button
+                    onClick={handleAddToCartNew}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                  >
+                    Add new item
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleAddToCartMerge}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
+                  >
+                    Add to cart
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                  >
+                    Buy it now
+                  </button>
+                </>
+              )}
             </div>
+
             <div ref={sentinelRef} className="h-px" />
           </Section>
 
@@ -926,6 +1055,71 @@ export default function ProductPage() {
           )}
         </main>
       )}
+
+      {/* ---------- FULLSCREEN DIALOG FOR IMAGES ---------- */}
+      <Dialog open={fsOpen} onOpenChange={setFsOpen}>
+        <DialogContent
+          className="p-0 border-0 max-w-none w-screen h-screen"
+          hideClose
+        >
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/95" />
+
+          {/* Close */}
+          <button
+            onClick={() => setFsOpen(false)}
+            aria-label="Close fullscreen"
+            className="fixed top-3 right-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          {/* Prev / Next */}
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={fsPrev}
+                aria-label="Previous image"
+                className="fixed left-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+              >
+                <ChevronLeftIcon className="h-6 w-6" />
+              </button>
+              <button
+                onClick={fsNext}
+                aria-label="Next image"
+                className="fixed right-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+
+          {/* Embla viewport */}
+          <div className="fixed inset-0 z-40 overflow-hidden" ref={fsRef}>
+            <div className="flex h-full">
+              {(images.length ? images : [undefined]).map((src, i) => (
+                <div
+                  key={"fs-" + i}
+                  className="relative shrink-0 grow-0 basis-full h-full"
+                >
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={`Product image ${i + 1}`}
+                      className="h-full w-full object-contain select-none"
+                      draggable={false}
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center text-neutral-400">
+                      No image
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
