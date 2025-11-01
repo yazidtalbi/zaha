@@ -29,6 +29,7 @@ type Product = {
   title: string;
   photos: string[] | null;
   price_mad: number;
+  shop_id?: string;
 };
 
 type Order = {
@@ -41,10 +42,8 @@ type Order = {
   phone: string | null;
   address: string | null;
   product_id: string | null;
-  // NEW: copied at checkout
   personalization?: string | null;
   options?: any | null;
-
   products?: Product | null;
 };
 
@@ -61,13 +60,37 @@ type OrderEvent = {
   created_at: string;
 };
 
+type ReviewRow = {
+  id: string;
+  product_id: string;
+  shop_id: string | null;
+  order_id: string | null;
+  author: string; // user id
+  rating: number | null; // int4
+  title: string | null; // text
+  body: string | null; // text
+  created_at: string;
+};
+
 function OrderInner() {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [events, setEvents] = useState<OrderEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const handleReviewSubmitted = (row: any) => {
+    setMyReview(row);
+    setHasReview(true);
+    setReviewChecked(true);
+  };
+
+  // auth
   const [user, setUser] = useState<any>(null);
+
+  // review state
+  const [hasReview, setHasReview] = useState<boolean>(false);
+  const [myReview, setMyReview] = useState<ReviewRow | null>(null);
+  const [reviewChecked, setReviewChecked] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -76,6 +99,7 @@ function OrderInner() {
     })();
   }, []);
 
+  // Load order + timeline
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
     if (!_id) return;
@@ -87,9 +111,9 @@ function OrderInner() {
         .eq("id", _id)
         .maybeSingle();
 
-      if (!error) {
+      if (!error && data) {
         setOrder(data as Order);
-        // Try to load timeline events if table exists
+
         try {
           const { data: ev, error: evErr } = await supabase
             .from("order_events")
@@ -101,29 +125,117 @@ function OrderInner() {
         } catch {
           setEvents(null);
         }
+      } else {
+        setOrder(null);
+        setEvents(null);
       }
       setLoading(false);
     })();
   }, [id]);
+
+  // Check if this user already left a review; if yes load the latest row to render
+  // --- replace the whole "Robust review existence check" effect with this:
+  useEffect(() => {
+    const productId = order?.product_id ?? order?.products?.id ?? null;
+    const authorId = user?.id ?? null;
+    if (!authorId || !productId) return;
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // 1) cheap existence check (RLS must allow select!)
+        const { count, error: countErr } = await supabase
+          .from("reviews")
+          .select("id", { count: "exact", head: true })
+          .eq("product_id", productId)
+          .eq("author", authorId);
+
+        const exists = !countErr && (count ?? 0) > 0;
+
+        // 2) fetch latest row to render (uses title/body per your schema)
+        let latest: ReviewRow | null = null;
+        if (exists) {
+          const { data, error } = await supabase
+            .from("reviews")
+            .select(
+              "id, product_id, shop_id, order_id, author, rating, title, body, created_at"
+            )
+            .eq("product_id", productId)
+            .eq("author", authorId)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (!error && data && data.length) latest = data[0] as ReviewRow;
+        }
+
+        if (!cancelled) {
+          setHasReview(exists);
+          setMyReview(latest);
+          setReviewChecked(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setHasReview(false);
+          setMyReview(null);
+          setReviewChecked(true);
+        }
+      }
+    }
+
+    load();
+
+    // realtime on that product so pill updates immediately after submit/edit/delete
+    const chan = supabase
+      .channel(`reviews-product-${productId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "reviews",
+          filter: `product_id=eq.${productId}`,
+        },
+        load
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(chan);
+    };
+  }, [order?.id, order?.product_id, order?.products?.id, user?.id]);
 
   if (loading) return <main className="p-4">Loading…</main>;
   if (!order) return <main className="p-4">Order not found.</main>;
 
   const p = order.products ?? null;
   const img = Array.isArray(p?.photos) ? p.photos[0] : undefined;
+  const productId = order.product_id ?? p?.id ?? null;
+
+  const canReview =
+    (order.status === "delivered" || order.status === "confirmed") &&
+    !!productId &&
+    !!user?.id;
 
   return (
     <main className="p-4 space-y-4">
       <h1 className="text-xl font-semibold">Order details</h1>
 
-      {order.status === "delivered" || order.status === "confirmed" ? (
+      {/* Review CTA or existing review */}
+      {canReview && reviewChecked ? (
         <div className="mt-6">
-          <LeaveReviewButton
-            productId={order.product_id}
-            shopId={order.products?.shop_id}
-            orderId={order.id}
-            authorId={user.id} // from supabase.auth.getUser()
-          />
+          {hasReview && myReview ? (
+            <ExistingReviewPill review={myReview} productId={productId!} />
+          ) : (
+            <LeaveReviewButton
+              productId={productId!}
+              shopId={order.products?.shop_id}
+              orderId={order.id}
+              authorId={user.id}
+              onSuccess={handleReviewSubmitted}
+            />
+          )}
         </div>
       ) : null}
 
@@ -213,7 +325,6 @@ function OrderInner() {
       <div className="mt-4 rounded-xl border p-4">
         <h2 className="text-base font-semibold mb-3">Activity timeline</h2>
         <ul className="space-y-3 text-sm">
-          {/* Creation */}
           <li className="flex items-start gap-2">
             <Clock className="h-4 w-4 mt-0.5" />
             <div>
@@ -223,9 +334,7 @@ function OrderInner() {
               </div>
             </div>
           </li>
-
-          {/* Status + payment events (if events table is available) */}
-          {events && events.length > 0 ? (
+          {events && events.length ? (
             events
               .filter(
                 (ev) =>
@@ -312,11 +421,7 @@ function statusIcon(s: OrderStatus) {
   }
 }
 
-/* ===========================
-   OptionsList — robust renderer
-   - Array of objects: [{ group/name/key/title, value/label, price_delta_mad? }]
-   - Object map: { Size: "L", Color: "Blue" }
-   =========================== */
+/* Options renderer */
 function OptionsList({ options }: { options: any }) {
   if (Array.isArray(options)) {
     if (!options.length) return null;
@@ -359,10 +464,60 @@ function OptionsList({ options }: { options: any }) {
     );
   }
 
-  // primitive fallback
   return (
     <div className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
       {String(options)}
     </div>
   );
+}
+
+/* Review pill (uses 'title' & 'body' columns) */
+function ExistingReviewPill({
+  review,
+  productId,
+}: {
+  review: ReviewRow;
+  productId: string;
+}) {
+  const stars = clamp(0, 5, review.rating ?? 0);
+  const text = (review.body ?? review.title ?? "").trim();
+  const snippet = text.slice(0, 140) + (text.length > 140 ? "…" : "");
+  const href = `/product/${productId}#reviews`;
+
+  return (
+    <Link
+      href={href}
+      className="block rounded-lg border border-black/10 bg-white px-3 py-2"
+      title="View your review"
+    >
+      <div className="flex items-center gap-2">
+        <StarRow n={stars} />
+        <span className="text-xs text-ink/60">
+          {new Date(review.created_at).toLocaleDateString()}
+        </span>
+        <span className="ml-auto text-[11px] rounded-full bg-ink/5 px-2 py-0.5">
+          Your review
+        </span>
+      </div>
+      {snippet && (
+        <p className="text-sm mt-1 text-ink/80 line-clamp-2">{snippet}</p>
+      )}
+      <div className="mt-1 text-xs underline decoration-ink/30 hover:decoration-ink">
+        View your review
+      </div>
+    </Link>
+  );
+}
+
+function StarRow({ n }: { n: number }) {
+  return (
+    <span aria-label={`${n} out of 5`}>
+      {"★★★★★".slice(0, n)}
+      <span className="text-ink/30">{"★★★★★".slice(n)}</span>
+    </span>
+  );
+}
+
+function clamp(min: number, max: number, v: number) {
+  return Math.max(min, Math.min(max, v));
 }
