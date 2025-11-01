@@ -65,10 +65,11 @@ type ReviewRow = {
   product_id: string;
   shop_id: string | null;
   order_id: string | null;
-  author: string; // user id
-  rating: number | null; // int4
-  title: string | null; // text
-  body: string | null; // text
+  author: string;
+  rating: number | null;
+  title: string | null;
+  body: string | null;
+  photos: string[] | null; // 👈 NEW
   created_at: string;
 };
 
@@ -159,8 +160,9 @@ function OrderInner() {
           const { data, error } = await supabase
             .from("reviews")
             .select(
-              "id, product_id, shop_id, order_id, author, rating, title, body, created_at"
+              "id, product_id, shop_id, order_id, author, rating, title, body, photos, created_at"
             )
+
             .eq("product_id", productId)
             .eq("author", authorId)
             .order("created_at", { ascending: false })
@@ -492,6 +494,23 @@ function ExistingReviewPill({
     >
       <div className="flex items-center gap-2">
         <StarRow n={stars} />
+        {review.photos?.length ? (
+          <div className="mt-2 flex gap-2 overflow-x-auto">
+            {review.photos.slice(0, 4).map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt=""
+                className="h-10 w-10 rounded object-cover border"
+              />
+            ))}
+            {review.photos.length > 4 && (
+              <div className="h-10 w-10 rounded border grid place-items-center text-xs text-ink/70">
+                +{review.photos.length - 4}
+              </div>
+            )}
+          </div>
+        ) : null}
         <span className="text-xs text-ink/60">
           {new Date(review.created_at).toLocaleDateString()}
         </span>

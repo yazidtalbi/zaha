@@ -1,3 +1,4 @@
+// components/reviews/ShopReviewsStrip.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -12,13 +13,16 @@ export default function ShopReviewsStrip({ shopId }: { shopId: string }) {
     dragFree: true,
     containScroll: "trimSnaps",
   });
+
   const [reviews, setReviews] = useState<Review[]>([]);
   const [count, setCount] = useState(0);
   const [avg, setAvg] = useState(0);
 
   useEffect(() => {
     if (!shopId) return;
+
     (async () => {
+      // 1) Latest visible reviews (limit for strip)
       const { data: list, count: total } = await supabase
         .from("reviews")
         .select(
@@ -36,13 +40,14 @@ export default function ShopReviewsStrip({ shopId }: { shopId: string }) {
       setReviews((list as any) ?? []);
       setCount(total ?? 0);
 
+      // 2) Average rating (simple client-side mean)
       const { data: ratings } = await supabase
         .from("reviews")
         .select("rating")
         .eq("shop_id", shopId)
         .eq("is_public", true);
 
-      const arr = (ratings as { rating: number }[]) ?? [];
+      const arr = (ratings as { rating: number | null }[]) ?? [];
       const mean = arr.length
         ? arr.reduce((s, r) => s + Number(r.rating || 0), 0) / arr.length
         : 0;
@@ -69,6 +74,7 @@ export default function ShopReviewsStrip({ shopId }: { shopId: string }) {
         <div className="flex gap-4">
           {reviews.map((r) => (
             <div key={r.id} className="min-w-[85%] sm:min-w-[380px]">
+              {/* Your existing review card */}
               <ReviewCard r={r} />
             </div>
           ))}

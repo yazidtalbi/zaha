@@ -14,6 +14,16 @@ import {
   X,
   ChevronRight,
   ChevronLeft as ChevronLeftIcon,
+  Store,
+  Package,
+  FileDown,
+  Ruler,
+  Scale,
+  MapPin,
+  Truck,
+  Layers,
+  Edit3,
+  Undo2,
 } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { toast } from "sonner";
@@ -101,6 +111,53 @@ function formatEndsShort(iso: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 }
 
+/* Small helper for item details rows */
+function DetailRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <li className="flex items-start gap-3">
+      <span className="mt-0.5">{icon}</span>
+      <span className="text-[15px] leading-relaxed">
+        <span className="font-medium">{label}: </span>
+        <span className="text-neutral-700">{value}</span>
+      </span>
+    </li>
+  );
+}
+
+/* -------- NEW: keywords helpers (comma-separated -> pill list) -------- */
+function keywordArray(s?: string | null) {
+  return (s || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function TagList({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {items.map((tag) => (
+        <Link
+          href={`/search?q=${encodeURIComponent(tag)}`}
+          key={tag}
+          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-2.5 py-1 text-[12px] hover:bg-neutral-200"
+        >
+          {tag}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------- page -------------------- */
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -128,7 +185,6 @@ export default function ProductPage() {
 
   const isOwner = useMemo(() => {
     if (!uid) return false;
-    // Prefer explicit product.shop_owner if present; otherwise fall back to the joined shop.owner
     return (
       (p?.shop_owner && p.shop_owner === uid) ||
       (shop?.owner && shop.owner === uid)
@@ -497,6 +553,50 @@ export default function ProductPage() {
     router.push(`/checkout/${p.id}?${params.toString()}`);
   }
 
+  // -------- Item details (from JSON) --------
+  const details = useMemo(() => {
+    const d = (p?.item_details ?? {}) as any;
+    return {
+      type: d.type === "digital" ? "digital" : "physical",
+      width_cm: Number(d.width_cm ?? 0) || null,
+      height_cm: Number(d.height_cm ?? 0) || null,
+      weight_kg: Number(d.weight_kg ?? 0) || null,
+      personalizable: Boolean(d.personalizable ?? p?.personalization_enabled),
+      ships_from: (d.ships_from ?? p?.city ?? null) as string | null,
+      ships_to: Array.isArray(d.ships_to) ? d.ships_to.filter(Boolean) : [],
+      materials: Array.isArray(d.materials) ? d.materials.filter(Boolean) : [],
+      returns:
+        d.returns === "accepted" || d.returns === "not_accepted"
+          ? d.returns
+          : null,
+      shipping: d.shipping ?? null,
+    };
+  }, [p?.item_details, p?.personalization_enabled, p?.city]);
+
+  // Compute "Order now and get it on <date>"
+  const etaString = useMemo(() => {
+    const maxDays =
+      details.shipping?.estimate_days_max ??
+      details.shipping?.estimate_days_min ??
+      null;
+    if (!maxDays || maxDays < 0) return null;
+
+    const now = new Date();
+    const eta = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + maxDays
+    );
+    const pretty = eta.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+    });
+    return `Order now and get it on ${pretty}`;
+  }, [
+    details.shipping?.estimate_days_max,
+    details.shipping?.estimate_days_min,
+  ]);
+
   if (loading) return <main className="p-4">Loading…</main>;
   if (err) return <main className="p-4">Error: {err}</main>;
   if (!p) return <main className="p-4">Not found.</main>;
@@ -504,8 +604,8 @@ export default function ProductPage() {
   return (
     <>
       {isRemoved ? (
+        /* ---------------- Removed screen ---------------- */
         <main className="pb-10">
-          {/* Top bar with back arrow */}
           <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
             <button
               onClick={() => router.back()}
@@ -514,8 +614,6 @@ export default function ProductPage() {
               <ChevronLeft size={18} />
             </button>
           </div>
-
-          {/* Centered unavailable message */}
           <div className="flex flex-col items-center justify-center pt-28 pb-8 text-center">
             <div className="text-lg font-medium mb-1">
               Sorry, this item is unavailable
@@ -524,8 +622,6 @@ export default function ProductPage() {
               The seller has removed this product from their store.
             </div>
           </div>
-
-          {/* Owner quick edit on removed screen */}
           {isOwner && (
             <div className="px-4">
               <Link
@@ -537,8 +633,6 @@ export default function ProductPage() {
               </Link>
             </div>
           )}
-
-          {/* More from shop */}
           <div className="px-4 space-y-8">
             {!!moreFromShop.length && (
               <section>
@@ -580,6 +674,7 @@ export default function ProductPage() {
           </div>
         </main>
       ) : (
+        /* ---------------- Normal product screen ---------------- */
         <main className="pb-10 bg-neutral-50 min-h-screen">
           {/* top buttons */}
           <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
@@ -601,7 +696,6 @@ export default function ProductPage() {
               <Heart size={16} />
             </button>
 
-            {/* Owner quick action: Edit */}
             {isOwner && (
               <Link
                 href={`/seller/edit/${p.id}`}
@@ -613,7 +707,8 @@ export default function ProductPage() {
               </Link>
             )}
           </div>
-          {/* gallery (Embla) */}
+
+          {/* gallery */}
           <div className="relative">
             <div ref={emblaRef} className="embla overflow-hidden">
               <div className="flex">
@@ -658,9 +753,13 @@ export default function ProductPage() {
               </div>
             )}
           </div>
-          {/* title + price */}
+
+          {/* title + price + shop */}
           <div className="px-4 pt-1 space-y-2">
             <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
+
+            {/* NEW: keyword/tag pills */}
+            <TagList items={keywordArray(p.keywords)} />
 
             {isUnavailable && (
               <div className="text-[12px] text-amber-800 bg-amber-100 px-2 py-1 rounded-full inline-block">
@@ -750,7 +849,8 @@ export default function ProductPage() {
               )}
             </div>
           </div>
-          {/* OPTIONS (dynamic) */}
+
+          {/* OPTIONS */}
           {optionGroups.map((g) => {
             const valueId = selected[g.id] ?? "";
             return (
@@ -784,6 +884,7 @@ export default function ProductPage() {
               </Section>
             );
           })}
+
           {/* PERSONALIZATION */}
           {personalizationConfig.enabled && (
             <Section title="Personalization">
@@ -823,6 +924,7 @@ export default function ProductPage() {
               )}
             </Section>
           )}
+
           {/* Quantity & CTAs or Owner Edit */}
           {!isOwner ? (
             <Section title="Quantity">
@@ -896,35 +998,190 @@ export default function ProductPage() {
               </Link>
             </div>
           )}
-          azzada
+
+          {/* Reviews strip */}
           <ProductReviewsStrip
             productId={p.id}
             shopId={p.shop_id ?? shop?.id}
           />
-          {/* Reviews placeholder */}
-          <Section title="Item reviews and shop ratings">
-            <div className="rounded-xl border bg-white p-3 text-sm text-neutral-600">
-              This item has not been reviewed yet. Buy it now and leave a
-              review.
-            </div>
-          </Section>
-          {/* Item details */}
+
+          {/* ---------------- ITEM DETAILS ---------------- */}
           <Section title="Item details">
-            <ul className="space-y-3 text-[15px]">
-              <li>
-                <span className="font-medium">Made by</span>{" "}
-                {shop?.title ?? p.shop_title ?? "independent artisan"}
-              </li>
-              <li>
-                <span className="font-medium">Made to order</span>
-              </li>
-              <li>
-                <span className="font-medium">Ships from</span>{" "}
-                {p.city ?? "Morocco"}
-              </li>
+            <ul className="space-y-3">
+              <DetailRow
+                icon={<Store className="h-5 w-5 text-neutral-500" />}
+                label="Designed by"
+                value={shop?.title ?? p.shop_title ?? "Independent artisan"}
+              />
+
+              <DetailRow
+                icon={
+                  details.type === "digital" ? (
+                    <FileDown className="h-5 w-5 text-neutral-500" />
+                  ) : (
+                    <Package className="h-5 w-5 text-neutral-500" />
+                  )
+                }
+                label="Item type"
+                value={
+                  details.type === "digital"
+                    ? "Instant Digital Download"
+                    : "Physical item"
+                }
+              />
+
+              {(details.width_cm || details.height_cm) && (
+                <DetailRow
+                  icon={<Ruler className="h-5 w-5 text-neutral-500" />}
+                  label="Dimensions"
+                  value={
+                    <>
+                      {details.width_cm ? `${details.width_cm} cm` : "—"} ×{" "}
+                      {details.height_cm ? `${details.height_cm} cm` : "—"}
+                    </>
+                  }
+                />
+              )}
+
+              {details.weight_kg && (
+                <DetailRow
+                  icon={<Scale className="h-5 w-5 text-neutral-500" />}
+                  label="Weight"
+                  value={`${details.weight_kg} kg`}
+                />
+              )}
+
+              {details.personalizable && (
+                <DetailRow
+                  icon={<Edit3 className="h-5 w-5 text-neutral-500" />}
+                  label="Personalizable"
+                  value="Yes"
+                />
+              )}
+
+              {details.materials?.length > 0 && (
+                <DetailRow
+                  icon={<Layers className="h-5 w-5 text-neutral-500" />}
+                  label="Materials"
+                  value={details.materials.join(", ")}
+                />
+              )}
             </ul>
           </Section>
-          {/* Similar */}
+
+          {/* ---------------- SHIPPING ---------------- */}
+          <Section title="Shipping & returns">
+            <ul className="space-y-3">
+              {details.ships_from && (
+                <DetailRow
+                  icon={<MapPin className="h-5 w-5 text-neutral-500" />}
+                  label="Ships from"
+                  value={details.ships_from}
+                />
+              )}
+
+              {details.ships_to?.length > 0 && (
+                <DetailRow
+                  icon={<Truck className="h-5 w-5 text-neutral-500" />}
+                  label="Ships to"
+                  value={details.ships_to.join(", ")}
+                />
+              )}
+
+              {/* Pricing */}
+              {details.shipping?.mode === "free" ? (
+                <DetailRow
+                  icon={<Package className="h-5 w-5 text-neutral-500" />}
+                  label="Shipping"
+                  value={
+                    details.shipping.free_over_mad
+                      ? `Free (orders over MAD ${details.shipping.free_over_mad})`
+                      : "Free"
+                  }
+                />
+              ) : details.shipping?.mode === "fees" ? (
+                <DetailRow
+                  icon={<Package className="h-5 w-5 text-neutral-500" />}
+                  label="Shipping"
+                  value={
+                    details.shipping.fee_mad != null
+                      ? `MAD ${details.shipping.fee_mad}`
+                      : "Additional fees"
+                  }
+                />
+              ) : null}
+
+              {/* Estimate */}
+              {(details.shipping?.estimate_days_min ||
+                details.shipping?.estimate_days_max) && (
+                <li className="flex items-start gap-3">
+                  <span className="mt-0.5">
+                    <Truck className="h-5 w-5 text-neutral-500" />
+                  </span>
+                  <div className="text-[15px] leading-relaxed">
+                    <span className="font-medium">Estimated delivery: </span>
+                    <span className="text-neutral-700">
+                      {details.shipping.estimate_days_min &&
+                      details.shipping.estimate_days_max
+                        ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
+                        : details.shipping.estimate_days_min
+                        ? `${details.shipping.estimate_days_min} days`
+                        : `${details.shipping.estimate_days_max} days`}
+                    </span>
+                    {etaString && (
+                      <div className="text-xs text-neutral-500 mt-1">
+                        {etaString}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              )}
+
+              {/* Badges */}
+              {(details.shipping?.cod ||
+                details.shipping?.pickup ||
+                details.shipping?.tracking) && (
+                <li className="flex flex-wrap gap-2 pl-8">
+                  {details.shipping.cod && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      COD
+                    </span>
+                  )}
+                  {details.shipping.pickup && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      Pickup
+                    </span>
+                  )}
+                  {details.shipping.tracking && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      Tracking
+                    </span>
+                  )}
+                </li>
+              )}
+
+              {/* Notes */}
+              {details.shipping?.notes && (
+                <DetailRow
+                  icon={<Package className="h-5 w-5 text-neutral-500" />}
+                  label="Shipping policy"
+                  value={details.shipping.notes}
+                />
+              )}
+
+              {details.returns && (
+                <DetailRow
+                  icon={<Undo2 className="h-5 w-5 text-neutral-500" />}
+                  label="Returns & exchanges"
+                  value={
+                    details.returns === "accepted" ? "Accepted" : "Not accepted"
+                  }
+                />
+              )}
+            </ul>
+          </Section>
+
+          {/* Compare similar */}
           {!!similar.length && (
             <Section title="Compare similar items">
               <div className="grid grid-cols-2 gap-3">
@@ -954,6 +1211,7 @@ export default function ProductPage() {
               </div>
             </Section>
           )}
+
           {/* More from shop */}
           {!!moreFromShop.length && (
             <Section title="More from this shop">
@@ -984,7 +1242,9 @@ export default function ProductPage() {
               </div>
             </Section>
           )}
+
           <div className="h-24" />
+
           {/* Sticky add-to-cart (hidden for owner) */}
           {showStickyAdd && !isOwner && (
             <div
@@ -1004,7 +1264,8 @@ export default function ProductPage() {
               </div>
             </div>
           )}
-          {/* ---------- DESCRIPTION: shadcn Sheet ---------- */}
+
+          {/* ---------- DESCRIPTION Sheet ---------- */}
           <Sheet open={descOpen} onOpenChange={setDescOpen}>
             <SheetContent side="bottom" className="p-0">
               <div className="p-4">
@@ -1037,6 +1298,7 @@ export default function ProductPage() {
               </div>
             </SheetContent>
           </Sheet>
+
           {/* Trigger for description sheet */}
           <div className="px-4 -mt-2">
             <button
@@ -1046,7 +1308,8 @@ export default function ProductPage() {
               Read item description
             </button>
           </div>
-          {/* ---------- PERSONALIZATION: shadcn Sheet ---------- */}
+
+          {/* ---------- PERSONALIZATION Sheet ---------- */}
           {personalizationConfig.enabled && (
             <Sheet
               open={personalizationOpen}
@@ -1125,10 +1388,7 @@ export default function ProductPage() {
           className="p-0 border-0 max-w-none w-screen h-screen"
           hideClose
         >
-          {/* Backdrop */}
           <div className="fixed inset-0 bg-black/95" />
-
-          {/* Close */}
           <button
             onClick={() => setFsOpen(false)}
             aria-label="Close fullscreen"
@@ -1137,7 +1397,6 @@ export default function ProductPage() {
             <X className="h-5 w-5" />
           </button>
 
-          {/* Prev / Next */}
           {images.length > 1 && (
             <>
               <button
@@ -1157,7 +1416,6 @@ export default function ProductPage() {
             </>
           )}
 
-          {/* Embla viewport */}
           <div className="fixed inset-0 z-40 overflow-hidden" ref={fsRef}>
             <div className="flex h-full">
               {(images.length ? images : [undefined]).map((src, i) => (

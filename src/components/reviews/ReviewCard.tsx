@@ -41,6 +41,26 @@ export function ReviewCard({
       <div className="mt-2">
         <Stars value={r.rating} />
       </div>
+
+      {/* Thumbnails strip (photos) */}
+      {Array.isArray((r as any).photos) && (r as any).photos.length ? (
+        <div className="mt-2 flex gap-2 overflow-x-auto">
+          {(r as any).photos.slice(0, 4).map((src: string, i: number) => (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              className="h-10 w-10 rounded object-cover border"
+            />
+          ))}
+          {(r as any).photos.length > 4 && (
+            <div className="h-10 w-10 rounded border grid place-items-center text-xs text-ink/70">
+              +{(r as any).photos.length - 4}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {r.title && <div className="mt-2 font-medium">{r.title}</div>}
       <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
         {r.body}

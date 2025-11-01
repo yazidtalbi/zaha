@@ -83,13 +83,20 @@ function Inner() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Small helper to map DB rows -> UI rows
+  // 🔔 Same-tab notifier for BottomNav
+  function emitCartChanged() {
+    try {
+      window.dispatchEvent(new Event("cart:changed"));
+    } catch {}
+  }
+
+  // Map DB rows -> UI rows
   function mapRows(data: CartRow[]): UiCartRow[] {
     return (data ?? []).map((row) => {
       const p = row.products;
       const removed = !p?.active || !!p?.deleted_at;
 
-      // safe options -> badges
+      // options -> badges
       const badges: string[] = [];
       const opts = row.options;
       if (opts) {
@@ -166,7 +173,7 @@ function Inner() {
     setLoading(false);
   }
 
-  // Auth + initial load + realtime sync
+  // Auth + initial load
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -257,6 +264,8 @@ function Inner() {
     if (error) {
       toast.error("Failed to update quantity", { description: error.message });
       setRows(prev); // revert
+    } else {
+      emitCartChanged(); // notify BottomNav
     }
   }
 
@@ -272,6 +281,7 @@ function Inner() {
       setRows(prev);
     } else {
       toast("Removed from cart");
+      emitCartChanged(); // notify BottomNav
     }
   }
 
@@ -290,6 +300,7 @@ function Inner() {
       setRows(prev);
     } else {
       toast("Cleared removed items");
+      emitCartChanged(); // notify BottomNav
     }
   }
 
@@ -302,7 +313,7 @@ function Inner() {
       toast("Your cart is empty");
       return;
     }
-    router.push("/checkout"); // ➜ address selection page
+    router.push("/checkout");
   }
 
   if (loading) return <main className="p-4">Loading…</main>;

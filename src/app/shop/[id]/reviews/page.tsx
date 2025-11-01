@@ -1,6 +1,7 @@
+// app/shop/[id]/reviews/page.tsx
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
@@ -10,19 +11,23 @@ import { ReviewCard, Review } from "@/components/reviews/ReviewCard";
 export default function ShopAllReviewsPage() {
   const { id } = useParams<{ id: string }>();
   const shopId = (id ?? "").toString().trim();
+  const search = useSearchParams();
+  const productId = search.get("product");
 
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [avg, setAvg] = useState<number>(0);
   const [count, setCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!shopId) return;
     (async () => {
-      const { data, count: c } = await supabase
+      setLoading(true);
+
+      let query = supabase
         .from("reviews")
         .select(
           `
-          id, rating, title, body, photos, created_at, author,
+          id, rating, title, body, photos, created_at, author, product_id,
           author_profile:profiles!left(id, name, role, phone, city)
         `,
           { count: "exact" }
@@ -31,23 +36,19 @@ export default function ShopAllReviewsPage() {
         .eq("is_public", true)
         .order("created_at", { ascending: false });
 
-      setReviews((data as any) ?? []);
-      setCount(c ?? 0);
+      if (productId) query = query.eq("product_id", productId);
 
-      const { data: ratings } = await supabase
-        .from("reviews")
-        .select("rating")
-        .eq("shop_id", shopId)
-        .eq("is_public", true);
-      const arr = (ratings as { rating: number }[]) ?? [];
-      const mean = arr.length
-        ? arr.reduce((s, r) => s + Number(r.rating || 0), 0) / arr.length
-        : 0;
-      setAvg(mean);
+      const { data, count: c, error } = await query;
+      if (!error) {
+        setReviews((data as any) ?? []);
+        setCount(c ?? 0);
+      }
+      setLoading(false);
     })();
-  }, [shopId]);
+  }, [shopId, productId]);
 
-  const histogram = useMemo(() => {
+  // avg + histogram derived from fetched rows
+  const { avg, histogram } = useMemo(() => {
     const buckets: Record<1 | 2 | 3 | 4 | 5, number> = {
       1: 0,
       2: 0,
@@ -55,19 +56,33 @@ export default function ShopAllReviewsPage() {
       4: 0,
       5: 0,
     };
-    for (const r of reviews)
-      buckets[r.rating as 1 | 2 | 3 | 4 | 5] =
-        (buckets[r.rating as 1 | 2 | 3 | 4 | 5] || 0) + 1;
-    return buckets;
+    let sum = 0;
+    let n = 0;
+    for (const r of reviews) {
+      const rating = Number(r.rating ?? 0) as 0 | 1 | 2 | 3 | 4 | 5;
+      if (rating >= 1 && rating <= 5) {
+        buckets[rating] = (buckets[rating] || 0) + 1;
+        sum += rating;
+        n++;
+      }
+    }
+    const avg = n ? sum / n : 0;
+    return { avg, histogram: buckets };
   }, [reviews]);
+
+  const backHref = productId ? `/product/${productId}` : `/shop/${shopId}`;
+  const heading = productId ? "Item Reviews" : "Shop Reviews";
 
   return (
     <main className="p-4">
-      <Link href={`/shop/${shopId}`} className="text-sm underline">
-        ← Back to shop
+      <Link href={backHref} className="text-sm underline">
+        ← Back
       </Link>
 
-      <h1 className="mt-3 text-xl font-semibold">Shop Reviews ({count})</h1>
+      <h1 className="mt-3 text-xl font-semibold">
+        {heading} ({count})
+      </h1>
+
       <div className="mt-2 flex items-center gap-3">
         <Stars value={avg} />
         <div className="text-sm text-muted-foreground">
@@ -95,12 +110,17 @@ export default function ShopAllReviewsPage() {
       </div>
 
       <div className="mt-4 space-y-3">
-        {reviews.map((r) => (
-          <ReviewCard key={r.id} r={r} />
-        ))}
-        {!reviews.length && (
+        {loading ? (
           <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
-            No reviews yet for this shop.
+            Loading…
+          </div>
+        ) : reviews.length ? (
+          reviews.map((r) => <ReviewCard key={r.id} r={r} />)
+        ) : (
+          <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
+            {productId
+              ? "No reviews yet for this item."
+              : "No reviews yet for this shop."}
           </div>
         )}
       </div>
