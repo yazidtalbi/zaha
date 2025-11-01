@@ -1,3 +1,4 @@
+// app/seller/orders/[id]/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -75,6 +76,10 @@ type Order = {
   product_id: string | null;
   products?: Product | null;
 
+  // ✅ New display fields
+  personalization?: string | null;
+  options?: any | null;
+
   // Optional quality-of-life columns (safe if missing)
   payment_confirmed?: boolean | null;
   tracking_number?: string | null;
@@ -129,9 +134,8 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       : status === "delivered"
       ? "success"
       : "destructive";
-  const classes = status === "success" ? "" : ""; // using standard variants; add custom styles if you have them
   return (
-    <Badge variant={variant as any} className={classes + " capitalize"}>
+    <Badge variant={variant as any} className="capitalize">
       {status}
     </Badge>
   );
@@ -459,6 +463,34 @@ export default function SellerOrderDetails() {
         </CardContent>
       </Card>
 
+      {/* ✅ Personalization + Options */}
+      {(order.personalization || order.options) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Customization</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {order.personalization ? (
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Personalization
+                </Label>
+                <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+                  {order.personalization}
+                </div>
+              </div>
+            ) : null}
+
+            {order.options ? (
+              <div>
+                <Label className="text-xs text-muted-foreground">Options</Label>
+                <OptionsList options={order.options} />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Buyer & payment */}
       <Card>
         <CardHeader className="pb-2">
@@ -544,7 +576,6 @@ export default function SellerOrderDetails() {
                 disabled={paymentConfirmed || savingPayment}
                 onCheckedChange={(next) => {
                   if (!paymentConfirmed && next) setShowPaymentSheet(true);
-                  // ignore any attempt to turn it off
                 }}
                 aria-label="Toggle payment confirmed"
               />
@@ -561,8 +592,7 @@ export default function SellerOrderDetails() {
                   <SheetTitle>Confirm payment?</SheetTitle>
                   <SheetDescription>
                     This will mark the order as <strong>paid</strong>. This
-                    action is
-                    <strong> permanent</strong> and cannot be reverted.
+                    action is <strong>permanent</strong> and cannot be reversed.
                   </SheetDescription>
                 </SheetHeader>
 
@@ -683,7 +713,7 @@ export default function SellerOrderDetails() {
             </div>
           </CardContent>
         </Card>
-        {/* Activity timeline (statuses only) */}
+
         {/* Activity timeline (statuses + payment) */}
         <Card>
           <CardHeader className="pb-2">
@@ -789,5 +819,57 @@ export default function SellerOrderDetails() {
         )}
       </div>
     </main>
+  );
+}
+
+/* ==========================================
+   OptionsList — robust renderer (array/object)
+   ========================================== */
+function OptionsList({ options }: { options: any }) {
+  if (Array.isArray(options)) {
+    if (!options.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {options.map((opt: any, i: number) => {
+          const group =
+            opt.group ?? opt.name ?? opt.key ?? opt.title ?? "Option";
+          const value = opt.value ?? opt.label ?? opt.choice ?? "";
+          const price =
+            opt.price_delta_mad != null ? ` (+${opt.price_delta_mad} MAD)` : "";
+          return (
+            <li key={i} className="flex items-start justify-between gap-4">
+              <span className="text-muted-foreground">{group}</span>
+              <span className="font-medium">
+                {String(value)}
+                <span className="ml-1 text-muted-foreground">{price}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  if (options && typeof options === "object") {
+    const entries = Object.entries(options);
+    if (!entries.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {entries.map(([k, v]) => (
+          <li key={k} className="flex items-start justify-between gap-4">
+            <span className="text-muted-foreground">{k}</span>
+            <span className="font-medium">
+              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+      {String(options)}
+    </div>
   );
 }

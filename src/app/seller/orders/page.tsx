@@ -1,3 +1,4 @@
+// app/seller/orders/page.tsx
 "use client";
 
 import RequireAuth from "@/components/RequireAuth";
@@ -16,6 +17,11 @@ type Order = {
   phone: string | null;
   address: string | null;
   product_id: string | null;
+
+  // NEW
+  personalization?: string | null;
+  options?: any | null;
+
   products?: {
     id: string;
     title: string;
@@ -183,6 +189,28 @@ function OrdersInner() {
                     {o.address ? ` · ${o.address}` : ""}
                   </div>
 
+                  {/* ——— Personalization ——— */}
+                  {o.personalization ? (
+                    <section className="mt-3">
+                      <h4 className="text-xs font-semibold text-ink/70 mb-1">
+                        Personalization
+                      </h4>
+                      <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+                        {o.personalization}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {/* ——— Options ——— */}
+                  {o.options ? (
+                    <section className="mt-3">
+                      <h4 className="text-xs font-semibold text-ink/70 mb-1">
+                        Options
+                      </h4>
+                      <OptionsList options={o.options} />
+                    </section>
+                  ) : null}
+
                   {/* status controls */}
                   {/* <div className="mt-2 flex flex-wrap items-center gap-2">
                     {STATUS.map((s) => (
@@ -225,5 +253,57 @@ function StatusBadge({ status }: { status: Order["status"] }) {
     <span className={`rounded-full px-2 py-0.5 text-[11px] ${color}`}>
       {status}
     </span>
+  );
+}
+
+/* ==========================================
+   OptionsList — robust renderer (array/object)
+   ========================================== */
+function OptionsList({ options }: { options: any }) {
+  if (Array.isArray(options)) {
+    if (!options.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {options.map((opt: any, i: number) => {
+          const group =
+            opt.group ?? opt.name ?? opt.key ?? opt.title ?? "Option";
+          const value = opt.value ?? opt.label ?? opt.choice ?? "";
+          const price =
+            opt.price_delta_mad != null ? ` (+${opt.price_delta_mad} MAD)` : "";
+          return (
+            <li key={i} className="flex items-start justify-between gap-4">
+              <span className="text-ink/80">{group}</span>
+              <span className="font-medium">
+                {String(value)}
+                <span className="ml-1 text-ink/60">{price}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  if (options && typeof options === "object") {
+    const entries = Object.entries(options);
+    if (!entries.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {entries.map(([k, v]) => (
+          <li key={k} className="flex items-start justify-between gap-4">
+            <span className="text-ink/80">{k}</span>
+            <span className="font-medium">
+              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+      {String(options)}
+    </div>
   );
 }

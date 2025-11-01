@@ -291,21 +291,25 @@ function AddressInner() {
       return;
     }
 
-    // build orders to insert (matches your schema: product_id, buyer, …)
+    // ✅ include personalization + options from each cart row
     const payload = cart.map((r) => {
       const p = r.products!;
       return {
-        buyer: uid, // <-- your column
+        buyer: uid,
         product_id: r.product_id,
         qty: r.qty,
         amount_mad: (p.price_mad ?? 0) * r.qty,
-        status: "pending", // will show in seller/orders
-        payment_method: "cod", // keep/rename if your table differs
+        status: "pending",
+        payment_method: "cod",
         city: a.city,
         phone: a.phone,
         address: `${a.line1}${a.line2 ? ", " + a.line2 : ""}, ${a.city}${
           a.postal_code ? " " + a.postal_code : ""
         }, ${a.country}`,
+
+        // 👇 new fields copied from cart_items
+        personalization: r.personalization ?? null,
+        options: r.options ?? null,
       };
     });
 

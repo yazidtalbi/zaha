@@ -40,6 +40,10 @@ type Order = {
   phone: string | null;
   address: string | null;
   product_id: string | null;
+  // NEW: copied at checkout
+  personalization?: string | null;
+  options?: any | null;
+
   products?: Product | null;
 };
 
@@ -102,6 +106,7 @@ function OrderInner() {
     <main className="p-4 space-y-4">
       <h1 className="text-xl font-semibold">Order details</h1>
 
+      {/* Product card */}
       <div className="rounded-xl border bg-sand p-3 flex gap-3 items-center">
         {img ? (
           <img
@@ -120,6 +125,26 @@ function OrderInner() {
         </div>
       </div>
 
+      {/* Personalization + Options */}
+      {!!order.personalization && (
+        <section className="rounded-xl border bg-white p-3">
+          <h3 className="text-sm font-semibold text-ink/80 mb-1">
+            Personalization
+          </h3>
+          <div className="whitespace-pre-wrap text-sm">
+            {order.personalization}
+          </div>
+        </section>
+      )}
+
+      {!!order.options && (
+        <section className="rounded-xl border bg-white p-3">
+          <h3 className="text-sm font-semibold text-ink/80 mb-1">Options</h3>
+          <OptionsList options={order.options} />
+        </section>
+      )}
+
+      {/* Shipping + status */}
       <div className="space-y-1 text-sm">
         <p>
           <span className="font-medium">City:</span> {order.city ?? "—"}
@@ -136,6 +161,7 @@ function OrderInner() {
         </p>
       </div>
 
+      {/* Contact */}
       {order.phone && (
         <div className="flex gap-2 mt-3">
           <a
@@ -166,7 +192,7 @@ function OrderInner() {
       <div className="mt-4 rounded-xl border p-4">
         <h2 className="text-base font-semibold mb-3">Activity timeline</h2>
         <ul className="space-y-3 text-sm">
-          {/* Always show creation */}
+          {/* Creation */}
           <li className="flex items-start gap-2">
             <Clock className="h-4 w-4 mt-0.5" />
             <div>
@@ -263,4 +289,59 @@ function statusIcon(s: OrderStatus) {
     case "cancelled":
       return <Ban className="h-4 w-4 mt-0.5" />;
   }
+}
+
+/* ===========================
+   OptionsList — robust renderer
+   - Array of objects: [{ group/name/key/title, value/label, price_delta_mad? }]
+   - Object map: { Size: "L", Color: "Blue" }
+   =========================== */
+function OptionsList({ options }: { options: any }) {
+  if (Array.isArray(options)) {
+    if (!options.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {options.map((opt: any, i: number) => {
+          const group =
+            opt.group ?? opt.name ?? opt.key ?? opt.title ?? "Option";
+          const value = opt.value ?? opt.label ?? opt.choice ?? "";
+          const price =
+            opt.price_delta_mad != null ? ` (+${opt.price_delta_mad} MAD)` : "";
+          return (
+            <li key={i} className="flex items-start justify-between gap-4">
+              <span className="text-ink/80">{group}</span>
+              <span className="font-medium">
+                {String(value)}
+                <span className="ml-1 text-ink/60">{price}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  if (options && typeof options === "object") {
+    const entries = Object.entries(options);
+    if (!entries.length) return null;
+    return (
+      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+        {entries.map(([k, v]) => (
+          <li key={k} className="flex items-start justify-between gap-4">
+            <span className="text-ink/80">{k}</span>
+            <span className="font-medium">
+              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  // primitive fallback
+  return (
+    <div className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+      {String(options)}
+    </div>
+  );
 }

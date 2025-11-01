@@ -112,6 +112,28 @@ export default function ProductPage() {
     [shop]
   );
 
+  // Auth / owner detection
+  const [uid, setUid] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      setUid(data.user?.id ?? null);
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
+      setUid(sess?.user?.id ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const isOwner = useMemo(() => {
+    if (!uid) return false;
+    // Prefer explicit product.shop_owner if present; otherwise fall back to the joined shop.owner
+    return (
+      (p?.shop_owner && p.shop_owner === uid) ||
+      (shop?.owner && shop.owner === uid)
+    );
+  }, [uid, p?.shop_owner, shop?.owner]);
+
   //cta
   const [inCart, setInCart] = useState(false);
 
@@ -119,7 +141,7 @@ export default function ProductPage() {
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
       const user = auth.user;
-      if (!user || !p?.id) return;
+      if (!user || !p?.id || isOwner) return;
       const { count } = await supabase
         .from("cart_items")
         .select("id", { count: "exact", head: true })
@@ -127,10 +149,13 @@ export default function ProductPage() {
         .eq("product_id", p.id);
       setInCart((count ?? 0) > 0);
     })();
-  }, [p?.id]);
+  }, [p?.id, isOwner]);
 
   async function handleAddToCartMerge() {
-    // same as your current handleAddToCart, but pass mode: "merge"
+    if (isOwner) {
+      toast.error("You can’t add your own item to your cart.");
+      return;
+    }
     const res = await addToCart({
       productId: p.id,
       qty,
@@ -148,6 +173,10 @@ export default function ProductPage() {
   }
 
   async function handleAddToCartNew() {
+    if (isOwner) {
+      toast.error("You can’t add your own item to your cart.");
+      return;
+    }
     const res = await addToCart({
       productId: p.id,
       qty,
@@ -268,7 +297,7 @@ export default function ProductPage() {
         .select(
           `
           *,
-          shops:shop_id ( id, title, avatar_url )
+          shops:shop_id ( id, title, avatar_url, owner )
         `
         )
         .eq("id", _id)
@@ -411,6 +440,10 @@ export default function ProductPage() {
   }
 
   async function handleAddToCart() {
+    if (isOwner) {
+      toast.error("You can’t add your own item to your cart.");
+      return;
+    }
     if (isUnavailable || isInactive || isRemoved) {
       toast("This item is currently unavailable.");
       return;
@@ -431,12 +464,11 @@ export default function ProductPage() {
     const optionsObject = selectionsToOptionsObject();
 
     try {
-      // ✅ Use the object signature so personalization + options are saved
       const res = await addToCart({
         productId: p.id,
         qty,
-        options: optionsObject, // jsonb
-        personalization: personalization.trim() || null, // text
+        options: optionsObject,
+        personalization: personalization.trim() || null,
       });
 
       if (res.ok) {
@@ -451,6 +483,7 @@ export default function ProductPage() {
   }
 
   function handleBuyNow() {
+    if (isOwner) return;
     if (isUnavailable || isInactive || isRemoved) return;
     const variant = selectionsToLabel();
     const total = promoActive ? promoTotal : currentTotal;
@@ -490,6 +523,19 @@ export default function ProductPage() {
               The seller has removed this product from their store.
             </div>
           </div>
+
+          {/* Owner quick edit on removed screen */}
+          {isOwner && (
+            <div className="px-4">
+              <Link
+                href={`/seller/edit/${p.id}`}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-black text-white px-4 py-3 font-medium"
+              >
+                <Pencil size={16} />
+                Edit this product
+              </Link>
+            </div>
+          )}
 
           {/* More from shop */}
           <div className="px-4 space-y-8">
@@ -553,6 +599,18 @@ export default function ProductPage() {
             <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
               <Heart size={16} />
             </button>
+
+            {/* Owner quick action: Edit */}
+            {isOwner && (
+              <Link
+                href={`/seller/edit/${p.id}`}
+                className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
+                aria-label="Edit product"
+                title="Edit product"
+              >
+                <Pencil size={16} />
+              </Link>
+            )}
           </div>
 
           {/* gallery (Embla) */}
@@ -769,67 +827,79 @@ export default function ProductPage() {
             </Section>
           )}
 
-          {/* quantity + CTAs */}
-          <Section title="Quantity">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center rounded-full border bg-white">
-                <button
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="px-3 py-1.5 text-lg"
-                  aria-label="Decrease"
-                >
-                  −
-                </button>
-                <div className="min-w-[2.25rem] text-center">{qty}</div>
-                <button
-                  onClick={() => setQty((q) => q + 1)}
-                  className="px-3 py-1.5 text-lg"
-                  aria-label="Increase"
-                >
-                  +
-                </button>
+          {/* Quantity & CTAs or Owner Edit */}
+          {!isOwner ? (
+            <Section title="Quantity">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center rounded-full border bg-white">
+                  <button
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    className="px-3 py-1.5 text-lg"
+                    aria-label="Decrease"
+                  >
+                    −
+                  </button>
+                  <div className="min-w-[2.25rem] text-center">{qty}</div>
+                  <button
+                    onClick={() => setQty((q) => q + 1)}
+                    className="px-3 py-1.5 text-lg"
+                    aria-label="Increase"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              {inCart ? (
-                <>
-                  <Link
-                    href="/cart"
-                    className="rounded-full border bg-white px-4 py-3 text-center font-medium"
-                  >
-                    View in your cart
-                  </Link>
-                  <button
-                    onClick={handleAddToCartNew}
-                    disabled={isUnavailable || isInactive || isRemoved}
-                    className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
-                  >
-                    Add new item
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleAddToCartMerge}
-                    disabled={isUnavailable || isInactive || isRemoved}
-                    className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
-                  >
-                    Add to cart
-                  </button>
-                  <button
-                    onClick={handleBuyNow}
-                    disabled={isUnavailable || isInactive || isRemoved}
-                    className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
-                  >
-                    Buy it now
-                  </button>
-                </>
-              )}
-            </div>
+              <div className="mt-4 grid grid-cols-1 gap-2">
+                {inCart ? (
+                  <>
+                    <Link
+                      href="/cart"
+                      className="rounded-full border bg-white px-4 py-3 text-center font-medium"
+                    >
+                      View in your cart
+                    </Link>
+                    <button
+                      onClick={handleAddToCartNew}
+                      disabled={isUnavailable || isInactive || isRemoved}
+                      className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                    >
+                      Add new item
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleAddToCartMerge}
+                      disabled={isUnavailable || isInactive || isRemoved}
+                      className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
+                    >
+                      Add to cart
+                    </button>
+                    <button
+                      onClick={handleBuyNow}
+                      disabled={isUnavailable || isInactive || isRemoved}
+                      className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                    >
+                      Buy it now
+                    </button>
+                  </>
+                )}
+              </div>
 
-            <div ref={sentinelRef} className="h-px" />
-          </Section>
+              <div ref={sentinelRef} className="h-px" />
+            </Section>
+          ) : (
+            <div className="px-4 py-3">
+              <Link
+                href={`/seller/edit/${p.id}`}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-black text-white px-4 py-3 font-medium"
+              >
+                <Pencil size={16} />
+                Edit this product
+              </Link>
+            </div>
+          )}
 
           {/* Reviews placeholder */}
           <Section title="Item reviews and shop ratings">
@@ -920,7 +990,8 @@ export default function ProductPage() {
 
           <div className="h-24" />
 
-          {showStickyAdd && (
+          {/* Sticky add-to-cart (hidden for owner) */}
+          {showStickyAdd && !isOwner && (
             <div
               className="fixed inset-x-0 px-4 z-50"
               style={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
