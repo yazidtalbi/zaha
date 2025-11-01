@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
+import ShopReviewsStrip from "@/components/reviews/ShopReviewsStrip";
 
 type Shop = {
   id: string;
@@ -216,6 +217,8 @@ export default function ShopPage() {
           ) : null}
         </div>
       </section>
+
+      <ShopReviewsStrip shopId={shop.id} />
 
       {/* browse by collections */}
       <section className="px-4 mt-4 space-y-3">

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import RequireAuth from "@/components/RequireAuth";
 import { Clock, CheckCircle2, Truck, PackageCheck, Ban } from "lucide-react";
+import LeaveReviewButton from "@/components/reviews/LeaveReviewButton";
 
 export default function BuyerOrderPage() {
   return (
@@ -66,6 +67,15 @@ function OrderInner() {
   const [events, setEvents] = useState<OrderEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user ?? null);
+    })();
+  }, []);
+
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
     if (!_id) return;
@@ -105,6 +115,17 @@ function OrderInner() {
   return (
     <main className="p-4 space-y-4">
       <h1 className="text-xl font-semibold">Order details</h1>
+
+      {order.status === "delivered" || order.status === "confirmed" ? (
+        <div className="mt-6">
+          <LeaveReviewButton
+            productId={order.product_id}
+            shopId={order.products?.shop_id}
+            orderId={order.id}
+            authorId={user.id} // from supabase.auth.getUser()
+          />
+        </div>
+      ) : null}
 
       {/* Product card */}
       <div className="rounded-xl border bg-sand p-3 flex gap-3 items-center">

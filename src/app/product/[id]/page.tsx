@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import useEmblaCarousel from "embla-carousel-react";
+import ProductReviewsStrip from "@/components/reviews/ProductReviewsStrip";
 
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
 type OptionGroup = {
@@ -612,7 +613,6 @@ export default function ProductPage() {
               </Link>
             )}
           </div>
-
           {/* gallery (Embla) */}
           <div className="relative">
             <div ref={emblaRef} className="embla overflow-hidden">
@@ -658,7 +658,6 @@ export default function ProductPage() {
               </div>
             )}
           </div>
-
           {/* title + price */}
           <div className="px-4 pt-1 space-y-2">
             <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
@@ -751,7 +750,6 @@ export default function ProductPage() {
               )}
             </div>
           </div>
-
           {/* OPTIONS (dynamic) */}
           {optionGroups.map((g) => {
             const valueId = selected[g.id] ?? "";
@@ -786,7 +784,6 @@ export default function ProductPage() {
               </Section>
             );
           })}
-
           {/* PERSONALIZATION */}
           {personalizationConfig.enabled && (
             <Section title="Personalization">
@@ -826,7 +823,6 @@ export default function ProductPage() {
               )}
             </Section>
           )}
-
           {/* Quantity & CTAs or Owner Edit */}
           {!isOwner ? (
             <Section title="Quantity">
@@ -900,7 +896,11 @@ export default function ProductPage() {
               </Link>
             </div>
           )}
-
+          azzada
+          <ProductReviewsStrip
+            productId={p.id}
+            shopId={p.shop_id ?? shop?.id}
+          />
           {/* Reviews placeholder */}
           <Section title="Item reviews and shop ratings">
             <div className="rounded-xl border bg-white p-3 text-sm text-neutral-600">
@@ -908,7 +908,6 @@ export default function ProductPage() {
               review.
             </div>
           </Section>
-
           {/* Item details */}
           <Section title="Item details">
             <ul className="space-y-3 text-[15px]">
@@ -925,7 +924,6 @@ export default function ProductPage() {
               </li>
             </ul>
           </Section>
-
           {/* Similar */}
           {!!similar.length && (
             <Section title="Compare similar items">
@@ -956,7 +954,6 @@ export default function ProductPage() {
               </div>
             </Section>
           )}
-
           {/* More from shop */}
           {!!moreFromShop.length && (
             <Section title="More from this shop">
@@ -987,9 +984,7 @@ export default function ProductPage() {
               </div>
             </Section>
           )}
-
           <div className="h-24" />
-
           {/* Sticky add-to-cart (hidden for owner) */}
           {showStickyAdd && !isOwner && (
             <div
@@ -1009,7 +1004,6 @@ export default function ProductPage() {
               </div>
             </div>
           )}
-
           {/* ---------- DESCRIPTION: shadcn Sheet ---------- */}
           <Sheet open={descOpen} onOpenChange={setDescOpen}>
             <SheetContent side="bottom" className="p-0">
@@ -1043,7 +1037,6 @@ export default function ProductPage() {
               </div>
             </SheetContent>
           </Sheet>
-
           {/* Trigger for description sheet */}
           <div className="px-4 -mt-2">
             <button
@@ -1053,7 +1046,6 @@ export default function ProductPage() {
               Read item description
             </button>
           </div>
-
           {/* ---------- PERSONALIZATION: shadcn Sheet ---------- */}
           {personalizationConfig.enabled && (
             <Sheet
