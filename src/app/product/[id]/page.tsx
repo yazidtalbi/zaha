@@ -24,6 +24,7 @@ import {
   Layers,
   Edit3,
   Undo2,
+  Star,
 } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { toast } from "sonner";
@@ -38,6 +39,9 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import useEmblaCarousel from "embla-carousel-react";
 import ProductReviewsStrip from "@/components/reviews/ProductReviewsStrip";
 
+/* -------------------------------------------------
+   Types
+------------------------------------------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
 type OptionGroup = {
   id: string;
@@ -46,7 +50,9 @@ type OptionGroup = {
   values: OptionValue[];
 };
 
-/* -------------------- utils -------------------- */
+/* -------------------------------------------------
+   Small utilities / UI atoms
+------------------------------------------------- */
 function remember(p: {
   id: string;
   title: string;
@@ -78,14 +84,37 @@ function remember(p: {
 function Section({
   title,
   children,
+  right,
+  collapsible = false,
 }: {
   title: string;
   children: React.ReactNode;
+  right?: React.ReactNode;
+  collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (!collapsible) setOpen(true);
+  }, [collapsible]);
+
   return (
-    <section className="px-4 py-5">
-      <h3 className="text-base font-semibold mb-3">{title}</h3>
-      {children}
+    <section className="px-4 py-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold">{title}</h3>
+        <div className="flex items-center gap-2">
+          {right}
+          {collapsible && (
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="text-sm text-neutral-600"
+              aria-label={open ? "Collapse" : "Expand"}
+            >
+              {open ? "Hide" : "Show"}
+            </button>
+          )}
+        </div>
+      </div>
+      {(!collapsible || open) && <div className="mt-3">{children}</div>}
     </section>
   );
 }
@@ -111,7 +140,6 @@ function formatEndsShort(iso: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 }
 
-/* Small helper for item details rows */
 function DetailRow({
   icon,
   label,
@@ -132,7 +160,6 @@ function DetailRow({
   );
 }
 
-/* -------- NEW: keywords helpers (comma-separated -> pill list) -------- */
 function keywordArray(s?: string | null) {
   return (s || "")
     .split(",")
@@ -140,16 +167,15 @@ function keywordArray(s?: string | null) {
     .filter(Boolean)
     .slice(0, 12);
 }
-
 function TagList({ items }: { items: string[] }) {
   if (!items.length) return null;
   return (
-    <div className="mt-1 flex flex-wrap gap-1.5">
+    <div className="mt-1 flex flex-wrap gap-2">
       {items.map((tag) => (
         <Link
           href={`/search?q=${encodeURIComponent(tag)}`}
           key={tag}
-          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-2.5 py-1 text-[12px] hover:bg-neutral-200"
+          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-3 py-1 text-xs hover:bg-neutral-200"
         >
           {tag}
         </Link>
@@ -158,7 +184,49 @@ function TagList({ items }: { items: string[] }) {
   );
 }
 
-/* -------------------- page -------------------- */
+/* -------------------------------------------------
+   Tiny UI Bits used to match the screenshot
+------------------------------------------------- */
+function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex-1 rounded-lg border bg-white px-3 py-2">
+      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-neutral-900">{value}</div>
+    </div>
+  );
+}
+
+function RatingChip({
+  value,
+  count,
+  onClick,
+}: {
+  value: number | null | undefined;
+  count: number | null | undefined;
+  onClick?: () => void;
+}) {
+  const display = value ? Number(value).toFixed(2) : "—";
+  const c = count ? count : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="text-xl font-semibold">{display}</div>
+      <Star className="h-4 w-4 fill-current text-amber-500" />
+      <button
+        onClick={onClick}
+        className="ml-2 rounded-full border px-3 py-1 text-xs hover:bg-neutral-50"
+      >
+        View all reviews
+      </button>
+      <div className="ml-auto text-xs text-neutral-500">
+        {c >= 1000 ? `${Math.floor(c / 100) / 10}k` : c} ratings
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------
+   Page
+------------------------------------------------- */
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -182,7 +250,6 @@ export default function ProductPage() {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
-
   const isOwner = useMemo(() => {
     if (!uid) return false;
     return (
@@ -191,65 +258,10 @@ export default function ProductPage() {
     );
   }, [uid, p?.shop_owner, shop?.owner]);
 
-  //cta
+  // cart state
   const [inCart, setInCart] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth.user;
-      if (!user || !p?.id || isOwner) return;
-      const { count } = await supabase
-        .from("cart_items")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("product_id", p.id);
-      setInCart((count ?? 0) > 0);
-    })();
-  }, [p?.id, isOwner]);
-
-  async function handleAddToCartMerge() {
-    if (isOwner) {
-      toast.error("You can’t add your own item to your cart.");
-      return;
-    }
-    const res = await addToCart({
-      productId: p.id,
-      qty,
-      options: selectionsToOptionsObject(),
-      personalization: personalization.trim() || null,
-      mode: "merge",
-    });
-    if (res.ok) {
-      window.dispatchEvent(new CustomEvent("cart:changed"));
-      setInCart(true);
-      toast.success("Added to cart 🛒");
-    } else {
-      toast.error("Failed to add to cart", { description: res.message });
-    }
-  }
-
-  async function handleAddToCartNew() {
-    if (isOwner) {
-      toast.error("You can’t add your own item to your cart.");
-      return;
-    }
-    const res = await addToCart({
-      productId: p.id,
-      qty,
-      options: selectionsToOptionsObject(),
-      personalization: personalization.trim() || null,
-      mode: "new",
-    });
-    if (res.ok) {
-      window.dispatchEvent(new CustomEvent("cart:changed"));
-      setInCart(true);
-      toast.success("Added as a new item 🛒");
-    } else {
-      toast.error("Failed to add to cart", { description: res.message });
-    }
-  }
-
+  // page load
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -287,21 +299,18 @@ export default function ProductPage() {
   ]);
   const [personalization, setPersonalization] = useState("");
 
-  // Embla carousel (top gallery)
+  // Embla (top gallery)
   const [idx, setIdx] = useState(0);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
-
   useEffect(() => {
     if (!emblaApi) return;
     const onSelect = () => setIdx(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSelect);
     onSelect();
-    return () => {
-      emblaApi.off("select", onSelect);
-    };
+    return () => emblaApi.off("select", onSelect);
   }, [emblaApi]);
 
-  // ---------- Fullscreen viewer state ----------
+  // Fullscreen gallery
   const [fsOpen, setFsOpen] = useState(false);
   const [startIndex, setStartIndex] = useState(0);
   const [fsRef, fsApi] = useEmblaCarousel({
@@ -310,21 +319,16 @@ export default function ProductPage() {
     speed: 20,
     align: "start",
   });
-
   const openFullscreenAt = useCallback((i: number) => {
     setStartIndex(i);
     setFsOpen(true);
   }, []);
-
   useEffect(() => {
     if (!fsApi) return;
     fsApi.scrollTo(startIndex, true);
   }, [fsApi, startIndex]);
-
   const fsPrev = useCallback(() => fsApi?.scrollPrev(), [fsApi]);
   const fsNext = useCallback(() => fsApi?.scrollNext(), [fsApi]);
-
-  // keyboard arrows in fullscreen
   useEffect(() => {
     if (!fsOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -335,11 +339,11 @@ export default function ProductPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [fsOpen, fsPrev, fsNext]);
 
-  // sticky CTA
+  // sticky CTA sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [showStickyAdd, setShowStickyAdd] = useState(false);
 
-  // load product
+  // fetch product
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
     if (!_id) {
@@ -370,7 +374,7 @@ export default function ProductPage() {
     })();
   }, [id]);
 
-  // default selections
+  // default option selections
   useEffect(() => {
     if (!optionGroups.length) return;
     setSelected((prev) => {
@@ -381,6 +385,21 @@ export default function ProductPage() {
       return next;
     });
   }, [optionGroups]);
+
+  // cart status for current product
+  useEffect(() => {
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth.user;
+      if (!user || !p?.id || isOwner) return;
+      const { count } = await supabase
+        .from("cart_items")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("product_id", p.id);
+      setInCart((count ?? 0) > 0);
+    })();
+  }, [p?.id, isOwner]);
 
   // remember + related
   const [similar, setSimilar] = useState<any[]>([]);
@@ -420,9 +439,8 @@ export default function ProductPage() {
     [p?.photos]
   );
 
-  // base + pricing math
+  // pricing math
   const basePrice = p?.price_mad ?? 0;
-
   const [minTotal, maxTotal] = useMemo(() => {
     if (!optionGroups.length) return [basePrice, basePrice] as [number, number];
     const sums = (pick: "min" | "max") =>
@@ -451,14 +469,8 @@ export default function ProductPage() {
   const promoTotal = promoActive
     ? Math.round(Number(p.promo_price_mad)) + selectedDelta
     : null;
-  const percentOff =
-    promoActive && currentTotal > 0
-      ? Math.round(
-          ((currentTotal - (promoTotal as number)) / currentTotal) * 100
-        )
-      : 0;
 
-  // NEW availability semantics
+  // availability
   const isUnavailable = Boolean(p?.unavailable);
   const isRemoved = Boolean(p?.deleted_at);
   const isInactive = !Boolean(p?.active);
@@ -484,8 +496,6 @@ export default function ProductPage() {
     }
     return parts.join("|");
   }
-
-  /** Build a clean options object like { Size: "M", Color: "Blue" } */
   function selectionsToOptionsObject(): Record<string, string> {
     const out: Record<string, string> = {};
     for (const g of optionGroups) {
@@ -496,49 +506,46 @@ export default function ProductPage() {
     return out;
   }
 
-  async function handleAddToCart() {
+  async function handleAddToCartMerge() {
     if (isOwner) {
       toast.error("You can’t add your own item to your cart.");
       return;
     }
-    if (isUnavailable || isInactive || isRemoved) {
-      toast("This item is currently unavailable.");
-      return;
+    const res = await addToCart({
+      productId: p.id,
+      qty,
+      options: selectionsToOptionsObject(),
+      personalization: personalization.trim() || null,
+      mode: "merge",
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("cart:changed"));
+      setInCart(true);
+      toast.success("Added to cart 🛒");
+    } else {
+      toast.error("Failed to add to cart", { description: res.message });
     }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      toast("Please sign in to add items.");
-      router.push("/account");
-      return;
-    }
-    if (p.shop_owner === user.id) {
+  }
+  async function handleAddToCartNew() {
+    if (isOwner) {
       toast.error("You can’t add your own item to your cart.");
       return;
     }
-
-    const optionsObject = selectionsToOptionsObject();
-
-    try {
-      const res = await addToCart({
-        productId: p.id,
-        qty,
-        options: optionsObject,
-        personalization: personalization.trim() || null,
-      });
-
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("cart:changed"));
-        toast.success("Added to cart 🛒");
-      } else {
-        toast.error("Failed to add to cart", { description: res.message });
-      }
-    } catch (e: any) {
-      toast.error("Failed to add to cart", { description: e?.message });
+    const res = await addToCart({
+      productId: p.id,
+      qty,
+      options: selectionsToOptionsObject(),
+      personalization: personalization.trim() || null,
+      mode: "new",
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("cart:changed"));
+      setInCart(true);
+      toast.success("Added as a new item 🛒");
+    } else {
+      toast.error("Failed to add to cart", { description: res.message });
     }
   }
-
   function handleBuyNow() {
     if (isOwner) return;
     if (isUnavailable || isInactive || isRemoved) return;
@@ -553,7 +560,24 @@ export default function ProductPage() {
     router.push(`/checkout/${p.id}?${params.toString()}`);
   }
 
-  // -------- Item details (from JSON) --------
+  // ratings aggregate (used for header strip)
+  const [ratingAvg, setRatingAvg] = useState<number | null>(null);
+  const [ratingCount, setRatingCount] = useState<number>(0);
+  useEffect(() => {
+    if (!p?.id) return;
+    (async () => {
+      // Try PostgREST aggregate (avg) + exact count
+      const { data, count } = await supabase
+        .from("reviews")
+        .select("avg:rating.avg()", { count: "exact", head: false })
+        .eq("product_id", p.id)
+        .single();
+      setRatingAvg((data as any)?.avg ?? null);
+      setRatingCount(count ?? 0);
+    })();
+  }, [p?.id]);
+
+  // delivery ETA pretty copy for header pill (use max estimate if provided in details)
   const details = useMemo(() => {
     const d = (p?.item_details ?? {}) as any;
     return {
@@ -573,25 +597,22 @@ export default function ProductPage() {
     };
   }, [p?.item_details, p?.personalization_enabled, p?.city]);
 
-  // Compute "Order now and get it on <date>"
-  const etaString = useMemo(() => {
+  const etaTitle = useMemo(() => {
     const maxDays =
       details.shipping?.estimate_days_max ??
       details.shipping?.estimate_days_min ??
       null;
     if (!maxDays || maxDays < 0) return null;
-
     const now = new Date();
     const eta = new Date(
       now.getFullYear(),
       now.getMonth(),
       now.getDate() + maxDays
     );
-    const pretty = eta.toLocaleDateString("en-GB", {
+    return eta.toLocaleDateString("en-US", {
+      month: "short",
       day: "numeric",
-      month: "long",
     });
-    return `Order now and get it on ${pretty}`;
   }, [
     details.shipping?.estimate_days_max,
     details.shipping?.estimate_days_min,
@@ -601,11 +622,23 @@ export default function ProductPage() {
   if (err) return <main className="p-4">Error: {err}</main>;
   if (!p) return <main className="p-4">Not found.</main>;
 
+  /* -------------------------------------------------
+     Render
+  ------------------------------------------------- */
+  const promoOff =
+    promoActive && currentTotal > 0
+      ? Math.round(
+          ((currentTotal - (promoTotal as number)) / currentTotal) * 100
+        )
+      : 0;
+
+  const showPriceRange = minTotal !== maxTotal && !promoActive;
+
   return (
     <>
       {isRemoved ? (
         /* ---------------- Removed screen ---------------- */
-        <main className="pb-10">
+        <main className="pb-16">
           <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
             <button
               onClick={() => router.back()}
@@ -618,7 +651,7 @@ export default function ProductPage() {
             <div className="text-lg font-medium mb-1">
               Sorry, this item is unavailable
             </div>
-            <div className="text-sm text-neutral-400">
+            <div className="text-sm text-neutral-500">
               The seller has removed this product from their store.
             </div>
           </div>
@@ -641,7 +674,6 @@ export default function ProductPage() {
                     Discover more from this store →
                   </h3>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   {moreFromShop.map((x) => (
                     <Link
@@ -675,8 +707,8 @@ export default function ProductPage() {
         </main>
       ) : (
         /* ---------------- Normal product screen ---------------- */
-        <main className="pb-10 bg-neutral-50 min-h-screen">
-          {/* top buttons */}
+        <main className="pb-20 bg-neutral-50 min-h-screen">
+          {/* top buttons overlay */}
           <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
             <button
               onClick={() => router.back()}
@@ -695,7 +727,6 @@ export default function ProductPage() {
             <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
               <Heart size={16} />
             </button>
-
             {isOwner && (
               <Link
                 href={`/seller/edit/${p.id}`}
@@ -710,12 +741,12 @@ export default function ProductPage() {
 
           {/* gallery */}
           <div className="relative">
-            <div ref={emblaRef} className="embla overflow-hidden">
+            <div ref={emblaRef} className="overflow-hidden">
               <div className="flex">
                 {(images.length ? images : [undefined]).map((src, i) => (
                   <button
                     key={i}
-                    className="min-w-0 flex-[0_0_100%] aspect-[4/3] bg-black/5"
+                    className="min-w-0 flex-[0_0_100%] aspect-[4/3] bg-neutral-100"
                     onClick={() => (src ? openFullscreenAt(i) : undefined)}
                     aria-label={
                       src ? `Open image ${i + 1} fullscreen` : "No image"
@@ -737,94 +768,45 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* dots */}
+            {/* carousel dots with translucent bg */}
             {images.length > 1 && (
-              <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1">
-                {images.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => emblaApi?.scrollTo(i)}
-                    className={`h-2 w-2 rounded-full ${
-                      i === idx ? "bg-black" : "bg-neutral-300"
-                    }`}
-                    aria-label={`Go to slide ${i + 1}`}
-                  />
-                ))}
+              <div className="absolute inset-x-0 bottom-2 flex items-center justify-center">
+                <div className="rounded-full bg-black/30 px-2 py-1 backdrop-blur-sm">
+                  <div className="flex items-center gap-1">
+                    {images.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => emblaApi?.scrollTo(i)}
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          i === idx ? "bg-white" : "bg-white/50"
+                        }`}
+                        aria-label={`Go to slide ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
           {/* title + price + shop */}
-          <div className="px-4 pt-1 space-y-2">
-            <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
-
-            {/* NEW: keyword/tag pills */}
-            <TagList items={keywordArray(p.keywords)} />
-
-            {isUnavailable && (
-              <div className="text-[12px] text-amber-800 bg-amber-100 px-2 py-1 rounded-full inline-block">
-                temporarily unavailable
-              </div>
-            )}
-
-            {/* pricing */}
-            {(() => {
-              const promoActiveLocal = isPromoActive(p);
-              const currentTotalLocal = currentTotal;
-              const promoTotalLocal = promoActiveLocal
-                ? Math.round(Number(p.promo_price_mad)) + selectedDelta
-                : null;
-              const percentOffLocal =
-                promoActiveLocal && currentTotalLocal > 0
-                  ? Math.round(
-                      ((currentTotalLocal - (promoTotalLocal as number)) /
-                        currentTotalLocal) *
-                        100
-                    )
-                  : 0;
-
-              return promoActiveLocal ? (
-                <div className="flex flex-col gap-1">
-                  <div className="text-sm font-medium text-green-400">
-                    {percentOffLocal}% off sale ends{" "}
-                    {formatEndsShort(p.promo_ends_at)}
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="text-xl font-bold text-green-400">
-                      MAD{(promoTotalLocal as number).toLocaleString("en-US")}
-                    </div>
-                    <div className="line-through text-neutral-400">
-                      MAD{currentTotalLocal.toLocaleString("en-US")}
-                    </div>
-                    {(isInactive || isRemoved) && !isUnavailable && (
-                      <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                        removed from seller’s store
-                      </span>
-                    )}
-                  </div>
-                </div>
+          <div className="px-4 pt-3 space-y-2">
+            {/* Price headline like “From MAD 780+ …” */}
+            <div className="text-sm text-green-600 font-medium">
+              {promoActive ? (
+                <>{promoOff}% off sale for a limited time</>
               ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  {minTotal !== maxTotal ? (
-                    <div className="text-xl font-bold">
-                      MAD{minTotal.toLocaleString("en-US")} – MAD
-                      {maxTotal.toLocaleString("en-US")}
-                    </div>
-                  ) : (
-                    <div className="text-xl font-bold">
-                      MAD{currentTotalLocal.toLocaleString("en-US")}
-                    </div>
-                  )}
-                  {(isInactive || isRemoved) && !isUnavailable && (
-                    <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                      removed from seller’s store
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
+                <>From MAD {minTotal.toLocaleString("en-US")}+</>
+              )}
+            </div>
 
-            <div className="text-sm text-neutral-500">
+            <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
+            {p.subtitle ? (
+              <div className="text-xs text-neutral-500">{p.subtitle}</div>
+            ) : null}
+
+            {/* shop byline */}
+            <div className="text-sm text-neutral-600">
               by{" "}
               {p.shop_id ? (
                 <Link
@@ -848,6 +830,76 @@ export default function ProductPage() {
                 </span>
               )}
             </div>
+
+            {/* tags */}
+            <TagList items={keywordArray(p.keywords)} />
+
+            {/* price block */}
+            {promoActive ? (
+              <div className="mt-1 flex items-center gap-3 flex-wrap">
+                <div className="text-xl font-bold text-green-600">
+                  MAD{(promoTotal as number).toLocaleString("en-US")}
+                </div>
+                <div className="line-through text-neutral-400">
+                  MAD{currentTotal.toLocaleString("en-US")}
+                </div>
+                <span className="text-xs text-green-700">
+                  Sale ends {formatEndsShort(p.promo_ends_at)}
+                </span>
+              </div>
+            ) : showPriceRange ? (
+              <div className="mt-1 text-xl font-bold">
+                MAD{minTotal.toLocaleString("en-US")} – MAD
+                {maxTotal.toLocaleString("en-US")}
+              </div>
+            ) : (
+              <div className="mt-1 text-xl font-bold">
+                MAD{currentTotal.toLocaleString("en-US")}
+              </div>
+            )}
+
+            {/* status flags */}
+            {(isInactive || isRemoved) && !isUnavailable ? (
+              <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
+                removed from seller’s store
+              </div>
+            ) : null}
+            {isUnavailable && (
+              <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
+                temporarily unavailable
+              </div>
+            )}
+
+            {/* header stat pills row */}
+            <div className="mt-2 flex items-stretch gap-2">
+              <StatPill label="Est. Delivery" value={etaTitle ?? "—"} />
+              <StatPill
+                label="Ratings"
+                value={
+                  <span className="inline-flex items-center gap-1">
+                    {(ratingAvg ?? 0).toFixed(1)}
+                    <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                  </span>
+                }
+              />
+              <StatPill
+                label="Orders"
+                value={
+                  p.orders_count != null
+                    ? p.orders_count >= 10000
+                      ? `${Math.round(p.orders_count / 1000)}k+`
+                      : `${p.orders_count.toLocaleString("en-US")}+`
+                    : "—"
+                }
+              />
+            </div>
+
+            {/* free shipping badge */}
+            {details.shipping?.mode === "free" && (
+              <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
+                Free shipping
+              </div>
+            )}
           </div>
 
           {/* OPTIONS */}
@@ -857,7 +909,7 @@ export default function ProductPage() {
               <Section key={g.id} title={g.name}>
                 <div className="rounded-xl border bg-white px-3 py-2">
                   <select
-                    className="w-full bg-transparent outline-none py-1"
+                    className="w-full bg-transparent outline-none py-1.5 text-sm"
                     value={valueId}
                     onChange={(e) =>
                       setSelected((s) => ({ ...s, [g.id]: e.target.value }))
@@ -890,8 +942,10 @@ export default function ProductPage() {
             <Section title="Personalization">
               {personalization.trim() ? (
                 <div className="rounded-xl border bg-white">
-                  <div className="flex items-center justify-between px-3 py-3 border-b">
-                    <div className="font-medium">Your personalization</div>
+                  <div className="flex items-center justify-between px-3 py-2 border-b">
+                    <div className="font-medium text-sm">
+                      Your personalization
+                    </div>
                     <button
                       type="button"
                       onClick={() => setPersonalizationOpen(true)}
@@ -927,7 +981,7 @@ export default function ProductPage() {
 
           {/* Quantity & CTAs or Owner Edit */}
           {!isOwner ? (
-            <Section title="Quantity">
+            <Section title="Select quantity">
               <div className="flex items-center gap-3">
                 <div className="flex items-center rounded-full border bg-white">
                   <button
@@ -948,7 +1002,7 @@ export default function ProductPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-2">
+              <div className="mt-3 grid grid-cols-1 gap-2">
                 {inCart ? (
                   <>
                     <Link
@@ -999,21 +1053,70 @@ export default function ProductPage() {
             </div>
           )}
 
-          {/* Reviews strip */}
+          {/* Reviews header (rating + CTA) */}
+          <Section
+            title="Reviews"
+            right={
+              <span className="text-xs text-neutral-500">
+                {ratingCount
+                  ? ratingCount >= 1000
+                    ? `${Math.floor(ratingCount / 100) / 10}k ratings`
+                    : `${ratingCount} ratings`
+                  : "No ratings"}
+              </span>
+            }
+          >
+            <RatingChip
+              value={ratingAvg}
+              count={ratingCount}
+              onClick={() =>
+                router.push(
+                  p.shop_id
+                    ? `/shop/${p.shop_id}/reviews?product=${p.id}`
+                    : `/product/${p.id}#reviews`
+                )
+              }
+            />
+          </Section>
+
+          {/* Reviews strip (cards like screenshot) */}
           <ProductReviewsStrip
             productId={p.id}
             shopId={p.shop_id ?? shop?.id}
           />
 
+          {/* Details & Description (collapsible feel) */}
+          <Section title="Details & Description" collapsible right={null}>
+            <div className="rounded-xl border bg-white p-3 text-[15px] leading-relaxed">
+              <p className="whitespace-pre-wrap">
+                {p.description ??
+                  "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
+              </p>
+
+              {optionGroups.length > 0 && (
+                <>
+                  <div className="font-semibold mt-3">Available options</div>
+                  <ul className="list-disc ml-4">
+                    {optionGroups.map((g) => (
+                      <li key={g.id}>
+                        <span className="font-medium">{g.name}:</span>{" "}
+                        {g.values.map((v) => v.label).join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </Section>
+
           {/* ---------------- ITEM DETAILS ---------------- */}
-          <Section title="Item details">
+          <Section title="Item details" collapsible>
             <ul className="space-y-3">
               <DetailRow
                 icon={<Store className="h-5 w-5 text-neutral-500" />}
                 label="Designed by"
                 value={shop?.title ?? p.shop_title ?? "Independent artisan"}
               />
-
               <DetailRow
                 icon={
                   details.type === "digital" ? (
@@ -1029,7 +1132,6 @@ export default function ProductPage() {
                     : "Physical item"
                 }
               />
-
               {(details.width_cm || details.height_cm) && (
                 <DetailRow
                   icon={<Ruler className="h-5 w-5 text-neutral-500" />}
@@ -1042,7 +1144,6 @@ export default function ProductPage() {
                   }
                 />
               )}
-
               {details.weight_kg && (
                 <DetailRow
                   icon={<Scale className="h-5 w-5 text-neutral-500" />}
@@ -1050,7 +1151,6 @@ export default function ProductPage() {
                   value={`${details.weight_kg} kg`}
                 />
               )}
-
               {details.personalizable && (
                 <DetailRow
                   icon={<Edit3 className="h-5 w-5 text-neutral-500" />}
@@ -1058,7 +1158,6 @@ export default function ProductPage() {
                   value="Yes"
                 />
               )}
-
               {details.materials?.length > 0 && (
                 <DetailRow
                   icon={<Layers className="h-5 w-5 text-neutral-500" />}
@@ -1070,7 +1169,7 @@ export default function ProductPage() {
           </Section>
 
           {/* ---------------- SHIPPING ---------------- */}
-          <Section title="Shipping & returns">
+          <Section title="Shipping & Policies" collapsible>
             <ul className="space-y-3">
               {details.ships_from && (
                 <DetailRow
@@ -1079,7 +1178,6 @@ export default function ProductPage() {
                   value={details.ships_from}
                 />
               )}
-
               {details.ships_to?.length > 0 && (
                 <DetailRow
                   icon={<Truck className="h-5 w-5 text-neutral-500" />}
@@ -1087,8 +1185,6 @@ export default function ProductPage() {
                   value={details.ships_to.join(", ")}
                 />
               )}
-
-              {/* Pricing */}
               {details.shipping?.mode === "free" ? (
                 <DetailRow
                   icon={<Package className="h-5 w-5 text-neutral-500" />}
@@ -1110,8 +1206,6 @@ export default function ProductPage() {
                   }
                 />
               ) : null}
-
-              {/* Estimate */}
               {(details.shipping?.estimate_days_min ||
                 details.shipping?.estimate_days_max) && (
                 <li className="flex items-start gap-3">
@@ -1128,16 +1222,9 @@ export default function ProductPage() {
                         ? `${details.shipping.estimate_days_min} days`
                         : `${details.shipping.estimate_days_max} days`}
                     </span>
-                    {etaString && (
-                      <div className="text-xs text-neutral-500 mt-1">
-                        {etaString}
-                      </div>
-                    )}
                   </div>
                 </li>
               )}
-
-              {/* Badges */}
               {(details.shipping?.cod ||
                 details.shipping?.pickup ||
                 details.shipping?.tracking) && (
@@ -1159,8 +1246,6 @@ export default function ProductPage() {
                   )}
                 </li>
               )}
-
-              {/* Notes */}
               {details.shipping?.notes && (
                 <DetailRow
                   icon={<Package className="h-5 w-5 text-neutral-500" />}
@@ -1168,7 +1253,6 @@ export default function ProductPage() {
                   value={details.shipping.notes}
                 />
               )}
-
               {details.returns && (
                 <DetailRow
                   icon={<Undo2 className="h-5 w-5 text-neutral-500" />}
@@ -1212,9 +1296,19 @@ export default function ProductPage() {
             </Section>
           )}
 
-          {/* More from shop */}
+          {/* More from this shop */}
           {!!moreFromShop.length && (
-            <Section title="More from this shop">
+            <Section
+              title="More from this shop"
+              right={
+                <Link
+                  href={`/shop/${p.shop_id}`}
+                  className="rounded-full border px-3 py-1 text-xs hover:bg-neutral-50"
+                >
+                  View the shop
+                </Link>
+              }
+            >
               <div className="grid grid-cols-2 gap-3">
                 {moreFromShop.map((x) => (
                   <Link
@@ -1253,7 +1347,7 @@ export default function ProductPage() {
             >
               <div className="max-w-screen-sm mx-auto">
                 <button
-                  onClick={handleAddToCart}
+                  onClick={handleAddToCartMerge}
                   disabled={isUnavailable || isInactive || isRemoved}
                   className="w-full rounded-full bg-black text-white px-4 py-4 font-medium shadow-xl disabled:opacity-60"
                 >
@@ -1278,7 +1372,6 @@ export default function ProductPage() {
                     {p.description ??
                       "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
                   </p>
-
                   {optionGroups.length > 0 && (
                     <>
                       <div className="font-semibold mt-2">
@@ -1323,7 +1416,7 @@ export default function ProductPage() {
                   </SheetHeader>
 
                   {images.length > 0 && (
-                    <div className="flex gap-2 overflow-x-auto pb-1">
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                       {images.slice(0, 4).map((src, i) => (
                         <div
                           key={i}

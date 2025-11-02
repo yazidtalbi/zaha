@@ -81,7 +81,7 @@ export default function HomePage() {
         {loading ? (
           <p className="text-sm text-neutral-500">Loading…</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 gap-y-8">
             {items.map((p) => (
               <ProductCard key={p.id} p={p} variant="carousel" />
             ))}

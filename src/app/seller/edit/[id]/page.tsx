@@ -8,6 +8,8 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { uploadCompressedToSupabase } from "@/lib/compressAndUpload";
+
 /* -------------------------------------------
    Types
 ------------------------------------------- */
@@ -47,8 +49,8 @@ type ItemDetails = {
 type ProductRow = {
   id: string;
   title: string;
-  keywords?: string | null; // NEW
-  description?: string | null; // NEW
+  keywords?: string | null;
+  description?: string | null;
   price_mad: number;
   city: string | null;
   active: boolean;
@@ -82,6 +84,8 @@ const LIMITS = {
   optionGroupName: 60,
   optionValueLabel: 60,
 };
+
+const MAX_PHOTOS = 5;
 
 function uid() {
   return crypto.randomUUID
@@ -131,9 +135,9 @@ function EditInner() {
 
   // Basics
   const [title, setTitle] = useState("");
-  const [keywordsInput, setKeywordsInput] = useState(""); // NEW (raw input)
-  const [keywordsCount, setKeywordsCount] = useState(0); // NEW (live count)
-  const [description, setDescription] = useState(""); // NEW
+  const [keywordsInput, setKeywordsInput] = useState("");
+  const [keywordsCount, setKeywordsCount] = useState(0);
+  const [description, setDescription] = useState("");
   const [price, setPrice] = useState<string>("");
   const [city, setCity] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
@@ -200,7 +204,7 @@ function EditInner() {
       setPhotos(Array.isArray(data.photos) ? data.photos.filter(Boolean) : []);
       setActive(Boolean(data.active));
 
-      // NEW: keywords & description
+      // Keywords & description
       const kwRaw = (data.keywords ?? "").toString();
       setKeywordsInput(kwRaw);
       setKeywordsCount(parseKeywords(kwRaw).length);
@@ -282,8 +286,21 @@ function EditInner() {
 
   /* ---------------- Photos ---------------- */
   async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
+    const picked = Array.from(e.target.files ?? []);
+    if (!picked.length) return;
+
+    if (photos.length >= MAX_PHOTOS) {
+      toast.error(`You already have ${photos.length}/${MAX_PHOTOS} photos.`);
+      e.currentTarget.value = "";
+      return;
+    }
+    const remaining = MAX_PHOTOS - photos.length;
+    const toProcess = picked.slice(0, remaining);
+    if (picked.length > toProcess.length) {
+      toast.message(
+        `Only ${remaining} more photo(s) allowed (max ${MAX_PHOTOS}).`
+      );
+    }
 
     setUploading(true);
     try {
@@ -292,22 +309,25 @@ function EditInner() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
-      const urls: string[] = [];
-      for (const file of files) {
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        const key = `u_${user.id}/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("products")
-          .upload(key, file, { cacheControl: "3600", upsert: true });
-        if (upErr) throw upErr;
-        const { data } = supabase.storage.from("products").getPublicUrl(key);
-        urls.push(data.publicUrl);
-      }
-      setPhotos((prev) => [...prev, ...urls]);
+      const urls = await Promise.all(
+        toProcess.map(async (file) => {
+          if (!/^image\/(jpeg|png|webp|gif|bmp)$/i.test(file.type)) {
+            throw new Error(
+              `Unsupported image type: ${
+                file.type || file.name
+              }. Use JPG/PNG/WEBP.`
+            );
+          }
+          return uploadCompressedToSupabase(file, user.id, "products");
+        })
+      );
+
+      setPhotos((prev) => [...prev, ...urls.filter(Boolean)]);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
       setUploading(false);
+      e.currentTarget.value = "";
     }
   }
 
@@ -544,8 +564,8 @@ function EditInner() {
 
       const payload = {
         title: title.trim(),
-        keywords: kw.length ? joinKeywordsForDB(kw) : null, // NEW
-        description: description.trim() || null, // NEW
+        keywords: kw.length ? joinKeywordsForDB(kw) : null,
+        description: description.trim() || null,
         price_mad: Math.round(base),
         city: city.trim() || null,
         active,
@@ -606,9 +626,25 @@ function EditInner() {
 
       {/* Photos */}
       <label className="block">
-        <div className="text-sm mb-1">Photos</div>
-        <input type="file" accept="image/*" multiple onChange={handleSelect} />
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm">Photos</div>
+          <div className="text-xs text-neutral-500">
+            {photos.length}/{MAX_PHOTOS}
+          </div>
+        </div>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+          multiple
+          onChange={handleSelect}
+          disabled={photos.length >= MAX_PHOTOS}
+        />
         {uploading && <div className="text-sm mt-1">Uploading…</div>}
+        {photos.length >= MAX_PHOTOS && (
+          <div className="text-xs text-neutral-500 mt-1">
+            You reached the maximum of {MAX_PHOTOS} photos.
+          </div>
+        )}
       </label>
 
       {!!photos.length && (

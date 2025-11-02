@@ -10,6 +10,15 @@ export default {
         olive: "#BBAA77",
         ink: "#3B2F2F",
       },
+      fontFamily: {
+        // default "font-sans" will now map to Instrument Sans
+        sans: [
+          "var(--font-instrument-sans)",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
+      },
       borderRadius: { xl: "0.75rem" },
     },
   },

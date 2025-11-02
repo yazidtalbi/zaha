@@ -1,9 +1,18 @@
 // components/reviews/ProductReviewStrip.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 type Review = {
   id: string;
@@ -17,13 +26,22 @@ type Review = {
 
 export default function ProductReviewStrip({
   productId,
-  shopId, // ← pass this from the product page so we can link correctly
+  shopId,
 }: {
   productId: string;
   shopId?: string | null;
 }) {
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [openReview, setOpenReview] = useState<Review | null>(null);
 
+  // Lightbox state
+  const [lightbox, setLightbox] = useState<{
+    photos: string[];
+    index: number;
+    originReviewId?: string;
+  } | null>(null);
+
+  // Fetch reviews
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
@@ -36,6 +54,7 @@ export default function ProductReviewStrip({
     })();
   }, [productId]);
 
+  // Summary
   const { avg, count, histogram } = useMemo(() => {
     const count = reviews.length;
     const sum = reviews.reduce((a, r) => a + (r.rating ?? 0), 0);
@@ -49,11 +68,39 @@ export default function ProductReviewStrip({
     return { avg, count, histogram: h };
   }, [reviews]);
 
-  if (!reviews.length) return null;
-
   const seeAllHref = shopId
     ? `/shop/${shopId}/reviews?product=${productId}`
-    : `/reviews?product=${productId}`; // fallback if you open it elsewhere
+    : `/reviews?product=${productId}`;
+
+  // -------- Lightbox controls (hooks must be unconditional) --------
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const next = useCallback(() => {
+    setLightbox((lb) =>
+      lb ? { ...lb, index: (lb.index + 1) % lb.photos.length } : lb
+    );
+  }, []);
+  const prev = useCallback(() => {
+    setLightbox((lb) =>
+      lb
+        ? { ...lb, index: (lb.index - 1 + lb.photos.length) % lb.photos.length }
+        : lb
+    );
+  }, []);
+
+  // Keyboard handlers for lightbox
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") prev();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, closeLightbox, next, prev]);
+
+  // Now it's safe to early return (after all hooks)
+  if (!reviews.length) return null;
 
   return (
     <section className="px-4 py-5">
@@ -100,7 +147,8 @@ export default function ProductReviewStrip({
           {reviews.map((r) => (
             <li
               key={r.id}
-              className="snap-start shrink-0 w-[85%] sm:w-[420px] rounded-xl border bg-white p-3"
+              className="snap-start shrink-0 w-[85%] sm:w-[420px] rounded-xl border bg-white p-3 cursor-pointer"
+              onClick={() => setOpenReview(r)} // open sheet when card clicked
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
@@ -136,12 +184,31 @@ export default function ProductReviewStrip({
                       src={src}
                       alt=""
                       className="h-10 w-10 rounded object-cover border"
+                      onClick={(e) => {
+                        e.stopPropagation(); // don’t open the sheet
+                        setLightbox({
+                          photos: r.photos!,
+                          index: i,
+                          originReviewId: r.id,
+                        });
+                      }}
                     />
                   ))}
                   {r.photos.length > 4 && (
-                    <div className="h-10 w-10 rounded border grid place-items-center text-xs text-neutral-600">
+                    <button
+                      type="button"
+                      className="h-10 w-10 rounded border grid place-items-center text-xs text-neutral-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightbox({
+                          photos: r.photos!,
+                          index: 4,
+                          originReviewId: r.id,
+                        });
+                      }}
+                    >
                       +{r.photos.length - 4}
-                    </div>
+                    </button>
                   )}
                 </div>
               ) : null}
@@ -149,6 +216,123 @@ export default function ProductReviewStrip({
           ))}
         </ul>
       </div>
+
+      {/* ---------------- Sheet: Full Review ---------------- */}
+      <Sheet
+        open={!!openReview}
+        onOpenChange={(o) => !o && setOpenReview(null)}
+      >
+        <SheetContent side="bottom" className="h-[85vh] overflow-y-auto p-0">
+          {openReview && (
+            <div className="p-4">
+              <SheetHeader>
+                <SheetTitle className="flex items-center justify-between">
+                  <span>{openReview.title || "Review"}</span>
+                  <span className="text-xs font-normal text-neutral-500">
+                    {new Date(openReview.created_at).toLocaleDateString()}
+                  </span>
+                </SheetTitle>
+                <SheetDescription className="mt-1">
+                  <span className="text-sm font-medium">
+                    {openReview.author || "Anonymous"}
+                  </span>
+                  <div className="text-[13px] mt-1">
+                    <span className="text-yellow-500">
+                      {"★★★★★".slice(0, openReview.rating ?? 0)}
+                    </span>
+                    <span className="text-neutral-300">
+                      {"★★★★★".slice(openReview.rating ?? 0)}
+                    </span>
+                  </div>
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+                {openReview.body}
+              </div>
+
+              {openReview.photos?.length ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {openReview.photos.map((src, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() =>
+                        setLightbox({
+                          photos: openReview.photos!,
+                          index: i,
+                          originReviewId: openReview.id,
+                        })
+                      }
+                      className="relative aspect-square overflow-hidden rounded border"
+                    >
+                      <img
+                        src={src}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ---------------- Dialog: Fullscreen Lightbox ---------------- */}
+      <Dialog open={!!lightbox} onOpenChange={(o) => !o && closeLightbox()}>
+        <DialogContent className="p-0 w-screen max-w-none h-screen bg-black/95 border-none">
+          {lightbox && (
+            <div className="relative h-full w-full">
+              {/* Close */}
+              <button
+                onClick={closeLightbox}
+                className="absolute top-3 right-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/60 hover:bg-black/80"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5 text-white" />
+              </button>
+
+              {/* Prev / Next */}
+              {lightbox.photos.length > 1 && (
+                <>
+                  <button
+                    onClick={prev}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/80"
+                    aria-label="Previous"
+                  >
+                    <ChevronLeft className="h-6 w-6 text-white" />
+                  </button>
+                  <button
+                    onClick={next}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/80"
+                    aria-label="Next"
+                  >
+                    <ChevronRight className="h-6 w-6 text-white" />
+                  </button>
+                </>
+              )}
+
+              {/* Image */}
+              <div className="h-full w-full grid place-items-center">
+                <img
+                  src={lightbox.photos[lightbox.index]}
+                  alt=""
+                  className="max-h-[90vh] max-w-[90vw] object-contain select-none"
+                  draggable={false}
+                  onClick={next}
+                />
+              </div>
+
+              {/* Counter */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-sm z-20">
+                {lightbox.index + 1} / {lightbox.photos.length}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

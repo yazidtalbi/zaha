@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { uploadCompressedToSupabase } from "@/lib/compressAndUpload"; // uses browser-image-compression under the hood
 
 /* ---------------- Types ---------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
@@ -90,6 +91,8 @@ const LIMITS = {
   optionGroupName: 60,
   optionValueLabel: 60,
 };
+
+const MAX_PHOTOS = 5;
 
 function parseKeywords(raw: string): string[] {
   return raw
@@ -240,8 +243,20 @@ export default function SellPage() {
 
   /* ------------- Photos ------------- */
   async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
+    const picked = Array.from(e.target.files ?? []);
+    if (!picked.length) return;
+
+    // Enforce max count BEFORE uploads
+    if (photos.length >= MAX_PHOTOS) {
+      alert(`You already have ${photos.length}/${MAX_PHOTOS} photos.`);
+      e.currentTarget.value = "";
+      return;
+    }
+    const remaining = MAX_PHOTOS - photos.length;
+    const toProcess = picked.slice(0, remaining);
+    if (picked.length > toProcess.length) {
+      alert(`Only ${remaining} more photo(s) allowed (max ${MAX_PHOTOS}).`);
+    }
 
     setUploading(true);
     try {
@@ -250,24 +265,29 @@ export default function SellPage() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
-      const urls: string[] = [];
-      for (const file of files) {
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        const key = `u_${user.id}/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("products")
-          .upload(key, file, { cacheControl: "3600", upsert: true });
-        if (upErr) throw upErr;
-        const { data } = supabase.storage.from("products").getPublicUrl(key);
-        urls.push(data.publicUrl);
-      }
-      setPhotos((prev) => [...prev, ...urls]);
+      const urls = await Promise.all(
+        toProcess.map(async (file) => {
+          // Guard against weird types (e.g., HEIC)
+          if (!/^image\/(jpeg|png|webp|gif|bmp)$/i.test(file.type)) {
+            throw new Error(
+              `Unsupported image type: ${
+                file.type || file.name
+              }. Please use JPG/PNG/WEBP.`
+            );
+          }
+          return uploadCompressedToSupabase(file, user.id, "products");
+        })
+      );
+
+      setPhotos((prev) => [...prev, ...urls.filter(Boolean)]);
     } catch (err) {
       alert((err as Error).message);
     } finally {
       setUploading(false);
+      e.currentTarget.value = ""; // allow reselecting same files
     }
   }
+
   function removePhoto(i: number) {
     setPhotos((prev) => prev.filter((_, idx) => idx !== i));
   }
@@ -320,8 +340,7 @@ export default function SellPage() {
       // keywords enforcement (max 7, each ≤ 40)
       const kw = parseKeywords(keywordsInput);
       if (!kw.length) {
-        // Not mandatory, but you can require at least 1 if you want:
-        // throw new Error("Please add at least one keyword");
+        // optional: require at least 1
       }
       if (kw.length > LIMITS.keywordMax)
         throw new Error(`Use at most ${LIMITS.keywordMax} keywords`);
@@ -431,7 +450,7 @@ export default function SellPage() {
         height_cm: height ? Number(height) : null,
         weight_kg: weight ? Number(weight) : null,
         personalizable: personalization_enabled,
-        ships_from: shipsFrom || city || null, // keep both concepts: filter city vs display ships_from
+        ships_from: shipsFrom || city || null,
         ships_to: shipsTo
           .split(",")
           .map((s) => s.trim())
@@ -514,9 +533,25 @@ export default function SellPage() {
 
       {/* Photos */}
       <label className="block">
-        <div className="text-sm mb-1">Photos</div>
-        <input type="file" accept="image/*" multiple onChange={handleSelect} />
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm">Photos</div>
+          <div className="text-xs text-neutral-500">
+            {photos.length}/{MAX_PHOTOS}
+          </div>
+        </div>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+          multiple
+          onChange={handleSelect}
+          disabled={photos.length >= MAX_PHOTOS}
+        />
         {uploading && <div className="text-sm mt-1">Uploading…</div>}
+        {photos.length >= MAX_PHOTOS && (
+          <div className="text-xs text-neutral-500 mt-1">
+            You reached the maximum of {MAX_PHOTOS} photos.
+          </div>
+        )}
       </label>
 
       {!!photos.length && (

@@ -8,9 +8,9 @@ import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useFavorites } from "@/hooks/useFavorites";
 
-// ————————————————————————————
-// Types
-// ————————————————————————————
+/* -------------------------------------------
+   Types
+------------------------------------------- */
 type Product = {
   id: string;
   title: string;
@@ -21,22 +21,26 @@ type Product = {
   promo_ends_at?: string | null; // NEW ISO
   photos?: string[] | null;
   rating_avg?: number | null;
-  rating_count?: number | null;
+  reviews_count?: number | null;
   shop_owner?: string | null;
+
+  // Optional extras for the visual (won’t render if not provided)
+  orders_count?: number | null; // e.g. 10200
+  free_shipping?: boolean | null; // e.g. true
 };
 
 type Props = {
   p: Product;
   variant?: "default" | "carousel";
   className?: string;
-  onUnfavorite?: (id: string) => void; // 👈 allow parent (/favorites) to remove instantly
+  onUnfavorite?: (id: string) => void; // allow parent (/favorites) to remove instantly
 };
 
-// ————————————————————————————
-// Helpers
-// ————————————————————————————
+/* -------------------------------------------
+   Helpers
+------------------------------------------- */
 function formatMAD(v: number) {
-  return `MAD${v.toLocaleString("en-US")}`;
+  return `MAD ${v.toLocaleString("en-US")}`;
 }
 
 function isPromoActive(p: Product, now = new Date()) {
@@ -54,11 +58,7 @@ function isPromoActive(p: Product, now = new Date()) {
 function getDisplayPrice(
   p: Product,
   now = new Date()
-): {
-  current: number;
-  compareAt: number | null;
-  promoOn: boolean;
-} {
+): { current: number; compareAt: number | null; promoOn: boolean } {
   const promoOn = isPromoActive(p, now);
   if (promoOn) {
     return {
@@ -67,7 +67,6 @@ function getDisplayPrice(
       promoOn: true,
     };
   }
-  // fallback to old compare_at_mad if present
   if (p.compare_at_mad && p.compare_at_mad > p.price_mad) {
     return {
       current: p.price_mad,
@@ -78,26 +77,32 @@ function getDisplayPrice(
   return { current: p.price_mad, compareAt: null, promoOn: false };
 }
 
-// ————————————————————————————
-// ProductCard
-// ————————————————————————————
+function fmtOrders(n?: number | null) {
+  if (!n || n <= 0) return null;
+  if (n >= 10000)
+    return `${(Math.round(n / 100) / 10).toLocaleString("en-US")}k+`;
+  return `${n.toLocaleString("en-US")}+`;
+}
+
+/* -------------------------------------------
+   ProductCard
+------------------------------------------- */
 export default function ProductCard({
   p,
   variant = "default",
   className = "",
-  onUnfavorite, // 👈 NEW
+  onUnfavorite,
 }: Props) {
   const imgs = useMemo(
     () => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []).slice(0, 5),
     [p.photos]
   );
-
   const { current, compareAt, promoOn } = getDisplayPrice(p);
 
   return (
     <Link
       href={`/product/${p.id}`}
-      className={`block rounded-2xl bg-[#1c171a]/90 border border-black/5 overflow-hidden ${className}`}
+      className={`block    overflow-hidden rounded-lg ${className}`}
     >
       {variant === "carousel" ? (
         <CardCarousel
@@ -106,16 +111,17 @@ export default function ProductCard({
           productId={p.id}
           shopOwner={p.shop_owner}
           promoOn={promoOn}
-          onUnfavorite={onUnfavorite} // 👈 pass through
+          onUnfavorite={onUnfavorite}
         />
       ) : (
         <div className="relative">
-          <div className="aspect-[4/5] bg-neutral-100 relative">
+          {/* FIXED HEIGHT image container */}
+          <div className="relative h-60 bg-neutral-100 roun ">
             {imgs[0] ? (
               <img
                 src={imgs[0]}
                 alt={p.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover "
                 loading="lazy"
               />
             ) : (
@@ -123,73 +129,95 @@ export default function ProductCard({
                 No image
               </div>
             )}
+
+            {promoOn && (
+              <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
+                Promo
+              </span>
+            )}
           </div>
+
           <FavButton
             productId={p.id}
             shopOwner={p.shop_owner ?? undefined}
-            onUnfavorite={onUnfavorite} // 👈 pass through
+            onUnfavorite={onUnfavorite}
           />
-          {promoOn && (
-            <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
-              Promo
-            </span>
-          )}
         </div>
       )}
 
-      <div className="p-3">
-        <div className="line-clamp-2 text-[13px] text-white/95">{p.title}</div>
+      {/* BODY */}
+      <div className="pt-3">
+        {/* Title */}
+        <div className="line-clamp-2 text-md leading-snug text-neutral-900 font-semibold">
+          {p.title}
+        </div>
 
+        {/* Price row: “From MAD 780 1000” */}
+        <div className="mt-1 flex items-baseline gap-2">
+          {/* <span className="text-[14px] text-neutral-600">From</span> */}
+          <span className="text-md font-semibold text-emerald-700">
+            {formatMAD(current)}
+          </span>
+          {compareAt && (
+            <span className="text-[14px] line-through text-neutral-400">
+              {(compareAt as number).toLocaleString("en-US")}
+            </span>
+          )}
+        </div>
+
+        {/* Rating */}
         {(p.rating_avg ?? 0) > 0 && (
-          <div className="mt-1 text-[12px] text-white/80 flex items-center gap-1">
+          <div className="mt-1 text-md text-neutral-900 flex items-center gap-1.5">
             <span className="font-semibold">
               {(p.rating_avg as number).toFixed(1)}
             </span>
-            <span>★</span>
-            {typeof p.rating_count === "number" && (
+            <span className="text-amber-600">★</span>
+            {typeof p.reviews_count === "number" && (
               <span className="opacity-75">
-                (
-                {p.rating_count >= 1000
-                  ? `${Math.round(p.rating_count / 100) / 10}k`
-                  : p.rating_count}
-                )
+                ({p.reviews_count.toLocaleString("en-US")})
               </span>
             )}
           </div>
         )}
 
-        <div className="mt-1 flex items-baseline gap-2">
-          <div className="text-[15px] font-semibold text-[#7ee084]">
-            {formatMAD(current)}
+        {/* Orders (optional) */}
+        {p.orders_count ? (
+          <div className="mt-1 text-[16px] font-semibold text-neutral-900">
+            {fmtOrders(p.orders_count)}{" "}
+            <span className="font-normal">Orders</span>
           </div>
-          {compareAt && (
-            <div className="text-[12px] line-through text-white/40">
-              {formatMAD(compareAt)}
-            </div>
-          )}
-        </div>
+        ) : null}
+
+        {/* Free shipping pill (optional) */}
+        {p.free_shipping ? (
+          <div className="mt-2">
+            <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 text-xs px-3 py-1 font-medium">
+              Free shipping
+            </span>
+          </div>
+        ) : null}
       </div>
     </Link>
   );
 }
 
-// ————————————————————————————
-// CardCarousel
-// ————————————————————————————
+/* -------------------------------------------
+   CardCarousel
+------------------------------------------- */
 function CardCarousel({
   images,
   title,
   productId,
   shopOwner,
   promoOn,
-  onUnfavorite, // 👈 NEW
+  onUnfavorite,
 }: {
   images: string[];
   title: string;
   productId: string;
   shopOwner?: string | null;
   promoOn: boolean;
-  onUnfavorite?: (id: string) => void; // 👈 NEW
+  onUnfavorite?: (id: string) => void;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [index, setIndex] = useState(0);
@@ -204,11 +232,12 @@ function CardCarousel({
 
   return (
     <div className="relative">
-      <div className="overflow-hidden" ref={emblaRef}>
+      <div className="overflow-hidden rounded-lg" ref={emblaRef}>
         <div className="flex">
           {(images.length ? images : [undefined]).map((src, i) => (
             <div className="min-w-0 flex-[0_0_100%]" key={i}>
-              <div className="aspect-[4/5] bg-neutral-100 relative">
+              {/* FIXED HEIGHT image container */}
+              <div className="relative h-60 bg-neutral-100">
                 {src ? (
                   <img
                     src={src}
@@ -221,25 +250,24 @@ function CardCarousel({
                     No image
                   </div>
                 )}
-                {promoOn && (
-                  <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
-                    Promo
-                  </span>
-                )}
               </div>
             </div>
           ))}
         </div>
       </div>
-
+      {promoOn && (
+        <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
+          Promo
+        </span>
+      )}
       <FavButton
         productId={productId}
         shopOwner={shopOwner ?? undefined}
-        onUnfavorite={onUnfavorite} // 👈 pass through
+        onUnfavorite={onUnfavorite}
       />
 
       {images.length > 1 && (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1.5">
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/40 px-1.5 py-1 backdrop-blur-sm">
           {images.map((_, i) => (
             <span
               key={i}
@@ -254,17 +282,17 @@ function CardCarousel({
   );
 }
 
-// ————————————————————————————
-// FavButton
-// ————————————————————————————
+/* -------------------------------------------
+   FavButton
+------------------------------------------- */
 function FavButton({
   productId,
   shopOwner,
-  onUnfavorite, // 👈 NEW
+  onUnfavorite,
 }: {
   productId: string;
   shopOwner?: string;
-  onUnfavorite?: (id: string) => void; // 👈 NEW
+  onUnfavorite?: (id: string) => void;
 }) {
   const { favorites, uid, toggleFavorite } = useFavorites();
   const [busy, setBusy] = useState(false);
@@ -276,7 +304,7 @@ function FavButton({
     try {
       if (!uid) {
         toast("Please sign in to save favorites.");
-        setBusy(false); // ensure not stuck busy
+        setBusy(false);
         return;
       }
       if (shopOwner && shopOwner === uid) {
@@ -291,17 +319,15 @@ function FavButton({
           .delete()
           .eq("user_id", uid)
           .eq("product_id", productId);
-
         toast("Removed from favorites");
-        toggleFavorite(productId); // keep shared state in sync
-        onUnfavorite?.(productId); // 👈 tell /favorites page to remove instantly
+        toggleFavorite(productId);
+        onUnfavorite?.(productId);
       } else {
         await supabase
           .from("favorites")
           .insert({ user_id: uid, product_id: productId });
-
         toast.success("Added to favorites ❤️");
-        toggleFavorite(productId); // keep shared state in sync
+        toggleFavorite(productId);
       }
     } catch (err: any) {
       toast.error("Failed to update favorites", { description: err.message });
@@ -319,9 +345,9 @@ function FavButton({
         e.preventDefault();
         toggle();
       }}
-      className="absolute top-2 right-2 h-9 w-9 rounded-full bg-black/60 grid place-items-center text-white"
+      className="absolute top-2 right-2 h-9 w-9 rounded-full bg-white shadow-sm grid place-items-center text-neutral-900"
     >
-      <Heart size={18} className={on ? "fill-white" : ""} />
+      <Heart size={18} className={on ? "fill-neutral-900" : ""} />
     </button>
   );
 }
