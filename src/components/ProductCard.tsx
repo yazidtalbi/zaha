@@ -14,26 +14,29 @@ import { useFavorites } from "@/hooks/useFavorites";
 type Product = {
   id: string;
   title: string;
-  price_mad: number; // base price
-  compare_at_mad?: number | null; // legacy strike-through
-  promo_price_mad?: number | null; // NEW
-  promo_starts_at?: string | null; // NEW ISO
-  promo_ends_at?: string | null; // NEW ISO
+  price_mad: number;
+  compare_at_mad?: number | null;
+  promo_price_mad?: number | null;
+  promo_starts_at?: string | null;
+  promo_ends_at?: string | null;
   photos?: string[] | null;
   rating_avg?: number | null;
   reviews_count?: number | null;
+  orders_count?: number | null;
+  free_shipping?: boolean | null;
   shop_owner?: string | null;
 
-  // Optional extras for the visual (won’t render if not provided)
-  orders_count?: number | null; // e.g. 10200
-  free_shipping?: boolean | null; // e.g. true
+  /** NEW: for fromshop tag pills (comma-separated: "wood, handmade, vintage") */
+  keywords?: string | null;
 };
 
 type Props = {
   p: Product;
   variant?: "default" | "carousel";
   className?: string;
-  onUnfavorite?: (id: string) => void; // allow parent (/favorites) to remove instantly
+  onUnfavorite?: (id: string) => void;
+  /** NEW: shop feed mode */
+  fromshop?: boolean;
 };
 
 /* -------------------------------------------
@@ -54,7 +57,6 @@ function isPromoActive(p: Product, now = new Date()) {
   );
 }
 
-/** Returns the current display price and an optional compareAt (for strikethrough) */
 function getDisplayPrice(
   p: Product,
   now = new Date()
@@ -84,6 +86,30 @@ function fmtOrders(n?: number | null) {
   return `${n.toLocaleString("en-US")}+`;
 }
 
+function keywordArray(s?: string | null) {
+  return (s || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function TagList({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {items.map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-3 py-1 text-xs"
+        >
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------------------------------
    ProductCard
 ------------------------------------------- */
@@ -92,6 +118,7 @@ export default function ProductCard({
   variant = "default",
   className = "",
   onUnfavorite,
+  fromshop = false,
 }: Props) {
   const imgs = useMemo(
     () => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []).slice(0, 5),
@@ -99,12 +126,18 @@ export default function ProductCard({
   );
   const { current, compareAt, promoOn } = getDisplayPrice(p);
 
+  // Choose visual: fromshop always uses single image (no carousel)
+  const useCarousel = !fromshop && variant === "carousel";
+
+  const firstImage = imgs[0];
+
   return (
     <Link
       href={`/product/${p.id}`}
-      className={`block    overflow-hidden rounded-lg ${className}`}
+      className={`block overflow-hidden ${className}`}
     >
-      {variant === "carousel" ? (
+      {/* IMAGE */}
+      {useCarousel ? (
         <CardCarousel
           images={imgs}
           title={p.title}
@@ -115,17 +148,20 @@ export default function ProductCard({
         />
       ) : (
         <div className="relative">
-          {/* FIXED HEIGHT image container */}
-          <div className="relative h-60 bg-neutral-100 roun ">
-            {imgs[0] ? (
+          <div
+            className={`relative h-36 bg-neutral-100 overflow-hidden  ${
+              fromshop ? "rounded-xl" : "rounded-lg"
+            }`}
+          >
+            {firstImage ? (
               <img
-                src={imgs[0]}
+                src={firstImage}
                 alt={p.title}
-                className="w-full h-full object-cover "
+                className="h-full   w-full object-cover object-center"
                 loading="lazy"
               />
             ) : (
-              <div className="w-full h-full grid place-items-center text-neutral-500 text-sm">
+              <div className="h-full w-full grid place-items-center text-neutral-500 text-sm">
                 No image
               </div>
             )}
@@ -146,15 +182,14 @@ export default function ProductCard({
       )}
 
       {/* BODY */}
-      <div className="pt-3">
+      <div className="pt-3 -space-y-1">
         {/* Title */}
         <div className="line-clamp-2 text-md leading-snug text-neutral-900 font-semibold">
           {p.title}
         </div>
 
-        {/* Price row: “From MAD 780 1000” */}
+        {/* Price row */}
         <div className="mt-1 flex items-baseline gap-2">
-          {/* <span className="text-[14px] text-neutral-600">From</span> */}
           <span className="text-md font-semibold text-emerald-700">
             {formatMAD(current)}
           </span>
@@ -165,8 +200,11 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* Rating */}
-        {(p.rating_avg ?? 0) > 0 && (
+        {/* Keywords (fromshop only) */}
+        {/* {fromshop && <TagList items={keywordArray(p.keywords)} />} */}
+
+        {/* Rating (hidden in fromshop) */}
+        {!fromshop && (p.rating_avg ?? 0) > 0 && (
           <div className="mt-1 text-md text-neutral-900 flex items-center gap-1.5">
             <span className="font-semibold">
               {(p.rating_avg as number).toFixed(1)}
@@ -180,8 +218,8 @@ export default function ProductCard({
           </div>
         )}
 
-        {/* Orders (optional) */}
-        {p.orders_count ? (
+        {/* Orders (hidden in fromshop) */}
+        {!fromshop && p.orders_count ? (
           <div className="mt-1 text-[16px] font-semibold text-neutral-900">
             {fmtOrders(p.orders_count)}{" "}
             <span className="font-normal">Orders</span>
@@ -202,7 +240,7 @@ export default function ProductCard({
 }
 
 /* -------------------------------------------
-   CardCarousel
+   CardCarousel (unchanged for default mode)
 ------------------------------------------- */
 function CardCarousel({
   images,
@@ -236,7 +274,6 @@ function CardCarousel({
         <div className="flex">
           {(images.length ? images : [undefined]).map((src, i) => (
             <div className="min-w-0 flex-[0_0_100%]" key={i}>
-              {/* FIXED HEIGHT image container */}
               <div className="relative h-60 bg-neutral-100">
                 {src ? (
                   <img
@@ -255,11 +292,13 @@ function CardCarousel({
           ))}
         </div>
       </div>
+
       {promoOn && (
         <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
           Promo
         </span>
       )}
+
       <FavButton
         productId={productId}
         shopOwner={shopOwner ?? undefined}
