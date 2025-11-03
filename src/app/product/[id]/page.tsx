@@ -203,12 +203,13 @@ function TagList({ items }: { items: string[] }) {
     <div className="mt-1 flex flex-wrap text-sm text-neutral-500">
       {items.map((tag, i) => (
         <span key={tag} className="flex items-center">
-          <Link
+          {tag}
+          {/* <Link
             href={`/search?q=${encodeURIComponent(tag)}`}
             className="hover:underline hover:text-black transition-colors"
           >
             {tag}
-          </Link>
+          </Link> */}
           {i < items.length - 1 && (
             <span className="mr-1 text-neutral-400">,</span>
           )}
@@ -434,6 +435,29 @@ export default function ProductPage() {
       (shop?.owner && shop.owner === uid)
     );
   }, [uid, p?.shop_owner, shop?.owner]);
+
+  // category
+  const [categoryPath, setCategoryPath] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!p?.id) return;
+    (async () => {
+      // primary category for this product
+      const { data, error } = await supabase
+        .from("product_categories")
+        .select("category_id, categories!inner(id, path, name_en)")
+        .eq("product_id", p.id)
+        .eq("is_primary", true)
+        .maybeSingle();
+
+      if (!error && data) {
+        const cat = (data as any).categories;
+        setCategoryPath(cat?.path ?? null);
+        setCategoryId(cat?.id ?? null);
+      }
+    })();
+  }, [p?.id]);
 
   // cart state
   const [inCart, setInCart] = useState(false);
@@ -1006,6 +1030,38 @@ export default function ProductPage() {
             {" "}
             <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
             <TagList items={keywordArray(p.keywords)} />
+            {categoryPath && (
+              <div className="mt-1 text-sm text-neutral-600">
+                in{" "}
+                {categoryId ? (
+                  <Link
+                    href={`/search?category=${encodeURIComponent(categoryId)}`}
+                    className="underline hover:text-black"
+                  >
+                    {categoryPath
+                      .split("/")
+                      .map(
+                        (part) =>
+                          part
+                            .replace(/-/g, " ") // Replace dashes with spaces
+                            .replace(/\b\w/g, (c) => c.toUpperCase()) // Capitalize each word
+                      )
+                      .join(" / ")}
+                  </Link>
+                ) : (
+                  <span>
+                    {categoryPath
+                      .split("/")
+                      .map((part) =>
+                        part
+                          .replace(/-/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase())
+                      )
+                      .join(" / ")}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="text-sm text-neutral-600 mt-2">
               by{" "}
               {p.shop_id ? (

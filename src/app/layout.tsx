@@ -5,6 +5,15 @@ import { Instrument_Sans } from "next/font/google";
 import ToastHost from "@/components/ToastHost";
 import BottomNav from "@/components/BottomNav";
 
+import { supabase } from "@/lib/supabaseClient";
+
+const { data, error } = await supabase.rpc("suggest_categories", {
+  title_text: "Handwoven wool berber rug 120x180",
+  lang: "en",
+  max_results: 6,
+});
+console.log({ data, error });
+
 export const metadata: Metadata = {
   title: "Zaha",
   description: "Crafted in Morocco",

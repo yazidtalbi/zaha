@@ -9,6 +9,7 @@ import HeroCarousel from "@/components/HeroCarousel";
 
 import Link from "next/link";
 import Header from "@/components/Header";
+import CategoriesStrip from "@/components/home/CategoriesStrip";
 
 const slides = [
   {
@@ -74,6 +75,9 @@ export default function HomePage() {
       {/* <HeroCard /> */}
 
       <HeroCarousel slides={slides} />
+
+      <CategoriesStrip />
+      {/* or pass pre-fetched categories as `initial` */}
 
       {/* Section */}
       <section className="p-4 space-y-2">

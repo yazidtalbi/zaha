@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadCompressedToSupabase } from "@/lib/compressAndUpload"; // uses browser-image-compression under the hood
 
+import CategorySheetPicker from "@/components/listing/CategorySheetPicker";
+
 /* ---------------- Types ---------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
 type OptionGroup = {
@@ -119,6 +121,10 @@ export default function SellPage() {
 
   const [price, setPrice] = useState<string>("");
   const [city, setCity] = useState("");
+
+  // inside your create/edit product form component
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryPath, setCategoryPath] = useState<string>("");
 
   // photos
   const [photos, setPhotos] = useState<string[]>([]);
@@ -330,22 +336,22 @@ export default function SellPage() {
   async function handleSave() {
     try {
       const base = Number(price);
+
+      // ——— Basic validations ———
       if (!title.trim()) throw new Error("Title is required");
       if (title.trim().length > LIMITS.title)
         throw new Error(`Title must be ≤ ${LIMITS.title} characters`);
       if (!Number.isFinite(base) || base <= 0)
         throw new Error("Enter a valid price");
       if (!photos.length) throw new Error("Add at least one photo");
+      if (!categoryId) throw new Error("Please select a category.");
 
       // keywords enforcement (max 7, each ≤ 40)
       const kw = parseKeywords(keywordsInput);
-      if (!kw.length) {
-        // optional: require at least 1
-      }
       if (kw.length > LIMITS.keywordMax)
         throw new Error(`Use at most ${LIMITS.keywordMax} keywords`);
 
-      // validate options
+      // ——— Options validation ———
       for (const g of groups) {
         if (!g.name.trim()) throw new Error("Option group needs a name");
         if (g.name.length > LIMITS.optionGroupName)
@@ -370,7 +376,7 @@ export default function SellPage() {
         }
       }
 
-      // promo
+      // ——— Promo validation ———
       let promo_price_mad: number | null = null;
       let promo_starts_at: string | null = null;
       let promo_ends_at: string | null = null;
@@ -391,19 +397,17 @@ export default function SellPage() {
         promo_ends_at = eISO;
       }
 
-      // personalization
+      // ——— Personalization ———
       let personalization_enabled = !!persoEnabled;
       let personalization_instructions: string | null = null;
       let personalization_max_chars: number | null = null;
 
       if (personalization_enabled) {
         const max = Number(persoMax);
-        if (!Number.isFinite(max) || max <= 0) {
+        if (!Number.isFinite(max) || max <= 0)
           throw new Error("Enter a valid max characters for personalization");
-        }
-        if (!persoInstr.trim()) {
+        if (!persoInstr.trim())
           throw new Error("Add buyer instructions for personalization");
-        }
         if (persoInstr.length > LIMITS.persoInstr)
           throw new Error(
             `Personalization instructions must be ≤ ${LIMITS.persoInstr} chars`
@@ -416,7 +420,7 @@ export default function SellPage() {
         personalization_max_chars = null;
       }
 
-      // quick client-side field lengths
+      // ——— Field lengths ———
       if (description.length > LIMITS.description)
         throw new Error(`Description must be ≤ ${LIMITS.description} chars`);
       if (city.length > LIMITS.city)
@@ -430,25 +434,25 @@ export default function SellPage() {
       if (shipNotes.length > LIMITS.shipNotes)
         throw new Error(`Shipping notes must be ≤ ${LIMITS.shipNotes} chars`);
 
-      // shipping JSON
+      // ——— Shipping JSON ———
       const shipping: ShippingDetails = {
         mode: shipMode,
         fee_mad: shipMode === "fees" ? (shipFee ? Number(shipFee) : 0) : null,
         free_over_mad: shipFreeOver ? Number(shipFreeOver) : null,
-        estimate_days_min: estDaysMin ? Number(estDaysMin) : null,
-        estimate_days_max: estDaysMax ? Number(estDaysMax) : null,
+        estimate_days_min: estDaysMin !== "" ? Number(estDaysMin) : null,
+        estimate_days_max: estDaysMax !== "" ? Number(estDaysMax) : null,
         cod: shipCOD,
         pickup: shipPickup,
         tracking: shipTracking,
         notes: shipNotes.trim() || null,
       };
 
-      // item_details JSON
+      // ——— Item details JSON ———
       const item_details: ItemDetails = {
         type: itemType,
-        width_cm: width ? Number(width) : null,
-        height_cm: height ? Number(height) : null,
-        weight_kg: weight ? Number(weight) : null,
+        width_cm: width !== "" ? Number(width) : null,
+        height_cm: height !== "" ? Number(height) : null,
+        weight_kg: weight !== "" ? Number(weight) : null,
         personalizable: personalization_enabled,
         ships_from: shipsFrom || city || null,
         ships_to: shipsTo
@@ -465,47 +469,71 @@ export default function SellPage() {
 
       setSaving(true);
 
-      // need shop id + owner id
+      // ——— 1) shop + user ———
       const shopId = await getOrCreateMyShop();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
+      // ——— 2) insert product as draft ———
       const payload: NewProductInsertWithOwner = {
         title: title.trim(),
         keywords: kw.length ? joinKeywordsForDB(kw) : null,
         description: description.trim() || null,
-
         price_mad: Math.round(base),
         city: city.trim() || null,
-        active: true,
+        active: false, // draft
         photos,
         shop_id: shopId,
         shop_owner: user.id,
-
         promo_price_mad,
         promo_starts_at,
         promo_ends_at,
-
         options_config: groups,
-
         personalization_enabled,
         personalization_instructions,
         personalization_max_chars,
-
         item_details,
       };
 
-      const { data, error } = await supabase
+      const { data: prod, error: insErr } = await supabase
         .from("products")
         .insert(payload)
         .select("id")
         .maybeSingle();
+      if (insErr) throw insErr;
+      const productId = prod!.id as string;
 
-      if (error) throw error;
+      // ——— 3) link selected category as primary ———
+      const { error: catErr } = await supabase
+        .from("product_categories")
+        .upsert(
+          [
+            {
+              product_id: productId,
+              category_id: categoryId!,
+              is_primary: true,
+            },
+          ],
+          { onConflict: "product_id,category_id" }
+        );
+      if (catErr) throw catErr;
+
+      // (optional) denormalize for fast reads if column exists in your DB:
+      // await supabase.from("products")
+      //   .update({ primary_category_id: categoryId })
+      //   .eq("id", productId);
+
+      // ——— 4) activate product ———
+      const { error: actErr } = await supabase
+        .from("products")
+        .update({ active: true })
+        .eq("id", productId);
+      if (actErr) throw actErr;
+
       alert("Product created!");
-      if (data?.id) router.push(`/product/${data.id}`);
+      router.push(`/product/${productId}`);
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -525,6 +553,14 @@ export default function SellPage() {
       setKeywordsInput(normalized);
     }
   }, [keywordsInput]);
+
+  const formInvalid =
+    saving ||
+    uploading ||
+    !title.trim() ||
+    !price ||
+    !photos.length ||
+    !categoryId;
 
   /* ------------- Render ------------- */
   return (
@@ -573,19 +609,30 @@ export default function SellPage() {
       )}
 
       {/* Title */}
-      <label className="block">
-        <div className="text-sm mb-1">Title</div>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value.slice(0, LIMITS.title))}
-          className="w-full rounded border px-3 py-2"
-          placeholder="Handmade clay cup"
-          maxLength={LIMITS.title}
+      {/* Category field (no <label> wrapper!) */}
+      <div className="space-y-1">
+        <div className="text-sm">Category</div>
+        <CategorySheetPicker
+          title={title}
+          value={categoryId}
+          onChange={(id, path) => {
+            setCategoryId(id);
+            setCategoryPath(path);
+          }}
         />
-        <div className="text-xs text-neutral-500 mt-1">
-          {title.length}/{LIMITS.title}
-        </div>
+        {categoryId && <div className="text-xs text-neutral-600"></div>}
+      </div>
+
+      {/* Title uses its own label linked by htmlFor */}
+      <label htmlFor="title" className="block text-sm mt-4">
+        Title
       </label>
+      <input
+        id="title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full rounded border px-3 py-2"
+      />
 
       {/* Keywords */}
       <label className="block">
@@ -1078,7 +1125,7 @@ export default function SellPage() {
 
       <button
         onClick={handleSave}
-        disabled={saving || uploading}
+        disabled={formInvalid}
         className="w-full rounded-xl px-4 py-3 bg-black text-white font-medium disabled:opacity-50"
       >
         {saving ? "Saving…" : "Publish"}
