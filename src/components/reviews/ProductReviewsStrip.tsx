@@ -24,6 +24,30 @@ type Review = {
   created_at: string;
 };
 
+function formatCount(n: number) {
+  if (n >= 1_000_000)
+    return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "m";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
+  return `${n}`;
+}
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+function Stars({ value }: { value: number | null }) {
+  const v = Math.max(0, Math.min(5, value ?? 0));
+  return (
+    <span className="tracking-[2px] text-[18px] leading-none">
+      <span className="text-amber-500">{"★★★★★".slice(0, v)}</span>
+      <span className="text-neutral-300">{"★★★★★".slice(v)}</span>
+    </span>
+  );
+}
+
 export default function ProductReviewStrip({
   productId,
   shopId,
@@ -49,30 +73,23 @@ export default function ProductReviewStrip({
         .select("id, author, rating, title, body, photos, created_at")
         .eq("product_id", productId)
         .order("created_at", { ascending: false });
-
       if (!error && data) setReviews(data);
     })();
   }, [productId]);
 
   // Summary
-  const { avg, count, histogram } = useMemo(() => {
+  const { avg, count } = useMemo(() => {
     const count = reviews.length;
     const sum = reviews.reduce((a, r) => a + (r.rating ?? 0), 0);
     const avg = count ? +(sum / count).toFixed(2) : 0;
-
-    const h: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    for (const r of reviews)
-      h[(r.rating as 1 | 2 | 3 | 4 | 5) || 0] =
-        (h[(r.rating as 1 | 2 | 3 | 4 | 5) || 0] || 0) + 1;
-
-    return { avg, count, histogram: h };
+    return { avg, count };
   }, [reviews]);
 
   const seeAllHref = shopId
     ? `/shop/${shopId}/reviews?product=${productId}`
     : `/reviews?product=${productId}`;
 
-  // -------- Lightbox controls (hooks must be unconditional) --------
+  // -------- Lightbox controls --------
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const next = useCallback(() => {
     setLightbox((lb) =>
@@ -99,125 +116,92 @@ export default function ProductReviewStrip({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, closeLightbox, next, prev]);
 
-  // Now it's safe to early return (after all hooks)
   if (!reviews.length) return null;
 
   return (
-    <section className="px-4 py-5">
-      {/* Header summary (compact) */}
-      <div className="flex items-end gap-3">
-        <div className="text-2xl font-semibold">{avg.toFixed(2)}★</div>
-        <div className="text-sm text-neutral-500">
-          {count} rating{count === 1 ? "" : "s"}
-        </div>
-      </div>
-
-      {/* small bars 5→1 */}
-      <div className="mt-3 space-y-1.5">
-        {[5, 4, 3, 2, 1].map((k) => {
-          const qty = histogram[k] || 0;
-          const pct = count ? (qty / count) * 100 : 0;
-          return (
-            <div key={k} className="flex items-center gap-2">
-              <div className="w-12 text-xs">{k} star</div>
-              <div className="h-2 w-full rounded bg-neutral-200 overflow-hidden">
-                <div
-                  className="h-full bg-neutral-700"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <div className="w-8 text-right text-xs text-neutral-500">
-                {qty}
-              </div>
+    <section className=" py-3">
+      {/* ===== Header summary (matches mock) ===== */}
+      <div className="flex items-center justify-between">
+        <div className="  items-baseline gap-4">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl leading-none font-semibold">
+              {avg.toFixed(2)}
             </div>
-          );
-        })}
-      </div>
+            <div className="text-2xl leading-none text-amber-500">★</div>
+          </div>
+          <div className="text-neutral-500 text-md">
+            {formatCount(count)} rating{count === 1 ? "" : "s"}
+          </div>
+        </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <h3 className="text-base font-semibold">Item reviews</h3>
-        <Link href={seeAllHref} className="text-sm underline" prefetch={false}>
-          See all reviews ({count})
+        <Link
+          href={seeAllHref}
+          prefetch={false}
+          className="rounded-full border-2 border-black px-4 py-1 text-sm     font-semibold"
+        >
+          All reviews
         </Link>
       </div>
 
-      {/* Horizontal, native scroll with snap */}
-      <div className="-mx-4 mt-3 overflow-x-auto px-4">
-        <ul className="flex gap-3 snap-x snap-mandatory">
+      {/* ===== Horizontal strip ===== */}
+      <div className="-mx-4 mt-4 overflow-x-auto px-4">
+        <ul className="flex gap-4 snap-x snap-mandatory">
           {reviews.map((r) => (
             <li
               key={r.id}
-              className="snap-start shrink-0 w-[85%] sm:w-[420px] rounded-xl border bg-white p-3 cursor-pointer"
+              className="snap-start shrink-0 w-[92%] sm:w-[520px] rounded-lg bg-white p-4   border border-neutral-200 cursor-pointer"
               onClick={() => setOpenReview(r)} // open sheet when card clicked
             >
+              {/* Stars + date (top line) */}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">
-                  {r.author || "Anonymous"}
-                </span>
-                <span className="text-xs text-neutral-500">
-                  {new Date(r.created_at).toLocaleDateString()}
+                <Stars value={r.rating} />
+                <span className="text-sm text-neutral-500">
+                  {formatDate(r.created_at)}
                 </span>
               </div>
 
-              {r.title && (
-                <div className="mt-1 text-sm font-medium">{r.title}</div>
-              )}
-
-              <div className="mt-1 text-[13px] leading-relaxed line-clamp-4">
+              <p className="text-md leading-7 font-semibold text-neutral-900 mt-3">
                 {r.body}
-              </div>
+              </p>
 
-              <div className="mt-1 text-[13px]">
-                <span className="text-yellow-500">
-                  {"★★★★★".slice(0, r.rating ?? 0)}
-                </span>
-                <span className="text-neutral-300">
-                  {"★★★★★".slice(r.rating ?? 0)}
-                </span>
-              </div>
-
-              {r.photos?.length ? (
-                <div className="mt-2 flex gap-2 overflow-x-auto">
-                  {r.photos.slice(0, 4).map((src, i) => (
+              {/* Thumb + body */}
+              <div className="mt-3 flex gap-3 items-start">
+                {r.photos?.length ? (
+                  <button
+                    type="button"
+                    className="relative h-16 w-16 rounded-xl overflow-hidden border border-neutral-200 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightbox({
+                        photos: r.photos!,
+                        index: 0,
+                        originReviewId: r.id,
+                      });
+                    }}
+                  >
+                    {/* square image */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      key={i}
-                      src={src}
+                      src={r.photos[0]}
                       alt=""
-                      className="h-10 w-10 rounded object-cover border"
-                      onClick={(e) => {
-                        e.stopPropagation(); // don’t open the sheet
-                        setLightbox({
-                          photos: r.photos!,
-                          index: i,
-                          originReviewId: r.id,
-                        });
-                      }}
+                      className="h-full w-full object-cover"
                     />
-                  ))}
-                  {r.photos.length > 4 && (
-                    <button
-                      type="button"
-                      className="h-10 w-10 rounded border grid place-items-center text-xs text-neutral-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLightbox({
-                          photos: r.photos!,
-                          index: 4,
-                          originReviewId: r.id,
-                        });
-                      }}
-                    >
-                      +{r.photos.length - 4}
-                    </button>
-                  )}
-                </div>
-              ) : null}
+                  </button>
+                ) : (
+                  <div className="h-16 w-16 rounded-xl border border-dashed border-neutral-200 shrink-0" />
+                )}
+              </div>
+
+              {/* Author */}
+              <div className="mt-6 text-[15px] text-neutral-400 font-medium">
+                {r.author || "Anonymous"}
+              </div>
             </li>
           ))}
         </ul>
       </div>
 
-      {/* ---------------- Sheet: Full Review ---------------- */}
+      {/* ===== Sheet: Full Review ===== */}
       <Sheet
         open={!!openReview}
         onOpenChange={(o) => !o && setOpenReview(null)}
@@ -229,30 +213,25 @@ export default function ProductReviewStrip({
                 <SheetTitle className="flex items-center justify-between">
                   <span>{openReview.title || "Review"}</span>
                   <span className="text-xs font-normal text-neutral-500">
-                    {new Date(openReview.created_at).toLocaleDateString()}
+                    {formatDate(openReview.created_at)}
                   </span>
                 </SheetTitle>
                 <SheetDescription className="mt-1">
-                  <span className="text-sm font-medium">
-                    {openReview.author || "Anonymous"}
-                  </span>
-                  <div className="text-[13px] mt-1">
-                    <span className="text-yellow-500">
-                      {"★★★★★".slice(0, openReview.rating ?? 0)}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {openReview.author || "Anonymous"}
                     </span>
-                    <span className="text-neutral-300">
-                      {"★★★★★".slice(openReview.rating ?? 0)}
-                    </span>
+                    <Stars value={openReview.rating} />
                   </div>
                 </SheetDescription>
               </SheetHeader>
 
-              <div className="mt-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+              <div className="mt-4 text-[15px] leading-7 whitespace-pre-wrap">
                 {openReview.body}
               </div>
 
               {openReview.photos?.length ? (
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-5 grid grid-cols-3 gap-2">
                   {openReview.photos.map((src, i) => (
                     <button
                       key={i}
@@ -264,8 +243,9 @@ export default function ProductReviewStrip({
                           originReviewId: openReview.id,
                         })
                       }
-                      className="relative aspect-square overflow-hidden rounded border"
+                      className="relative aspect-square overflow-hidden rounded-xl border"
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={src}
                         alt=""
@@ -280,7 +260,7 @@ export default function ProductReviewStrip({
         </SheetContent>
       </Sheet>
 
-      {/* ---------------- Dialog: Fullscreen Lightbox ---------------- */}
+      {/* ===== Dialog: Fullscreen Lightbox ===== */}
       <Dialog open={!!lightbox} onOpenChange={(o) => !o && closeLightbox()}>
         <DialogContent className="p-0 w-screen max-w-none h-screen bg-black/95 border-none">
           {lightbox && (
@@ -316,6 +296,7 @@ export default function ProductReviewStrip({
 
               {/* Image */}
               <div className="h-full w-full grid place-items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={lightbox.photos[lightbox.index]}
                   alt=""

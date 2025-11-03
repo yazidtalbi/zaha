@@ -1,7 +1,14 @@
 // app/product/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  useId,
+} from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
@@ -26,6 +33,8 @@ import {
   Undo2,
   Star,
   Plus,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { toast } from "sonner";
@@ -88,37 +97,55 @@ function Section({
   children,
   right,
   collapsible = false,
+  defaultOpen = false, // 👈 new
 }: {
   title: string;
   children: React.ReactNode;
   right?: React.ReactNode;
   collapsible?: boolean;
+  /** when collapsible, should it start open? (default false = hidden) */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const panelId = useId();
+
+  // If collapsible → start from defaultOpen, else always open
+  const [open, setOpen] = useState(collapsible ? defaultOpen : true);
+
+  // Keep state in sync if props change
   useEffect(() => {
-    if (!collapsible) setOpen(true);
-  }, [collapsible]);
+    setOpen(collapsible ? defaultOpen : true);
+  }, [collapsible, defaultOpen]);
 
   return (
-    <section className="px-4 ">
-      <section className="border border-t-0 border-r-0 border-l-0 border-black  py-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <div className="flex items-center gap-2">
-            {right}
-            {collapsible && (
-              <button
-                onClick={() => setOpen((v) => !v)}
-                className="text-sm text-neutral-600"
-                aria-label={open ? "Collapse" : "Expand"}
-              >
-                {open ? "Hide" : "Show"}
-              </button>
-            )}
-          </div>
+    <section className="px-4 py-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold">{title}</h3>
+
+        <div className="flex items-center gap-2">
+          {right}
+          {collapsible && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="p-1 text-neutral-600 hover:text-neutral-900 transition"
+              aria-expanded={open}
+              aria-controls={panelId}
+            >
+              {open ? (
+                <ChevronUp className="h-5 w-5" />
+              ) : (
+                <ChevronDown className="h-5 w-5" />
+              )}
+            </button>
+          )}
         </div>
-        {(!collapsible || open) && <div className="mt-3">{children}</div>}
-      </section>
+      </div>
+
+      {(!collapsible || open) && (
+        <div id={panelId} className="mt-3">
+          {children}
+        </div>
+      )}
     </section>
   );
 }
@@ -155,7 +182,7 @@ function DetailRow({
   return (
     <li className="flex items-start gap-3">
       <span className="mt-0.5">{icon}</span>
-      <span className="text-[15px] leading-relaxed">
+      <span className="text-sm leading-relaxed">
         <span className="font-medium">{label}: </span>
         <span className="text-neutral-700">{value}</span>
       </span>
@@ -173,15 +200,19 @@ function keywordArray(s?: string | null) {
 function TagList({ items }: { items: string[] }) {
   if (!items.length) return null;
   return (
-    <div className="mt-1 flex flex-wrap gap-2">
-      {items.map((tag) => (
-        <Link
-          href={`/search?q=${encodeURIComponent(tag)}`}
-          key={tag}
-          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-3 py-1 text-xs hover:bg-neutral-200"
-        >
-          {tag}
-        </Link>
+    <div className="mt-1 flex flex-wrap text-sm text-neutral-500">
+      {items.map((tag, i) => (
+        <span key={tag} className="flex items-center">
+          <Link
+            href={`/search?q=${encodeURIComponent(tag)}`}
+            className="hover:underline hover:text-black transition-colors"
+          >
+            {tag}
+          </Link>
+          {i < items.length - 1 && (
+            <span className="mr-1 text-neutral-400">,</span>
+          )}
+        </span>
       ))}
     </div>
   );
@@ -189,7 +220,7 @@ function TagList({ items }: { items: string[] }) {
 
 function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex-1 rounded-lg border bg-white px-3 py-2">
+    <div className="flex-1 rounded-lg bg-white px-3 py-2">
       <div className="text-xs text-neutral-500">{label}</div>
       <div className="mt-1 text-sm font-medium text-neutral-900">{value}</div>
     </div>
@@ -291,7 +322,7 @@ function ReviewsHeader({
     <div className="rounded-2xl bg-neutral-100 p-3 border">
       <div className="flex items-center">
         <div className="text-2xl font-semibold">{display}</div>
-        <Star className="ml-1 h-5 w-5 fill-current text-amber-500" />
+        <Star className="ml-1 h-4 w-4 fill-current text-amber-500" />
         <button
           onClick={onViewAll}
           className="ml-auto inline-flex items-center rounded-full border px-3 py-1 text-sm hover:bg-white"
@@ -318,7 +349,7 @@ function ShopMoreSection({ shop, products }: { shop: any; products: any[] }) {
   return (
     <section className="px-4 py-4 pt-12">
       <h3 className="text-lg font-semibold mb-3">More from this shop</h3>
-      <div className="rounded-2xl bg-white p-5   overflow-hidden">
+      <div className="rounded-2xl bg-white p-5   overflow-hidden   border border-neutral-200 ">
         {/* header bar */}
         <div className="flex  gap-3 justify-between items-start">
           <div className="h-18 w-18 rounded-lg overflow-hidden bg-neutral-200 shrink-0">
@@ -333,7 +364,7 @@ function ShopMoreSection({ shop, products }: { shop: any; products: any[] }) {
 
           <Link
             href={`/shop/${shop?.id ?? ""}`}
-            className="rounded-full border-2 border-black px-4 py-1 text-md bg-white hover:bg-neutral-50 font-semibold"
+            className="rounded-full border-2 border-black px-4 py-1 text-sm   font-semibold"
           >
             View the shop
           </Link>
@@ -478,6 +509,72 @@ export default function ProductPage() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [showStickyAdd, setShowStickyAdd] = useState(false);
 
+  // after: const [showStickyAdd, setShowStickyAdd] = useState(false);
+  const priceBarRef = useRef<HTMLDivElement | null>(null);
+  // ——— Sticky top title bar ———
+
+  const [showStickyTop, setShowStickyTop] = useState(false);
+  const mainCtaRef = useRef<HTMLDivElement | null>(null);
+  const ctaObserverRef = useRef<IntersectionObserver | null>(null);
+
+  // 1) Top bar scroll (unchanged)
+  useEffect(() => {
+    function handleScroll() {
+      setShowStickyTop(window.scrollY > 600);
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // 2) Bottom CTA observer — reattach when CTA mounts/changes
+  useEffect(() => {
+    // disconnect any old observer
+    if (ctaObserverRef.current) {
+      ctaObserverRef.current.disconnect();
+      ctaObserverRef.current = null;
+    }
+
+    const el = mainCtaRef.current;
+    if (!el) {
+      // CTA not mounted yet — try again on next render
+      return;
+    }
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        const visible = entry.isIntersecting;
+        // show sticky when CTA is NOT visible
+        setShowStickyAdd(!visible);
+
+        // 🔎 debug in console
+        console.log(
+          "[CTA observe]",
+          {
+            visible,
+            top: entry.boundingClientRect.top,
+            bottom: entry.boundingClientRect.bottom,
+          },
+          "rootBounds:",
+          entry.rootBounds
+        );
+      },
+      {
+        threshold: 0,
+        rootMargin: "0px 0px -80px 0px", // reveal just before CTA fully leaves
+      }
+    );
+
+    obs.observe(el);
+    ctaObserverRef.current = obs;
+
+    return () => {
+      obs.disconnect();
+      ctaObserverRef.current = null;
+    };
+    // Re-run when things that affect the CTA block change/mount
+  }, [p?.id, isOwner, inCart]);
+
   // fetch product
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
@@ -612,16 +709,36 @@ export default function ProductPage() {
   const isRemoved = Boolean(p?.deleted_at);
   const isInactive = !Boolean(p?.active);
 
-  // sticky observe
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setShowStickyAdd(!entry.isIntersecting),
-      { threshold: 0, rootMargin: "0px 0px -72px 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
+    // sticky top bar
+    function handleScroll() {
+      const y = window.scrollY;
+      setShowStickyTop(y > 600);
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+
+    // sticky add-to-cart bar
+    const ctaEl = mainCtaRef.current;
+    if (ctaEl) {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          // when CTA block goes out of view → show sticky bar
+          setShowStickyAdd(!entry.isIntersecting);
+        },
+        {
+          threshold: 0,
+          rootMargin: "0px 0px -80px 0px", // trigger slightly before it’s gone
+        }
+      );
+      observer.observe(ctaEl);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener("scroll", handleScroll);
+      };
+    }
+
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   function selectionsToLabel(): string {
@@ -769,223 +886,269 @@ export default function ProductPage() {
   return (
     <>
       {/* overlay nav buttons */}
-      <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
-        <button
-          onClick={() => router.back()}
-          className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
-        >
-          <ChevronLeft size={18} />
-        </button>
-      </div>
-      <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <MessageSquare size={16} />
-        </button>
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <Share2 size={16} />
-        </button>
-        <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-          <Heart size={16} />
-        </button>
-        {isOwner && (
-          <Link
-            href={`/seller/edit/${p.id}`}
-            className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
-            aria-label="Edit product"
-            title="Edit product"
+
+      <section>
+        <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
           >
-            <Pencil size={16} />
-          </Link>
-        )}
-      </div>
-
-      {/* ——— Carousel ——— */}
-      <ProductCarousel
-        images={images}
-        title={p.title}
-        onOpen={(i) => {
-          setStartIndex(i);
-          setFsOpen(true);
-        }}
-      />
-
-      {/* ——— Title + meta ——— */}
-      <div className="px-4 pt-3 space-y-2">
-        <div className="text-sm text-green-600 font-medium">
-          {promoActive ? (
-            <>{promoOff}% off sale for a limited time</>
-          ) : (
-            <>From MAD {minTotal.toLocaleString("en-US")}+</>
-          )}
+            <ChevronLeft size={18} />
+          </button>
         </div>
-
-        <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
-        {p.subtitle ? (
-          <div className="text-xs text-neutral-500">{p.subtitle}</div>
-        ) : null}
-
-        <div className="text-sm text-neutral-600">
-          by{" "}
-          {p.shop_id ? (
+        <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
+          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+            <MessageSquare size={16} />
+          </button>
+          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+            <Share2 size={16} />
+          </button>
+          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+            <Heart size={16} />
+          </button>
+          {isOwner && (
             <Link
-              href={`/shop/${p.shop_id}`}
-              className="inline-flex items-center gap-2 hover:underline"
+              href={`/seller/edit/${p.id}`}
+              className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
+              aria-label="Edit product"
+              title="Edit product"
             >
-              {shopImg ? (
-                <span className="inline-block h-5 w-5 rounded-full overflow-hidden bg-neutral-200">
-                  <img
-                    src={shopImg}
-                    alt={shop?.title ?? "Shop"}
-                    className="h-full w-full object-cover"
-                  />
-                </span>
-              ) : null}
-              <span className="font-medium">{shop?.title || "shop"}</span>
+              <Pencil size={16} />
             </Link>
-          ) : (
-            <span className="font-medium">
-              {p.shop_title || "a Moroccan maker"}
-            </span>
           )}
         </div>
-
-        <TagList items={keywordArray(p.keywords)} />
-
-        {/* price block */}
-        {promoActive ? (
-          <div className="mt-1 flex items-center gap-3 flex-wrap">
-            <div className="text-xl font-bold text-green-600">
-              MAD{(promoTotal as number).toLocaleString("en-US")}
-            </div>
-            <div className="line-through text-neutral-400">
-              MAD{currentTotal.toLocaleString("en-US")}
-            </div>
-            <span className="text-xs text-green-700">
-              Sale ends {formatEndsShort(p.promo_ends_at)}
-            </span>
-          </div>
-        ) : showPriceRange ? (
-          <div className="mt-1 text-xl font-bold">
-            MAD{minTotal.toLocaleString("en-US")} – MAD
-            {maxTotal.toLocaleString("en-US")}
-          </div>
-        ) : (
-          <div className="mt-1 text-xl font-bold">
-            MAD{currentTotal.toLocaleString("en-US")}
-          </div>
-        )}
-
-        {(isInactive || isRemoved) && !isUnavailable ? (
-          <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
-            removed from seller’s store
-          </div>
-        ) : null}
-        {isUnavailable && (
-          <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
-            temporarily unavailable
-          </div>
-        )}
-
-        {/* stat pills like screenshot */}
-        <div className="mt-2 flex items-stretch gap-2">
-          <StatPill label="Est. Delivery" value={etaTitle ?? "—"} />
-          <StatPill
-            label="Ratings"
-            value={
-              <span className="inline-flex items-center gap-1">
-                {(ratingAvg ?? 0).toFixed(1)}
-                <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
-              </span>
-            }
-          />
-          <StatPill
-            label="Orders"
-            value={
-              p.orders_count != null
-                ? p.orders_count >= 10000
-                  ? `${Math.round(p.orders_count / 1000)}k+`
-                  : `${p.orders_count.toLocaleString("en-US")}+`
-                : "—"
-            }
-          />
-        </div>
-
-        {/* Free shipping badge */}
-        {details.shipping?.mode === "free" && (
-          <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
-            Free shipping
-          </div>
-        )}
-      </div>
-
-      {/* ——— Options ——— */}
-      {optionGroups.map((g) => {
-        const valueId = selected[g.id] ?? "";
-        return (
-          <Section key={g.id} title={g.name}>
-            <div className="rounded-xl border bg-white px-3 py-2">
-              <select
-                className="w-full bg-transparent outline-none py-1.5 text-sm"
-                value={valueId}
-                onChange={(e) =>
-                  setSelected((s) => ({ ...s, [g.id]: e.target.value }))
-                }
+        <div
+          className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
+            showStickyTop
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 -translate-y-4 pointer-events-none"
+          }`}
+        >
+          <div className="px-4 py-2">
+            <div className="flex items-center gap-2">
+              <div className="text-[15px] font-semibold truncate">
+                {p.title}
+              </div>
+              <button
+                type="button"
+                className="ml-auto h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
               >
-                {g.values.map((v) => {
-                  const delta = Number(v.price_delta_mad ?? 0);
-                  const label =
-                    delta === 0
-                      ? v.label
-                      : `${v.label}  ${
-                          delta > 0
-                            ? `+ MAD${delta}`
-                            : `- MAD${Math.abs(delta)}`
-                        }`;
-                  return (
-                    <option key={v.id} value={v.id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
+                <Heart className="h-4 w-4" />
+              </button>
             </div>
-          </Section>
-        );
-      })}
+            <div className="mt-1 flex items-center gap-2 text-sm">
+              <div className="font-semibold">
+                {promoActive
+                  ? `MAD${(promoTotal as number).toLocaleString("en-US")}`
+                  : `MAD${currentTotal.toLocaleString("en-US")}`}
+              </div>
+              {promoActive && (
+                <div className="line-through text-neutral-400 text-xs">
+                  MAD{currentTotal.toLocaleString("en-US")}
+                </div>
+              )}
+              <div className="ml-2 text-neutral-500 truncate flex-1 text-xs">
+                {keywordArray(p.keywords).slice(0, 3).join(", ")}
+                {keywordArray(p.keywords).length > 3 && "…"}
+              </div>
+            </div>
+          </div>
+        </div>
 
-      {/* ——— Personalization (inline CTA variant) ——— */}
-      {personalizationConfig.enabled && (
-        <Section title="Personalization">
-          {personalization.trim() ? (
-            <div className="rounded-xl border bg-white">
-              <div className="flex items-center justify-between px-3 py-2 border-b">
-                <div className="font-medium text-sm">Your personalization</div>
-                <button
-                  type="button"
-                  onClick={() => setPersonalizationOpen(true)}
-                  className="text-sm inline-flex items-center gap-1 underline"
-                >
-                  <Pencil size={14} /> Edit
-                </button>
-              </div>
-              <div className="px-3 py-3 text-sm">
-                <div className="text-neutral-500 mb-1">Personalization</div>
-                <div className="break-words">{personalization}</div>
-              </div>
+        {/* ——— Carousel ——— */}
+        <ProductCarousel
+          images={images}
+          title={p.title}
+          onOpen={(i) => {
+            setStartIndex(i);
+            setFsOpen(true);
+          }}
+        />
+
+        {/* ——— Title + meta ——— */}
+        <div className="px-4 pt-3 space-y-4">
+          {/* sentinel for sticky top bar */}
+
+          <section className="-space-y-1 mt-4">
+            {" "}
+            <div className="text-sm text-emerald-800 font-medium">
+              {promoActive ? (
+                <>
+                  {promoOff}% off sale until {formatEndsShort(p.promo_ends_at)}
+                </>
+              ) : (
+                <>From MAD {minTotal.toLocaleString("en-US")}+</>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPersonalizationOpen(true)}
-              className="inline-flex items-center gap-2 text-sm font-medium text-neutral-900"
-            >
-              <Plus className="h-4 w-4" />
-              Add personalization{" "}
-              <span className="text-neutral-500">(optional)</span>
-            </button>
+            {/* price block */}
+            {promoActive ? (
+              <div className=" flex items-center gap-3 flex-wrap ">
+                <div className="text-xl font-bold text-emerald-800">
+                  MAD{(promoTotal as number).toLocaleString("en-US")}
+                </div>
+                <div className="line-through text-neutral-400">
+                  MAD{currentTotal.toLocaleString("en-US")}
+                </div>
+              </div>
+            ) : showPriceRange ? (
+              <div className="mt-1 text-xl font-bold">
+                MAD{minTotal.toLocaleString("en-US")} – MAD
+                {maxTotal.toLocaleString("en-US")}
+              </div>
+            ) : (
+              <div className="mt-1 text-xl font-bold">
+                MAD{currentTotal.toLocaleString("en-US")}
+              </div>
+            )}
+          </section>
+
+          <section className="-space-y-1">
+            {" "}
+            <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
+            <TagList items={keywordArray(p.keywords)} />
+            <div className="text-sm text-neutral-600 mt-2">
+              by{" "}
+              {p.shop_id ? (
+                <Link
+                  href={`/shop/${p.shop_id}`}
+                  className="inline-flex items-center gap-2 hover:underline"
+                >
+                  {/* {shopImg ? (
+                  <span className="inline-block h-4 w-4 rounded-full overflow-hidden bg-neutral-200">
+                    <img
+                      src={shopImg}
+                      alt={shop?.title ?? "Shop"}
+                      className="h-full w-full object-cover"
+                    />
+                  </span>
+                ) : null} */}
+                  <span className="font-semibold">{shop?.title || "shop"}</span>
+                </Link>
+              ) : (
+                <span className="font-medium">
+                  {p.shop_title || "a Moroccan maker"}
+                </span>
+              )}
+            </div>
+          </section>
+          {p.subtitle ? (
+            <div className="text-xs text-neutral-500">{p.subtitle}</div>
+          ) : null}
+
+          {(isInactive || isRemoved) && !isUnavailable ? (
+            <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
+              removed from seller’s store
+            </div>
+          ) : null}
+          {isUnavailable && (
+            <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
+              temporarily unavailable
+            </div>
           )}
-        </Section>
-      )}
+
+          {/* stat pills like screenshot */}
+          <div className="mt-6 flex items-stretch gap-2">
+            <StatPill label="Est. Delivery" value={etaTitle ?? "—"} />
+            <StatPill
+              label="Ratings"
+              value={
+                <span className="inline-flex items-center gap-1">
+                  {(ratingAvg ?? 0).toFixed(1)}
+                  <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                </span>
+              }
+            />
+            <StatPill
+              label="Orders"
+              value={
+                p.orders_count != null
+                  ? p.orders_count >= 10000
+                    ? `${Math.round(p.orders_count / 1000)}k+`
+                    : `${p.orders_count.toLocaleString("en-US")}+`
+                  : "—"
+              }
+            />
+          </div>
+
+          {/* Free shipping badge */}
+          {details.shipping?.mode === "free" && (
+            <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
+              Free shipping
+            </div>
+          )}
+        </div>
+
+        {/* ——— Options ——— */}
+        {optionGroups.map((g) => {
+          const valueId = selected[g.id] ?? "";
+          return (
+            <Section key={g.id} title={g.name}>
+              <div className="rounded-xl border bg-white px-3 py-2">
+                <select
+                  className="w-full bg-transparent outline-none py-1.5 text-sm"
+                  value={valueId}
+                  onChange={(e) =>
+                    setSelected((s) => ({ ...s, [g.id]: e.target.value }))
+                  }
+                >
+                  {g.values.map((v) => {
+                    const delta = Number(v.price_delta_mad ?? 0);
+                    const label =
+                      delta === 0
+                        ? v.label
+                        : `${v.label}  ${
+                            delta > 0
+                              ? `+ MAD${delta}`
+                              : `- MAD${Math.abs(delta)}`
+                          }`;
+                    return (
+                      <option key={v.id} value={v.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </Section>
+          );
+        })}
+
+        {/* ——— Personalization (inline CTA variant) ——— */}
+        {personalizationConfig.enabled && (
+          <Section title="Personalization">
+            {personalization.trim() ? (
+              <div className="rounded-xl border bg-white">
+                <div className="flex items-center justify-between px-3 py-2 border-b">
+                  <div className="font-medium text-sm">
+                    Your personalization
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPersonalizationOpen(true)}
+                    className="text-sm inline-flex items-center gap-1 underline"
+                  >
+                    <Pencil size={14} /> Edit
+                  </button>
+                </div>
+                <div className="px-3 py-3 text-sm">
+                  <div className="text-neutral-500 mb-1">Personalization</div>
+                  <div className="break-words">{personalization}</div>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPersonalizationOpen(true)}
+                className="inline-flex items-center gap-2 text-md font-semibold  text-amber-800 pb-4"
+              >
+                <Plus className="h-4 w-4" />
+                Add personalization{" "}
+                <span className="text-neutral-500 font-normal">(optional)</span>
+              </button>
+            )}
+          </Section>
+        )}
+      </section>
 
       {/* ——— Quantity & CTAs or Owner Edit ——— */}
       {!isOwner ? (
@@ -1010,7 +1173,10 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-2">
+          <div
+            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+            ref={mainCtaRef}
+          >
             {inCart ? (
               <>
                 <Link
@@ -1022,246 +1188,241 @@ export default function ProductPage() {
                 <button
                   onClick={handleAddToCartNew}
                   disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                  className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
                 >
                   Add new item
                 </button>
               </>
             ) : (
-              <>
+              <div className="flex gap-2">
                 <button
                   onClick={handleAddToCartMerge}
                   disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full border bg-white px-4 py-3 font-medium disabled:opacity-60"
+                  className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60 w-full"
                 >
                   Add to cart
                 </button>
                 <button
                   onClick={handleBuyNow}
                   disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full bg-black text-white px-4 py-3 font-medium disabled:opacity-60"
+                  className="rounded-full  ring-black ring-2   px-4 py-3 font-semibold disabled:opacity-60 w-full"
                 >
                   Buy it now
                 </button>
-              </>
+              </div>
             )}
           </div>
-
-          <div ref={sentinelRef} className="h-px" />
         </Section>
       ) : (
-        <div className="px-4 py-3">
+        <div className="px-4 pb-4">
           <Link
             href={`/seller/edit/${p.id}`}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-black text-white px-4 py-3 font-medium"
+            className="  inline-flex items-center justify-center gap-2 rounded-full bg-amber-800 text-white px-4 py-3 w-full font-medium"
           >
             <Pencil size={16} />
             Edit this product
           </Link>
+          <p className="text-sm text-gray-500  mx-auto w-full text-center mt-2">
+            You are the owner of this product
+          </p>
         </div>
       )}
 
       {/* ——— Reviews ——— */}
-      <section className="px-4 py-4">
-        <ReviewsHeader
-          avg={ratingAvg}
-          count={ratingCount}
-          onViewAll={() =>
-            router.push(
-              p.shop_id
-                ? `/shop/${p.shop_id}/reviews?product=${p.id}`
-                : `/product/${p.id}#reviews`
-            )
-          }
-        />
-        <div className="mt-3">
-          <ProductReviewsStrip
-            productId={p.id}
-            shopId={p.shop_id ?? shop?.id}
-          />
-        </div>
-      </section>
+      <section className="px-4 "></section>
+      <div className=" ">
+        <Section title="Reviews" collapsible defaultOpen>
+          {" "}
+          <div className="mt-3">
+            <ProductReviewsStrip
+              productId={p.id}
+              shopId={p.shop_id ?? shop?.id}
+            />
+          </div>
+        </Section>
+        <hr className="  border-neutral-400 mx-4"></hr>
+        {/* ——— Description ——— */}
+        <Section title="Description" collapsible defaultOpen>
+          <div className="">
+            <p className="whitespace-pre-wrap">
+              {p.description ??
+                "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
+            </p>
 
-      {/* ——— Item details ——— */}
-      <Section title="Description" collapsible>
-        <div className="pb-3">
-          <p className="whitespace-pre-wrap">
-            {p.description ??
-              "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
-          </p>
-
-          {/* Optional “Available options” list if exists */}
-          {Array.isArray(optionGroups) && optionGroups.length > 0 && (
-            <>
-              <div className="font-semibold mt-4 mb-1">Available options</div>
-              <ul className="list-disc ml-5 text-[15px]">
-                {optionGroups.map((g) => (
-                  <li key={g.id}>
-                    <span className="font-medium">{g.name}:</span>{" "}
-                    {g.values.map((v) => v.label).join(", ")}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      </Section>
-
-      {/* ——— Item details ——— */}
-      <Section title="Item details" collapsible>
-        <ul className="space-y-3">
-          <DetailRow
-            icon={<Store className="h-5 w-5 text-neutral-500" />}
-            label="Designed by"
-            value={shop?.title ?? p.shop_title ?? "Independent artisan"}
-          />
-          <DetailRow
-            icon={
-              details.type === "digital" ? (
-                <FileDown className="h-5 w-5 text-neutral-500" />
-              ) : (
-                <Package className="h-5 w-5 text-neutral-500" />
-              )
-            }
-            label="Item type"
-            value={
-              details.type === "digital"
-                ? "Instant Digital Download"
-                : "Physical item"
-            }
-          />
-          {(details.width_cm || details.height_cm) && (
+            {/* Optional “Available options” list if exists */}
+            {Array.isArray(optionGroups) && optionGroups.length > 0 && (
+              <>
+                <div className="font-semibold mt-4 mb-1">Available options</div>
+                <ul className="list-disc ml-5 text-[15px]">
+                  {optionGroups.map((g) => (
+                    <li key={g.id}>
+                      <span className="font-medium">{g.name}:</span>{" "}
+                      {g.values.map((v) => v.label).join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </Section>
+        <hr className="  border-neutral-400 mx-4"></hr>
+        {/* ——— Item details ——— */}
+        <Section title="Item Details" collapsible defaultOpen>
+          <ul className="space-y-3">
             <DetailRow
-              icon={<Ruler className="h-5 w-5 text-neutral-500" />}
-              label="Dimensions"
+              icon={<Store className="h-4 w-4 text-neutral-500" />}
+              label="Designed by"
+              value={shop?.title ?? p.shop_title ?? "Independent artisan"}
+            />
+            <DetailRow
+              icon={
+                details.type === "digital" ? (
+                  <FileDown className="h-4 w-4 text-neutral-500" />
+                ) : (
+                  <Package className="h-4 w-4 text-neutral-500" />
+                )
+              }
+              label="Item type"
               value={
-                <>
-                  {details.width_cm ? `${details.width_cm} cm` : "—"} ×{" "}
-                  {details.height_cm ? `${details.height_cm} cm` : "—"}
-                </>
+                details.type === "digital"
+                  ? "Instant Digital Download"
+                  : "Physical item"
               }
             />
-          )}
-          {details.weight_kg && (
-            <DetailRow
-              icon={<Scale className="h-5 w-5 text-neutral-500" />}
-              label="Weight"
-              value={`${details.weight_kg} kg`}
-            />
-          )}
-          {details.personalizable && (
-            <DetailRow
-              icon={<Edit3 className="h-5 w-5 text-neutral-500" />}
-              label="Personalizable"
-              value="Yes"
-            />
-          )}
-          {details.materials?.length > 0 && (
-            <DetailRow
-              icon={<Layers className="h-5 w-5 text-neutral-500" />}
-              label="Materials"
-              value={details.materials.join(", ")}
-            />
-          )}
-        </ul>
-      </Section>
-
-      {/* ——— Shipping & Policies ——— */}
-      <Section title="Shipping & Policies" collapsible>
-        <ul className="space-y-3">
-          {details.ships_from && (
-            <DetailRow
-              icon={<MapPin className="h-5 w-5 text-neutral-500" />}
-              label="Ships from"
-              value={details.ships_from}
-            />
-          )}
-          {details.ships_to?.length > 0 && (
-            <DetailRow
-              icon={<Truck className="h-5 w-5 text-neutral-500" />}
-              label="Ships to"
-              value={details.ships_to.join(", ")}
-            />
-          )}
-          {details.shipping?.mode === "free" ? (
-            <DetailRow
-              icon={<Package className="h-5 w-5 text-neutral-500" />}
-              label="Shipping"
-              value={
-                details.shipping.free_over_mad
-                  ? `Free (orders over MAD ${details.shipping.free_over_mad})`
-                  : "Free"
-              }
-            />
-          ) : details.shipping?.mode === "fees" ? (
-            <DetailRow
-              icon={<Package className="h-5 w-5 text-neutral-500" />}
-              label="Shipping"
-              value={
-                details.shipping.fee_mad != null
-                  ? `MAD ${details.shipping.fee_mad}`
-                  : "Additional fees"
-              }
-            />
-          ) : null}
-          {(details.shipping?.estimate_days_min ||
-            details.shipping?.estimate_days_max) && (
-            <li className="flex items-start gap-3">
-              <span className="mt-0.5">
-                <Truck className="h-5 w-5 text-neutral-500" />
-              </span>
-              <div className="text-[15px] leading-relaxed">
-                <span className="font-medium">Estimated delivery: </span>
-                <span className="text-neutral-700">
-                  {details.shipping.estimate_days_min &&
-                  details.shipping.estimate_days_max
-                    ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
-                    : details.shipping.estimate_days_min
-                    ? `${details.shipping.estimate_days_min} days`
-                    : `${details.shipping.estimate_days_max} days`}
+            {(details.width_cm || details.height_cm) && (
+              <DetailRow
+                icon={<Ruler className="h-4 w-4 text-neutral-500" />}
+                label="Dimensions"
+                value={
+                  <>
+                    {details.width_cm ? `${details.width_cm} cm` : "—"} ×{" "}
+                    {details.height_cm ? `${details.height_cm} cm` : "—"}
+                  </>
+                }
+              />
+            )}
+            {details.weight_kg && (
+              <DetailRow
+                icon={<Scale className="h-4 w-4 text-neutral-500" />}
+                label="Weight"
+                value={`${details.weight_kg} kg`}
+              />
+            )}
+            {details.personalizable && (
+              <DetailRow
+                icon={<Edit3 className="h-4 w-4 text-neutral-500" />}
+                label="Personalizable"
+                value="Yes"
+              />
+            )}
+            {details.materials?.length > 0 && (
+              <DetailRow
+                icon={<Layers className="h-4 w-4 text-neutral-500" />}
+                label="Materials"
+                value={details.materials.join(", ")}
+              />
+            )}
+          </ul>
+        </Section>
+        <hr className=" border-neutral-400 mx-4"></hr>
+        {/* ——— Shipping & Policies ——— */}
+        <Section title="Shipping & Policies" collapsible defaultOpen={false}>
+          <ul className="space-y-3 ">
+            {details.ships_from && (
+              <DetailRow
+                icon={<MapPin className="h-4 w-4 text-neutral-500" />}
+                label="Ships from"
+                value={details.ships_from}
+              />
+            )}
+            {details.ships_to?.length > 0 && (
+              <DetailRow
+                icon={<Truck className="h-4 w-4 text-neutral-500" />}
+                label="Ships to"
+                value={details.ships_to.join(", ")}
+              />
+            )}
+            {details.shipping?.mode === "free" ? (
+              <DetailRow
+                icon={<Package className="h-4 w-4 text-neutral-500" />}
+                label="Shipping"
+                value={
+                  details.shipping.free_over_mad
+                    ? `Free (orders over MAD ${details.shipping.free_over_mad})`
+                    : "Free"
+                }
+              />
+            ) : details.shipping?.mode === "fees" ? (
+              <DetailRow
+                icon={<Package className="h-4 w-4 text-neutral-500" />}
+                label="Shipping"
+                value={
+                  details.shipping.fee_mad != null
+                    ? `MAD ${details.shipping.fee_mad}`
+                    : "Additional fees"
+                }
+              />
+            ) : null}
+            {(details.shipping?.estimate_days_min ||
+              details.shipping?.estimate_days_max) && (
+              <li className="flex items-start gap-3">
+                <span className="mt-0.5">
+                  <Truck className="h-4 w-4 text-neutral-500" />
                 </span>
-              </div>
-            </li>
-          )}
-          {(details.shipping?.cod ||
-            details.shipping?.pickup ||
-            details.shipping?.tracking) && (
-            <li className="flex flex-wrap gap-2 pl-8">
-              {details.shipping.cod && (
-                <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                  COD
-                </span>
-              )}
-              {details.shipping.pickup && (
-                <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                  Pickup
-                </span>
-              )}
-              {details.shipping.tracking && (
-                <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                  Tracking
-                </span>
-              )}
-            </li>
-          )}
-          {details.shipping?.notes && (
-            <DetailRow
-              icon={<Package className="h-5 w-5 text-neutral-500" />}
-              label="Shipping policy"
-              value={details.shipping.notes}
-            />
-          )}
-          {details.returns && (
-            <DetailRow
-              icon={<Undo2 className="h-5 w-5 text-neutral-500" />}
-              label="Returns & exchanges"
-              value={
-                details.returns === "accepted" ? "Accepted" : "Not accepted"
-              }
-            />
-          )}
-        </ul>
-      </Section>
+                <div className="text-[15px] leading-relaxed">
+                  <span className="font-medium">Estimated delivery: </span>
+                  <span className="text-neutral-700">
+                    {details.shipping.estimate_days_min &&
+                    details.shipping.estimate_days_max
+                      ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
+                      : details.shipping.estimate_days_min
+                      ? `${details.shipping.estimate_days_min} days`
+                      : `${details.shipping.estimate_days_max} days`}
+                  </span>
+                </div>
+              </li>
+            )}
+            {(details.shipping?.cod ||
+              details.shipping?.pickup ||
+              details.shipping?.tracking) && (
+              <li className="flex flex-wrap gap-2 pl-8">
+                {details.shipping.cod && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                    COD
+                  </span>
+                )}
+                {details.shipping.pickup && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                    Pickup
+                  </span>
+                )}
+                {details.shipping.tracking && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                    Tracking
+                  </span>
+                )}
+              </li>
+            )}
+            {details.shipping?.notes && (
+              <DetailRow
+                icon={<Package className="h-4 w-4 text-neutral-500" />}
+                label="Shipping policy"
+                value={details.shipping.notes}
+              />
+            )}
+            {details.returns && (
+              <DetailRow
+                icon={<Undo2 className="h-4 w-4 text-neutral-500" />}
+                label="Returns & exchanges"
+                value={
+                  details.returns === "accepted" ? "Accepted" : "Not accepted"
+                }
+              />
+            )}
+          </ul>
+        </Section>{" "}
+        <hr className="border-neutral-400 mx-4"></hr>
+      </div>
 
       {/* ——— More from this shop (shop header + slider) ——— */}
       {!!moreFromShop.length && shop?.id && (
@@ -1302,16 +1463,23 @@ export default function ProductPage() {
       <div className="h-10" />
 
       {/* Sticky add-to-cart (hidden for owner) */}
-      {showStickyAdd && !isOwner && (
+      {!isOwner && (
         <div
-          className="fixed inset-x-0 px-4 z-50"
-          style={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
+          className={`fixed inset-x-0 z-50 transform transition-all duration-300 ease-out ${
+            showStickyAdd
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 translate-y-6 pointer-events-none"
+          }`}
+          style={{
+            // 🟢 lift it above your BottomNav (which is ~64–72px tall)
+            bottom: "calc(env(safe-area-inset-bottom) + 54px)",
+          }}
         >
-          <div className="max-w-screen-sm mx-auto">
+          <div className="max-w-screen-sm mx-auto   bg-white/90 backdrop-blur-sm border-t border-neutral-200 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
             <button
               onClick={handleAddToCartMerge}
               disabled={isUnavailable || isInactive || isRemoved}
-              className="w-full rounded-full bg-black text-white px-4 py-4 font-medium shadow-xl disabled:opacity-60"
+              className="w-full rounded-full bg-amber-900 text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
             >
               {isUnavailable || isInactive || isRemoved
                 ? "Unavailable"
@@ -1439,7 +1607,7 @@ export default function ProductPage() {
             aria-label="Close fullscreen"
             className="fixed top-3 right-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
 
           {images.length > 1 && (

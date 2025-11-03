@@ -223,7 +223,7 @@ export default function BottomNav() {
   if (!mounted) return null;
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 border-t bg-paper/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 inset-x-0 z-50 border-t bg-paper/95 backdrop-blur pb-[env(safe-area-inset-bottom)] bg-white">
       <ul
         className={clsx(
           "max-w-screen-sm mx-auto grid",

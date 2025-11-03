@@ -1,6 +1,10 @@
 import type { Config } from "tailwindcss";
 export default {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
@@ -9,6 +13,7 @@ export default {
         terracotta: "#C97E4E",
         olive: "#BBAA77",
         ink: "#3B2F2F",
+        zahagreen: "#235C4B",
       },
       fontFamily: {
         // default "font-sans" will now map to Instrument Sans

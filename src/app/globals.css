@@ -19,6 +19,7 @@
   --terracotta: #c97e4e; /* accent/buttons */
   --olive: #bbaa77; /* subtle accents */
   --ink: #3b2f2f; /* text */
+  --zahagreen: #235c4b; /* text */
 
   /* base */
 
@@ -132,10 +133,13 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Base */
 html,
 body {
-  height: 100%;
+  height: auto;
+  overflow-y: auto;
+}
+main {
+  overflow: visible;
 }
 
 .no-scrollbar::-webkit-scrollbar {
