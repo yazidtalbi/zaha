@@ -78,7 +78,7 @@ function remember(p: {
       id: p.id,
       title: p.title,
       price_mad: p.price_mad,
-      photo: Array.isArray(p.photos) ? p.photos[0] ?? null : null,
+      photo: Array.isArray(p.photos) ? (p.photos[0] ?? null) : null,
       at: Date.now(),
     };
     const prev: (typeof entry)[] = JSON.parse(
@@ -336,6 +336,13 @@ function ReviewsHeader({
   );
 }
 
+function prettify(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /** 3) ShopMoreSection — header card + horizontal ProductCard slider */
 function ShopMoreSection({ shop, products }: { shop: any; products: any[] }) {
   const [emblaRef] = useEmblaCarousel({
@@ -441,21 +448,84 @@ export default function ProductPage() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!p) return;
+    remember(p);
+    (async () => {
+      // Similar by category subtree if we have it; otherwise fallback
+      if (categoryPath) {
+        const { data } = await supabase
+          .from("products")
+          .select(
+            `
+          *,
+          product_categories!inner(category_id),
+          cat:product_categories!inner(category_id) (
+            path
+          )
+        `
+          )
+          .like("cat.path", `${categoryPath}%`)
+          .neq("id", p.id)
+          .eq("active", true)
+          .eq("unavailable", false)
+          .limit(12);
+
+        setSimilar((data as any[]) ?? []);
+      } else {
+        // Fallback (no category yet): keep your old heuristic
+        let q = supabase
+          .from("products")
+          .select("*")
+          .eq("active", true)
+          .eq("unavailable", false)
+          .neq("id", p.id)
+          .limit(8);
+        if (p.city) q = q.ilike("city", p.city);
+        const sim = await q;
+        setSimilar((sim.data as any[]) ?? []);
+      }
+
+      // more from shop (unchanged)
+      if (p.shop_id) {
+        const { data } = await supabase
+          .from("products")
+          .select("*")
+          .eq("active", true)
+          .eq("unavailable", false)
+          .eq("shop_id", p.shop_id)
+          .neq("id", p.id)
+          .limit(10);
+        setMoreFromShop((data as any[]) ?? []);
+      }
+    })();
+  }, [p, categoryPath]);
+
+  // pick deepest primary (fallback: deepest linked)
+  useEffect(() => {
     if (!p?.id) return;
     (async () => {
-      // primary category for this product
       const { data, error } = await supabase
         .from("product_categories")
-        .select("category_id, categories!inner(id, path, name_en)")
-        .eq("product_id", p.id)
-        .eq("is_primary", true)
-        .maybeSingle();
+        .select("is_primary, categories!inner(id, path, name_en, slug, depth)")
+        .eq("product_id", p.id);
 
-      if (!error && data) {
-        const cat = (data as any).categories;
-        setCategoryPath(cat?.path ?? null);
-        setCategoryId(cat?.id ?? null);
+      if (error || !data?.length) {
+        setCategoryPath(null);
+        setCategoryId(null);
+        return;
       }
+
+      // prefer primary, otherwise deepest by depth (or path length)
+      const rows = data as any[];
+      const primary =
+        rows.find((r) => r.is_primary) ??
+        rows
+          .sort((a, b) => (a.categories.depth ?? 0) - (b.categories.depth ?? 0))
+          .pop();
+
+      const cat = primary.categories;
+      setCategoryPath(cat?.path ?? null); // e.g. "clothing/womens-clothing"
+      setCategoryId(cat?.id ?? null);
     })();
   }, [p?.id]);
 
@@ -1033,33 +1103,19 @@ export default function ProductPage() {
             {categoryPath && (
               <div className="mt-1 text-sm text-neutral-600">
                 in{" "}
-                {categoryId ? (
-                  <Link
-                    href={`/search?category=${encodeURIComponent(categoryId)}`}
-                    className="underline hover:text-black"
-                  >
-                    {categoryPath
-                      .split("/")
-                      .map(
-                        (part) =>
-                          part
-                            .replace(/-/g, " ") // Replace dashes with spaces
-                            .replace(/\b\w/g, (c) => c.toUpperCase()) // Capitalize each word
-                      )
-                      .join(" / ")}
-                  </Link>
-                ) : (
-                  <span>
-                    {categoryPath
-                      .split("/")
-                      .map((part) =>
-                        part
-                          .replace(/-/g, " ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase())
-                      )
-                      .join(" / ")}
-                  </span>
-                )}
+                <Link
+                  href={`/c/${categoryPath}`}
+                  className="underline hover:text-black"
+                >
+                  {categoryPath
+                    .split("/")
+                    .map((s) =>
+                      s
+                        .replace(/-/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())
+                    )
+                    .join(" / ")}
+                </Link>
               </div>
             )}
             <div className="text-sm text-neutral-600 mt-2">
@@ -1432,8 +1488,8 @@ export default function ProductPage() {
                     details.shipping.estimate_days_max
                       ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
                       : details.shipping.estimate_days_min
-                      ? `${details.shipping.estimate_days_min} days`
-                      : `${details.shipping.estimate_days_max} days`}
+                        ? `${details.shipping.estimate_days_min} days`
+                        : `${details.shipping.estimate_days_max} days`}
                   </span>
                 </div>
               </li>
