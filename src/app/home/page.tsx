@@ -1,15 +1,13 @@
 "use client";
+
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
-import CategoryPills from "@/components/CategoryPills";
-import HeroCard from "@/components/HeroCard";
-
-import HeroCarousel from "@/components/HeroCarousel";
-
-import Link from "next/link";
 import Header from "@/components/Header";
 import CategoriesStrip from "@/components/home/CategoriesStrip";
+import HeroCarousel from "@/components/HeroCarousel";
 
 const slides = [
   {
@@ -37,15 +35,14 @@ export default function HomePage() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [favIds, setFavIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("favorites").select("product_id");
       setFavIds(new Set((data ?? []).map((r: any) => r.product_id)));
     })();
   }, []);
-  // then pass <FavButton productId={id} prefLiked={favIds.has(id)} />
 
   async function load() {
     setLoading(true);
@@ -64,20 +61,32 @@ export default function HomePage() {
   }, [category, q]);
 
   return (
-    <main className="pb-24 bg-neutral-50 min-h-screen">
-      {/* Search */}
-
+    <main className="pb-12 bg-neutral-50 min-h-screen">
       <Header />
+
       {/* Categories */}
-      <CategoryPills active={category} onSelect={setCategory} />
+      {/* <CategoryPills active={category} onSelect={setCategory} /> */}
 
       {/* Hero */}
       {/* <HeroCard /> */}
 
+      {/* ————————————————
+          Static image above carousel
+      ———————————————— */}
+      {/* <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] overflow-hidden rounded-2xl mt-3 mb-4 px-4">
+        <Image
+          src="/top-banner.jpg" // your image here
+          alt="Zaha featured banner"
+          fill
+          className="object-cover rounded-2xl shadow-md"
+          priority
+        />
+      </div> */}
+
+      {/* Hero Carousel */}
       <HeroCarousel slides={slides} />
 
       <CategoriesStrip />
-      {/* or pass pre-fetched categories as `initial` */}
 
       {/* Section */}
       <section className="p-4 space-y-2">

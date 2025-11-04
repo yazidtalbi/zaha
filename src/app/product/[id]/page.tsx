@@ -981,151 +981,153 @@ export default function ProductPage() {
     <>
       {/* overlay nav buttons */}
 
-      <section>
-        <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
-          <button
-            onClick={() => router.back()}
-            className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
-          >
-            <ChevronLeft size={18} />
-          </button>
-        </div>
-        <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
-          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <MessageSquare size={16} />
-          </button>
-          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <Share2 size={16} />
-          </button>
-          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <Heart size={16} />
-          </button>
-          {isOwner && (
-            <Link
-              href={`/seller/edit/${p.id}`}
-              className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
-              aria-label="Edit product"
-              title="Edit product"
+      <main className="pb-24 bg-neutral-50  min-h-screen">
+        <section className="">
+          <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
+            <button
+              onClick={() => router.back()}
+              className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
             >
-              <Pencil size={16} />
-            </Link>
-          )}
-        </div>
-        <div
-          className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
-            showStickyTop
-              ? "opacity-100 translate-y-0 pointer-events-auto"
-              : "opacity-0 -translate-y-4 pointer-events-none"
-          }`}
-        >
-          <div className="px-4 py-2">
-            <div className="flex items-center gap-2">
-              <div className="text-[15px] font-semibold truncate">
-                {p.title}
-              </div>
-              <button
-                type="button"
-                className="ml-auto h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <MessageSquare size={16} />
+            </button>
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <Share2 size={16} />
+            </button>
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <Heart size={16} />
+            </button>
+            {isOwner && (
+              <Link
+                href={`/seller/edit/${p.id}`}
+                className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
+                aria-label="Edit product"
+                title="Edit product"
               >
-                <Heart className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-sm">
-              <div className="font-semibold">
-                {promoActive
-                  ? `MAD${(promoTotal as number).toLocaleString("en-US")}`
-                  : `MAD${currentTotal.toLocaleString("en-US")}`}
-              </div>
-              {promoActive && (
-                <div className="line-through text-neutral-400 text-xs">
-                  MAD{currentTotal.toLocaleString("en-US")}
+                <Pencil size={16} />
+              </Link>
+            )}
+          </div>
+          <div
+            className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
+              showStickyTop
+                ? "opacity-100 translate-y-0 pointer-events-auto"
+                : "opacity-0 -translate-y-4 pointer-events-none"
+            }`}
+          >
+            <div className="px-4 py-2">
+              <div className="flex items-center gap-2">
+                <div className="text-[15px] font-semibold truncate">
+                  {p.title}
                 </div>
-              )}
-              <div className="ml-2 text-neutral-500 truncate flex-1 text-xs">
-                {keywordArray(p.keywords).slice(0, 3).join(", ")}
-                {keywordArray(p.keywords).length > 3 && "…"}
+                <button
+                  type="button"
+                  className="ml-auto h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                >
+                  <Heart className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-sm">
+                <div className="font-semibold">
+                  {promoActive
+                    ? `MAD${(promoTotal as number).toLocaleString("en-US")}`
+                    : `MAD${currentTotal.toLocaleString("en-US")}`}
+                </div>
+                {promoActive && (
+                  <div className="line-through text-neutral-400 text-xs">
+                    MAD{currentTotal.toLocaleString("en-US")}
+                  </div>
+                )}
+                <div className="ml-2 text-neutral-500 truncate flex-1 text-xs">
+                  {keywordArray(p.keywords).slice(0, 3).join(", ")}
+                  {keywordArray(p.keywords).length > 3 && "…"}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ——— Carousel ——— */}
-        <ProductCarousel
-          images={images}
-          title={p.title}
-          onOpen={(i) => {
-            setStartIndex(i);
-            setFsOpen(true);
-          }}
-        />
+          {/* ——— Carousel ——— */}
+          <ProductCarousel
+            images={images}
+            title={p.title}
+            onOpen={(i) => {
+              setStartIndex(i);
+              setFsOpen(true);
+            }}
+          />
 
-        {/* ——— Title + meta ——— */}
-        <div className="px-4 pt-3 space-y-4">
-          {/* sentinel for sticky top bar */}
+          {/* ——— Title + meta ——— */}
+          <div className="px-4 pt-3 space-y-4">
+            {/* sentinel for sticky top bar */}
 
-          <section className="-space-y-1 mt-4">
-            {" "}
-            <div className="text-sm text-emerald-800 font-medium">
+            <section className="-space-y-1 mt-4">
+              {" "}
+              <div className="text-sm text-emerald-800 font-medium">
+                {promoActive ? (
+                  <>
+                    {promoOff}% off sale until{" "}
+                    {formatEndsShort(p.promo_ends_at)}
+                  </>
+                ) : (
+                  <>From MAD {minTotal.toLocaleString("en-US")}+</>
+                )}
+              </div>
+              {/* price block */}
               {promoActive ? (
-                <>
-                  {promoOff}% off sale until {formatEndsShort(p.promo_ends_at)}
-                </>
-              ) : (
-                <>From MAD {minTotal.toLocaleString("en-US")}+</>
-              )}
-            </div>
-            {/* price block */}
-            {promoActive ? (
-              <div className=" flex items-center gap-3 flex-wrap ">
-                <div className="text-xl font-bold text-emerald-800">
-                  MAD{(promoTotal as number).toLocaleString("en-US")}
+                <div className=" flex items-center gap-3 flex-wrap ">
+                  <div className="text-xl font-bold text-emerald-800">
+                    MAD{(promoTotal as number).toLocaleString("en-US")}
+                  </div>
+                  <div className="line-through text-neutral-400">
+                    MAD{currentTotal.toLocaleString("en-US")}
+                  </div>
                 </div>
-                <div className="line-through text-neutral-400">
+              ) : showPriceRange ? (
+                <div className="mt-1 text-xl font-bold">
+                  MAD{minTotal.toLocaleString("en-US")} – MAD
+                  {maxTotal.toLocaleString("en-US")}
+                </div>
+              ) : (
+                <div className="mt-1 text-xl font-bold">
                   MAD{currentTotal.toLocaleString("en-US")}
                 </div>
-              </div>
-            ) : showPriceRange ? (
-              <div className="mt-1 text-xl font-bold">
-                MAD{minTotal.toLocaleString("en-US")} – MAD
-                {maxTotal.toLocaleString("en-US")}
-              </div>
-            ) : (
-              <div className="mt-1 text-xl font-bold">
-                MAD{currentTotal.toLocaleString("en-US")}
-              </div>
-            )}
-          </section>
+              )}
+            </section>
 
-          <section className="-space-y-1">
-            {" "}
-            <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
-            <TagList items={keywordArray(p.keywords)} />
-            {categoryPath && (
-              <div className="mt-1 text-sm text-neutral-600">
-                in{" "}
-                <Link
-                  href={`/c/${categoryPath}`}
-                  className="underline hover:text-black"
-                >
-                  {categoryPath
-                    .split("/")
-                    .map((s) =>
-                      s
-                        .replace(/-/g, " ")
-                        .replace(/\b\w/g, (c) => c.toUpperCase())
-                    )
-                    .join(" / ")}
-                </Link>
-              </div>
-            )}
-            <div className="text-sm text-neutral-600 mt-2">
-              by{" "}
-              {p.shop_id ? (
-                <Link
-                  href={`/shop/${p.shop_id}`}
-                  className="inline-flex items-center gap-2 hover:underline"
-                >
-                  {/* {shopImg ? (
+            <section className="-space-y-1">
+              {" "}
+              <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
+              <TagList items={keywordArray(p.keywords)} />
+              {categoryPath && (
+                <div className="mt-1 text-sm text-neutral-600">
+                  in{" "}
+                  <Link
+                    href={`/c/${categoryPath}`}
+                    className="underline hover:text-black"
+                  >
+                    {categoryPath
+                      .split("/")
+                      .map((s) =>
+                        s
+                          .replace(/-/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase())
+                      )
+                      .join(" / ")}
+                  </Link>
+                </div>
+              )}
+              <div className="text-sm text-neutral-600 mt-2">
+                by{" "}
+                {p.shop_id ? (
+                  <Link
+                    href={`/shop/${p.shop_id}`}
+                    className="inline-flex items-center gap-2 hover:underline"
+                  >
+                    {/* {shopImg ? (
                   <span className="inline-block h-4 w-4 rounded-full overflow-hidden bg-neutral-200">
                     <img
                       src={shopImg}
@@ -1134,491 +1136,242 @@ export default function ProductPage() {
                     />
                   </span>
                 ) : null} */}
-                  <span className="font-semibold">{shop?.title || "shop"}</span>
-                </Link>
-              ) : (
-                <span className="font-medium">
-                  {p.shop_title || "a Moroccan maker"}
-                </span>
-              )}
-            </div>
-          </section>
-          {p.subtitle ? (
-            <div className="text-xs text-neutral-500">{p.subtitle}</div>
-          ) : null}
+                    <span className="font-semibold">
+                      {shop?.title || "shop"}
+                    </span>
+                  </Link>
+                ) : (
+                  <span className="font-medium">
+                    {p.shop_title || "a Moroccan maker"}
+                  </span>
+                )}
+              </div>
+            </section>
+            {p.subtitle ? (
+              <div className="text-xs text-neutral-500">{p.subtitle}</div>
+            ) : null}
 
-          {(isInactive || isRemoved) && !isUnavailable ? (
-            <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
-              removed from seller’s store
-            </div>
-          ) : null}
-          {isUnavailable && (
-            <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
-              temporarily unavailable
-            </div>
-          )}
+            {(isInactive || isRemoved) && !isUnavailable ? (
+              <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
+                removed from seller’s store
+              </div>
+            ) : null}
+            {isUnavailable && (
+              <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
+                temporarily unavailable
+              </div>
+            )}
 
-          {/* stat pills like screenshot */}
-          <div className="mt-6 flex items-stretch gap-2">
-            <StatPill label="Est. Delivery" value={etaTitle ?? "—"} />
-            <StatPill
-              label="Ratings"
-              value={
-                <span className="inline-flex items-center gap-1">
-                  {(ratingAvg ?? 0).toFixed(1)}
-                  <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
-                </span>
-              }
-            />
-            <StatPill
-              label="Orders"
-              value={
-                p.orders_count != null
-                  ? p.orders_count >= 10000
-                    ? `${Math.round(p.orders_count / 1000)}k+`
-                    : `${p.orders_count.toLocaleString("en-US")}+`
-                  : "—"
-              }
-            />
+            {/* stat pills like screenshot */}
+            <div className="mt-6 flex items-stretch gap-2">
+              <StatPill label="Est. Delivery" value={etaTitle ?? "—"} />
+              <StatPill
+                label="Ratings"
+                value={
+                  <span className="inline-flex items-center gap-1">
+                    {(ratingAvg ?? 0).toFixed(1)}
+                    <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                  </span>
+                }
+              />
+              <StatPill
+                label="Orders"
+                value={
+                  p.orders_count != null
+                    ? p.orders_count >= 10000
+                      ? `${Math.round(p.orders_count / 1000)}k+`
+                      : `${p.orders_count.toLocaleString("en-US")}+`
+                    : "—"
+                }
+              />
+            </div>
+
+            {/* Free shipping badge */}
+            {details.shipping?.mode === "free" && (
+              <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
+                Free shipping
+              </div>
+            )}
           </div>
 
-          {/* Free shipping badge */}
-          {details.shipping?.mode === "free" && (
-            <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
-              Free shipping
-            </div>
-          )}
-        </div>
-
-        {/* ——— Options ——— */}
-        {optionGroups.map((g) => {
-          const valueId = selected[g.id] ?? "";
-          return (
-            <Section key={g.id} title={g.name}>
-              <div className="rounded-xl border bg-white px-3 py-2">
-                <select
-                  className="w-full bg-transparent outline-none py-1.5 text-sm"
-                  value={valueId}
-                  onChange={(e) =>
-                    setSelected((s) => ({ ...s, [g.id]: e.target.value }))
-                  }
-                >
-                  {g.values.map((v) => {
-                    const delta = Number(v.price_delta_mad ?? 0);
-                    const label =
-                      delta === 0
-                        ? v.label
-                        : `${v.label}  ${
-                            delta > 0
-                              ? `+ MAD${delta}`
-                              : `- MAD${Math.abs(delta)}`
-                          }`;
-                    return (
-                      <option key={v.id} value={v.id}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            </Section>
-          );
-        })}
-
-        {/* ——— Personalization (inline CTA variant) ——— */}
-        {personalizationConfig.enabled && (
-          <Section title="Personalization">
-            {personalization.trim() ? (
-              <div className="rounded-xl border bg-white">
-                <div className="flex items-center justify-between px-3 py-2 border-b">
-                  <div className="font-medium text-sm">
-                    Your personalization
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPersonalizationOpen(true)}
-                    className="text-sm inline-flex items-center gap-1 underline"
+          {/* ——— Options ——— */}
+          {optionGroups.map((g) => {
+            const valueId = selected[g.id] ?? "";
+            return (
+              <Section key={g.id} title={g.name}>
+                <div className="rounded-xl border bg-white px-3 py-2">
+                  <select
+                    className="w-full bg-transparent outline-none py-1.5 text-sm"
+                    value={valueId}
+                    onChange={(e) =>
+                      setSelected((s) => ({ ...s, [g.id]: e.target.value }))
+                    }
                   >
-                    <Pencil size={14} /> Edit
+                    {g.values.map((v) => {
+                      const delta = Number(v.price_delta_mad ?? 0);
+                      const label =
+                        delta === 0
+                          ? v.label
+                          : `${v.label}  ${
+                              delta > 0
+                                ? `+ MAD${delta}`
+                                : `- MAD${Math.abs(delta)}`
+                            }`;
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </Section>
+            );
+          })}
+
+          {/* ——— Personalization (inline CTA variant) ——— */}
+          {personalizationConfig.enabled && (
+            <Section title="Personalization">
+              {personalization.trim() ? (
+                <div className="rounded-xl border bg-white">
+                  <div className="flex items-center justify-between px-3 py-2 border-b">
+                    <div className="font-medium text-sm">
+                      Your personalization
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPersonalizationOpen(true)}
+                      className="text-sm inline-flex items-center gap-1 underline"
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                  </div>
+                  <div className="px-3 py-3 text-sm">
+                    <div className="text-neutral-500 mb-1">Personalization</div>
+                    <div className="break-words">{personalization}</div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPersonalizationOpen(true)}
+                  className="inline-flex items-center gap-2 text-md font-semibold  text-amber-800 pb-4"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add personalization{" "}
+                  <span className="text-neutral-500 font-normal">
+                    (optional)
+                  </span>
+                </button>
+              )}
+            </Section>
+          )}
+        </section>
+
+        {/* ——— Quantity & CTAs or Owner Edit ——— */}
+        {!isOwner ? (
+          <Section title="Select quantity">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-full border bg-white">
+                <button
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="px-3 py-1.5 text-lg"
+                  aria-label="Decrease"
+                >
+                  −
+                </button>
+                <div className="min-w-[2.25rem] text-center">{qty}</div>
+                <button
+                  onClick={() => setQty((q) => q + 1)}
+                  className="px-3 py-1.5 text-lg"
+                  aria-label="Increase"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 gap-3 grid-cols-2" ref={mainCtaRef}>
+              {inCart ? (
+                <>
+                  <Link
+                    href="/cart"
+                    className="rounded-full border bg-white px-4 py-3 text-center font-medium"
+                  >
+                    View in your cart
+                  </Link>
+                  <button
+                    onClick={handleAddToCartNew}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
+                  >
+                    Add new item
+                  </button>
+                </>
+              ) : (
+                <div className="mt-3   gap-3 grid-cols-2">
+                  <button
+                    onClick={handleAddToCartMerge}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60 w-full"
+                  >
+                    Add to cart
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={isUnavailable || isInactive || isRemoved}
+                    className="rounded-full  ring-black ring-2   px-4 py-3 font-semibold disabled:opacity-60 w-full"
+                  >
+                    Buy it now
                   </button>
                 </div>
-                <div className="px-3 py-3 text-sm">
-                  <div className="text-neutral-500 mb-1">Personalization</div>
-                  <div className="break-words">{personalization}</div>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setPersonalizationOpen(true)}
-                className="inline-flex items-center gap-2 text-md font-semibold  text-amber-800 pb-4"
-              >
-                <Plus className="h-4 w-4" />
-                Add personalization{" "}
-                <span className="text-neutral-500 font-normal">(optional)</span>
-              </button>
-            )}
-          </Section>
-        )}
-      </section>
-
-      {/* ——— Quantity & CTAs or Owner Edit ——— */}
-      {!isOwner ? (
-        <Section title="Select quantity">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center rounded-full border bg-white">
-              <button
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                className="px-3 py-1.5 text-lg"
-                aria-label="Decrease"
-              >
-                −
-              </button>
-              <div className="min-w-[2.25rem] text-center">{qty}</div>
-              <button
-                onClick={() => setQty((q) => q + 1)}
-                className="px-3 py-1.5 text-lg"
-                aria-label="Increase"
-              >
-                +
-              </button>
+              )}
             </div>
-          </div>
-
-          <div
-            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
-            ref={mainCtaRef}
-          >
-            {inCart ? (
-              <>
-                <Link
-                  href="/cart"
-                  className="rounded-full border bg-white px-4 py-3 text-center font-medium"
-                >
-                  View in your cart
-                </Link>
-                <button
-                  onClick={handleAddToCartNew}
-                  disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
-                >
-                  Add new item
-                </button>
-              </>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddToCartMerge}
-                  disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60 w-full"
-                >
-                  Add to cart
-                </button>
-                <button
-                  onClick={handleBuyNow}
-                  disabled={isUnavailable || isInactive || isRemoved}
-                  className="rounded-full  ring-black ring-2   px-4 py-3 font-semibold disabled:opacity-60 w-full"
-                >
-                  Buy it now
-                </button>
-              </div>
-            )}
-          </div>
-        </Section>
-      ) : (
-        <div className="px-4 pb-4">
-          <Link
-            href={`/seller/edit/${p.id}`}
-            className="  inline-flex items-center justify-center gap-2 rounded-full bg-amber-800 text-white px-4 py-3 w-full font-medium"
-          >
-            <Pencil size={16} />
-            Edit this product
-          </Link>
-          <p className="text-sm text-gray-500  mx-auto w-full text-center mt-2">
-            You are the owner of this product
-          </p>
-        </div>
-      )}
-
-      {/* ——— Reviews ——— */}
-      <section className="px-4 "></section>
-      <div className=" ">
-        <Section title="Reviews" collapsible defaultOpen>
-          {" "}
-          <div className="mt-3">
-            <ProductReviewsStrip
-              productId={p.id}
-              shopId={p.shop_id ?? shop?.id}
-            />
-          </div>
-        </Section>
-        <hr className="  border-neutral-400 mx-4"></hr>
-        {/* ——— Description ——— */}
-        <Section title="Description" collapsible defaultOpen>
-          <div className="">
-            <p className="whitespace-pre-wrap">
-              {p.description ??
-                "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
-            </p>
-
-            {/* Optional “Available options” list if exists */}
-            {Array.isArray(optionGroups) && optionGroups.length > 0 && (
-              <>
-                <div className="font-semibold mt-4 mb-1">Available options</div>
-                <ul className="list-disc ml-5 text-[15px]">
-                  {optionGroups.map((g) => (
-                    <li key={g.id}>
-                      <span className="font-medium">{g.name}:</span>{" "}
-                      {g.values.map((v) => v.label).join(", ")}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </Section>
-        <hr className="  border-neutral-400 mx-4"></hr>
-        {/* ——— Item details ——— */}
-        <Section title="Item Details" collapsible defaultOpen>
-          <ul className="space-y-3">
-            <DetailRow
-              icon={<Store className="h-4 w-4 text-neutral-500" />}
-              label="Designed by"
-              value={shop?.title ?? p.shop_title ?? "Independent artisan"}
-            />
-            <DetailRow
-              icon={
-                details.type === "digital" ? (
-                  <FileDown className="h-4 w-4 text-neutral-500" />
-                ) : (
-                  <Package className="h-4 w-4 text-neutral-500" />
-                )
-              }
-              label="Item type"
-              value={
-                details.type === "digital"
-                  ? "Instant Digital Download"
-                  : "Physical item"
-              }
-            />
-            {(details.width_cm || details.height_cm) && (
-              <DetailRow
-                icon={<Ruler className="h-4 w-4 text-neutral-500" />}
-                label="Dimensions"
-                value={
-                  <>
-                    {details.width_cm ? `${details.width_cm} cm` : "—"} ×{" "}
-                    {details.height_cm ? `${details.height_cm} cm` : "—"}
-                  </>
-                }
-              />
-            )}
-            {details.weight_kg && (
-              <DetailRow
-                icon={<Scale className="h-4 w-4 text-neutral-500" />}
-                label="Weight"
-                value={`${details.weight_kg} kg`}
-              />
-            )}
-            {details.personalizable && (
-              <DetailRow
-                icon={<Edit3 className="h-4 w-4 text-neutral-500" />}
-                label="Personalizable"
-                value="Yes"
-              />
-            )}
-            {details.materials?.length > 0 && (
-              <DetailRow
-                icon={<Layers className="h-4 w-4 text-neutral-500" />}
-                label="Materials"
-                value={details.materials.join(", ")}
-              />
-            )}
-          </ul>
-        </Section>
-        <hr className=" border-neutral-400 mx-4"></hr>
-        {/* ——— Shipping & Policies ——— */}
-        <Section title="Shipping & Policies" collapsible defaultOpen={false}>
-          <ul className="space-y-3 ">
-            {details.ships_from && (
-              <DetailRow
-                icon={<MapPin className="h-4 w-4 text-neutral-500" />}
-                label="Ships from"
-                value={details.ships_from}
-              />
-            )}
-            {details.ships_to?.length > 0 && (
-              <DetailRow
-                icon={<Truck className="h-4 w-4 text-neutral-500" />}
-                label="Ships to"
-                value={details.ships_to.join(", ")}
-              />
-            )}
-            {details.shipping?.mode === "free" ? (
-              <DetailRow
-                icon={<Package className="h-4 w-4 text-neutral-500" />}
-                label="Shipping"
-                value={
-                  details.shipping.free_over_mad
-                    ? `Free (orders over MAD ${details.shipping.free_over_mad})`
-                    : "Free"
-                }
-              />
-            ) : details.shipping?.mode === "fees" ? (
-              <DetailRow
-                icon={<Package className="h-4 w-4 text-neutral-500" />}
-                label="Shipping"
-                value={
-                  details.shipping.fee_mad != null
-                    ? `MAD ${details.shipping.fee_mad}`
-                    : "Additional fees"
-                }
-              />
-            ) : null}
-            {(details.shipping?.estimate_days_min ||
-              details.shipping?.estimate_days_max) && (
-              <li className="flex items-start gap-3">
-                <span className="mt-0.5">
-                  <Truck className="h-4 w-4 text-neutral-500" />
-                </span>
-                <div className="text-[15px] leading-relaxed">
-                  <span className="font-medium">Estimated delivery: </span>
-                  <span className="text-neutral-700">
-                    {details.shipping.estimate_days_min &&
-                    details.shipping.estimate_days_max
-                      ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
-                      : details.shipping.estimate_days_min
-                        ? `${details.shipping.estimate_days_min} days`
-                        : `${details.shipping.estimate_days_max} days`}
-                  </span>
-                </div>
-              </li>
-            )}
-            {(details.shipping?.cod ||
-              details.shipping?.pickup ||
-              details.shipping?.tracking) && (
-              <li className="flex flex-wrap gap-2 pl-8">
-                {details.shipping.cod && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                    COD
-                  </span>
-                )}
-                {details.shipping.pickup && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                    Pickup
-                  </span>
-                )}
-                {details.shipping.tracking && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
-                    Tracking
-                  </span>
-                )}
-              </li>
-            )}
-            {details.shipping?.notes && (
-              <DetailRow
-                icon={<Package className="h-4 w-4 text-neutral-500" />}
-                label="Shipping policy"
-                value={details.shipping.notes}
-              />
-            )}
-            {details.returns && (
-              <DetailRow
-                icon={<Undo2 className="h-4 w-4 text-neutral-500" />}
-                label="Returns & exchanges"
-                value={
-                  details.returns === "accepted" ? "Accepted" : "Not accepted"
-                }
-              />
-            )}
-          </ul>
-        </Section>{" "}
-        <hr className="border-neutral-400 mx-4"></hr>
-      </div>
-
-      {/* ——— More from this shop (shop header + slider) ——— */}
-      {!!moreFromShop.length && shop?.id && (
-        <ShopMoreSection shop={shop} products={moreFromShop} />
-      )}
-
-      {/* ——— Compare similar ——— */}
-      {!!similar.length && (
-        <Section title="Compare similar items">
-          <div className="grid grid-cols-2 gap-3">
-            {similar.map((x) => (
-              <Link
-                key={x.id}
-                href={`/product/${x.id}`}
-                className="block rounded-xl bg-white border overflow-hidden"
-              >
-                <div className="aspect-[4/3] bg-neutral-100">
-                  {Array.isArray(x.photos) && x.photos[0] ? (
-                    <img
-                      src={x.photos[0]}
-                      alt={x.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : null}
-                </div>
-                <div className="p-2">
-                  <div className="text-sm line-clamp-2">{x.title}</div>
-                  <div className="text-xs text-neutral-600 mt-1">
-                    MAD{x.price_mad}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <div className="h-10" />
-
-      {/* Sticky add-to-cart (hidden for owner) */}
-      {!isOwner && (
-        <div
-          className={`fixed inset-x-0 z-50 transform transition-all duration-300 ease-out ${
-            showStickyAdd
-              ? "opacity-100 translate-y-0 pointer-events-auto"
-              : "opacity-0 translate-y-6 pointer-events-none"
-          }`}
-          style={{
-            // 🟢 lift it above your BottomNav (which is ~64–72px tall)
-            bottom: "calc(env(safe-area-inset-bottom) + 54px)",
-          }}
-        >
-          <div className="max-w-screen-sm mx-auto   bg-white/90 backdrop-blur-sm border-t border-neutral-200 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
-            <button
-              onClick={handleAddToCartMerge}
-              disabled={isUnavailable || isInactive || isRemoved}
-              className="w-full rounded-full bg-amber-900 text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
+          </Section>
+        ) : (
+          <div className="px-4 pb-4">
+            <Link
+              href={`/seller/edit/${p.id}`}
+              className="  inline-flex items-center justify-center gap-2 rounded-full bg-amber-800 text-white px-4 py-3 w-full font-medium"
             >
-              {isUnavailable || isInactive || isRemoved
-                ? "Unavailable"
-                : "Add to cart"}
-            </button>
+              <Pencil size={16} />
+              Edit this product
+            </Link>
+            <p className="text-sm text-gray-500  mx-auto w-full text-center mt-2">
+              You are the owner of this product
+            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Description sheet */}
-      <Sheet open={descOpen} onOpenChange={setDescOpen}>
-        <SheetContent side="bottom" className="p-0">
-          <div className="p-4">
-            <SheetHeader className="mb-2">
-              <SheetTitle>Description</SheetTitle>
-              <SheetDescription />
-            </SheetHeader>
-            <div className="space-y-3 text-[15px]">
+        {/* ——— Reviews ——— */}
+        <section className="px-4 "></section>
+        <div className=" ">
+          <Section title="Reviews" collapsible defaultOpen>
+            {" "}
+            <div className="mt-3">
+              <ProductReviewsStrip
+                productId={p.id}
+                shopId={p.shop_id ?? shop?.id}
+              />
+            </div>
+          </Section>
+          <hr className="  border-neutral-400 mx-4"></hr>
+          {/* ——— Description ——— */}
+          <Section title="Description" collapsible defaultOpen>
+            <div className="">
               <p className="whitespace-pre-wrap">
                 {p.description ??
                   "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
               </p>
-              {optionGroupsMemo.length > 0 && (
+
+              {/* Optional “Available options” list if exists */}
+              {Array.isArray(optionGroups) && optionGroups.length > 0 && (
                 <>
-                  <div className="font-semibold mt-2">Available options</div>
-                  <ul className="list-disc ml-4">
-                    {optionGroupsMemo.map((g) => (
+                  <div className="font-semibold mt-4 mb-1">
+                    Available options
+                  </div>
+                  <ul className="list-disc ml-5 text-[15px]">
+                    {optionGroups.map((g) => (
                       <li key={g.id}>
                         <span className="font-medium">{g.name}:</span>{" "}
                         {g.values.map((v) => v.label).join(", ")}
@@ -1628,12 +1381,264 @@ export default function ProductPage() {
                 </>
               )}
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </Section>
+          <hr className="  border-neutral-400 mx-4"></hr>
+          {/* ——— Item details ——— */}
+          <Section title="Item Details" collapsible defaultOpen>
+            <ul className="space-y-3">
+              <DetailRow
+                icon={<Store className="h-4 w-4 text-neutral-500" />}
+                label="Designed by"
+                value={shop?.title ?? p.shop_title ?? "Independent artisan"}
+              />
+              <DetailRow
+                icon={
+                  details.type === "digital" ? (
+                    <FileDown className="h-4 w-4 text-neutral-500" />
+                  ) : (
+                    <Package className="h-4 w-4 text-neutral-500" />
+                  )
+                }
+                label="Item type"
+                value={
+                  details.type === "digital"
+                    ? "Instant Digital Download"
+                    : "Physical item"
+                }
+              />
+              {(details.width_cm || details.height_cm) && (
+                <DetailRow
+                  icon={<Ruler className="h-4 w-4 text-neutral-500" />}
+                  label="Dimensions"
+                  value={
+                    <>
+                      {details.width_cm ? `${details.width_cm} cm` : "—"} ×{" "}
+                      {details.height_cm ? `${details.height_cm} cm` : "—"}
+                    </>
+                  }
+                />
+              )}
+              {details.weight_kg && (
+                <DetailRow
+                  icon={<Scale className="h-4 w-4 text-neutral-500" />}
+                  label="Weight"
+                  value={`${details.weight_kg} kg`}
+                />
+              )}
+              {details.personalizable && (
+                <DetailRow
+                  icon={<Edit3 className="h-4 w-4 text-neutral-500" />}
+                  label="Personalizable"
+                  value="Yes"
+                />
+              )}
+              {details.materials?.length > 0 && (
+                <DetailRow
+                  icon={<Layers className="h-4 w-4 text-neutral-500" />}
+                  label="Materials"
+                  value={details.materials.join(", ")}
+                />
+              )}
+            </ul>
+          </Section>
+          <hr className=" border-neutral-400 mx-4"></hr>
+          {/* ——— Shipping & Policies ——— */}
+          <Section title="Shipping & Policies" collapsible defaultOpen={false}>
+            <ul className="space-y-3 ">
+              {details.ships_from && (
+                <DetailRow
+                  icon={<MapPin className="h-4 w-4 text-neutral-500" />}
+                  label="Ships from"
+                  value={details.ships_from}
+                />
+              )}
+              {details.ships_to?.length > 0 && (
+                <DetailRow
+                  icon={<Truck className="h-4 w-4 text-neutral-500" />}
+                  label="Ships to"
+                  value={details.ships_to.join(", ")}
+                />
+              )}
+              {details.shipping?.mode === "free" ? (
+                <DetailRow
+                  icon={<Package className="h-4 w-4 text-neutral-500" />}
+                  label="Shipping"
+                  value={
+                    details.shipping.free_over_mad
+                      ? `Free (orders over MAD ${details.shipping.free_over_mad})`
+                      : "Free"
+                  }
+                />
+              ) : details.shipping?.mode === "fees" ? (
+                <DetailRow
+                  icon={<Package className="h-4 w-4 text-neutral-500" />}
+                  label="Shipping"
+                  value={
+                    details.shipping.fee_mad != null
+                      ? `MAD ${details.shipping.fee_mad}`
+                      : "Additional fees"
+                  }
+                />
+              ) : null}
+              {(details.shipping?.estimate_days_min ||
+                details.shipping?.estimate_days_max) && (
+                <li className="flex items-start gap-3">
+                  <span className="mt-0.5">
+                    <Truck className="h-4 w-4 text-neutral-500" />
+                  </span>
+                  <div className="text-[15px] leading-relaxed">
+                    <span className="font-medium">Estimated delivery: </span>
+                    <span className="text-neutral-700">
+                      {details.shipping.estimate_days_min &&
+                      details.shipping.estimate_days_max
+                        ? `${details.shipping.estimate_days_min}–${details.shipping.estimate_days_max} days`
+                        : details.shipping.estimate_days_min
+                          ? `${details.shipping.estimate_days_min} days`
+                          : `${details.shipping.estimate_days_max} days`}
+                    </span>
+                  </div>
+                </li>
+              )}
+              {(details.shipping?.cod ||
+                details.shipping?.pickup ||
+                details.shipping?.tracking) && (
+                <li className="flex flex-wrap gap-2 pl-8">
+                  {details.shipping.cod && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      COD
+                    </span>
+                  )}
+                  {details.shipping.pickup && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      Pickup
+                    </span>
+                  )}
+                  {details.shipping.tracking && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-neutral-200">
+                      Tracking
+                    </span>
+                  )}
+                </li>
+              )}
+              {details.shipping?.notes && (
+                <DetailRow
+                  icon={<Package className="h-4 w-4 text-neutral-500" />}
+                  label="Shipping policy"
+                  value={details.shipping.notes}
+                />
+              )}
+              {details.returns && (
+                <DetailRow
+                  icon={<Undo2 className="h-4 w-4 text-neutral-500" />}
+                  label="Returns & exchanges"
+                  value={
+                    details.returns === "accepted" ? "Accepted" : "Not accepted"
+                  }
+                />
+              )}
+            </ul>
+          </Section>{" "}
+          <hr className="border-neutral-400 mx-4"></hr>
+        </div>
 
-      {/* Trigger to open description */}
-      {/* <div className="px-4 -mt-2">
+        {/* ——— More from this shop (shop header + slider) ——— */}
+        {!!moreFromShop.length && shop?.id && (
+          <ShopMoreSection shop={shop} products={moreFromShop} />
+        )}
+
+        {/* ——— Compare similar ——— */}
+        {!!similar.length && (
+          <Section title="Compare similar items">
+            <div className="grid grid-cols-2 gap-3">
+              {similar.map((x) => (
+                <Link
+                  key={x.id}
+                  href={`/product/${x.id}`}
+                  className="block rounded-xl bg-white border overflow-hidden"
+                >
+                  <div className="aspect-[4/3] bg-neutral-100">
+                    {Array.isArray(x.photos) && x.photos[0] ? (
+                      <img
+                        src={x.photos[0]}
+                        alt={x.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="p-2">
+                    <div className="text-sm line-clamp-2">{x.title}</div>
+                    <div className="text-xs text-neutral-600 mt-1">
+                      MAD{x.price_mad}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        <div className="h-10" />
+
+        {/* Sticky add-to-cart (hidden for owner) */}
+        {!isOwner && (
+          <div
+            className={`fixed inset-x-0 z-50 transform transition-all duration-300 ease-out ${
+              showStickyAdd
+                ? "opacity-100 translate-y-0 pointer-events-auto"
+                : "opacity-0 translate-y-6 pointer-events-none"
+            }`}
+            style={{
+              // 🟢 lift it above your BottomNav (which is ~64–72px tall)
+              bottom: "calc(env(safe-area-inset-bottom) + 54px)",
+            }}
+          >
+            <div className="max-w-screen-sm mx-auto   bg-white/90 backdrop-blur-sm border-t border-neutral-200 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
+              <button
+                onClick={handleAddToCartMerge}
+                disabled={isUnavailable || isInactive || isRemoved}
+                className="w-full rounded-full bg-amber-900 text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
+              >
+                {isUnavailable || isInactive || isRemoved
+                  ? "Unavailable"
+                  : "Add to cart"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Description sheet */}
+        <Sheet open={descOpen} onOpenChange={setDescOpen}>
+          <SheetContent side="bottom" className="p-0">
+            <div className="p-4">
+              <SheetHeader className="mb-2">
+                <SheetTitle>Description</SheetTitle>
+                <SheetDescription />
+              </SheetHeader>
+              <div className="space-y-3 text-[15px]">
+                <p className="whitespace-pre-wrap">
+                  {p.description ??
+                    "Handmade with care. Minimalist aesthetic and durable build. Perfect for modern homes."}
+                </p>
+                {optionGroupsMemo.length > 0 && (
+                  <>
+                    <div className="font-semibold mt-2">Available options</div>
+                    <ul className="list-disc ml-4">
+                      {optionGroupsMemo.map((g) => (
+                        <li key={g.id}>
+                          <span className="font-medium">{g.name}:</span>{" "}
+                          {g.values.map((v) => v.label).join(", ")}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Trigger to open description */}
+        {/* <div className="px-4 -mt-2">
         <button
           onClick={() => setDescOpen(true)}
           className="mt-3 text-sm underline"
@@ -1642,130 +1647,134 @@ export default function ProductPage() {
         </button>
       </div> */}
 
-      {/* Personalization sheet */}
-      {personalizationConfig.enabled && (
-        <Sheet open={personalizationOpen} onOpenChange={setPersonalizationOpen}>
-          <SheetContent side="bottom" className="p-0">
-            <div className="p-4 space-y-3 text-[15px]">
-              <SheetHeader className="mb-1">
-                <SheetTitle>Add personalization</SheetTitle>
-                <SheetDescription />
-              </SheetHeader>
+        {/* Personalization sheet */}
+        {personalizationConfig.enabled && (
+          <Sheet
+            open={personalizationOpen}
+            onOpenChange={setPersonalizationOpen}
+          >
+            <SheetContent side="bottom" className="p-0">
+              <div className="p-4 space-y-3 text-[15px]">
+                <SheetHeader className="mb-1">
+                  <SheetTitle>Add personalization</SheetTitle>
+                  <SheetDescription />
+                </SheetHeader>
 
-              {images.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                  {images.slice(0, 4).map((src, i) => (
-                    <div
-                      key={i}
-                      className="h-16 w-16 rounded-md overflow-hidden bg-neutral-100 shrink-0"
-                    >
-                      <img
-                        src={src}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
+                {images.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {images.slice(0, 4).map((src, i) => (
+                      <div
+                        key={i}
+                        className="h-16 w-16 rounded-md overflow-hidden bg-neutral-100 shrink-0"
+                      >
+                        <img
+                          src={src}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {personalizationConfig.instructions && (
+                  <div className="rounded-md bg-neutral-100 p-3 text-[13px] leading-relaxed">
+                    <div className="font-medium mb-1">Personalization</div>
+                    <div className="whitespace-pre-wrap">
+                      {personalizationConfig.instructions}
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                )}
 
-              {personalizationConfig.instructions && (
-                <div className="rounded-md bg-neutral-100 p-3 text-[13px] leading-relaxed">
-                  <div className="font-medium mb-1">Personalization</div>
-                  <div className="whitespace-pre-wrap">
-                    {personalizationConfig.instructions}
+                <div className="space-y-2">
+                  <textarea
+                    value={personalization}
+                    onChange={(e) =>
+                      setPersonalization(
+                        e.target.value.slice(0, personalizationConfig.maxChars)
+                      )
+                    }
+                    className="w-full min-h-[120px] rounded-lg border px-3 py-2 outline-none"
+                    placeholder="Type your personalization here…"
+                    maxLength={personalizationConfig.maxChars}
+                  />
+                  <div className="text-right text-xs text-neutral-500">
+                    {personalization.length}/{personalizationConfig.maxChars}
                   </div>
                 </div>
-              )}
 
-              <div className="space-y-2">
-                <textarea
-                  value={personalization}
-                  onChange={(e) =>
-                    setPersonalization(
-                      e.target.value.slice(0, personalizationConfig.maxChars)
-                    )
-                  }
-                  className="w-full min-h-[120px] rounded-lg border px-3 py-2 outline-none"
-                  placeholder="Type your personalization here…"
-                  maxLength={personalizationConfig.maxChars}
-                />
-                <div className="text-right text-xs text-neutral-500">
-                  {personalization.length}/{personalizationConfig.maxChars}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setPersonalizationOpen(false)}
-                className="w-full rounded-full bg-black text-white px-4 py-3 font-medium"
-              >
-                Finish personalization
-              </button>
-            </div>
-          </SheetContent>
-        </Sheet>
-      )}
-
-      {/* Fullscreen images */}
-      <Dialog open={fsOpen} onOpenChange={setFsOpen}>
-        <DialogContent
-          className="p-0 border-0 max-w-none w-screen h-screen"
-          hideClose
-        >
-          <div className="fixed inset-0 bg-black/95" />
-          <button
-            onClick={() => setFsOpen(false)}
-            aria-label="Close fullscreen"
-            className="fixed top-3 right-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          {images.length > 1 && (
-            <>
-              <button
-                onClick={fsPrev}
-                aria-label="Previous image"
-                className="fixed left-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
-              >
-                <ChevronLeftIcon className="h-6 w-6" />
-              </button>
-              <button
-                onClick={fsNext}
-                aria-label="Next image"
-                className="fixed right-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
-              >
-                <ChevronRight className="h-6 w-6" />
-              </button>
-            </>
-          )}
-
-          <div className="fixed inset-0 z-40 overflow-hidden" ref={fsRef}>
-            <div className="flex h-full">
-              {(images.length ? images : [undefined]).map((src, i) => (
-                <div
-                  key={"fs-" + i}
-                  className="relative shrink-0 grow-0 basis-full h-full"
+                <button
+                  type="button"
+                  onClick={() => setPersonalizationOpen(false)}
+                  className="w-full rounded-full bg-black text-white px-4 py-3 font-medium"
                 >
-                  {src ? (
-                    <img
-                      src={src}
-                      alt={`Product image ${i + 1}`}
-                      className="h-full w-full object-contain select-none"
-                      draggable={false}
-                    />
-                  ) : (
-                    <div className="w-full h-full grid place-items-center text-neutral-400">
-                      No image
-                    </div>
-                  )}
-                </div>
-              ))}
+                  Finish personalization
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
+
+        {/* Fullscreen images */}
+        <Dialog open={fsOpen} onOpenChange={setFsOpen}>
+          <DialogContent
+            className="p-0 border-0 max-w-none w-screen h-screen"
+            hideClose
+          >
+            <div className="fixed inset-0 bg-black/95" />
+            <button
+              onClick={() => setFsOpen(false)}
+              aria-label="Close fullscreen"
+              className="fixed top-3 right-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={fsPrev}
+                  aria-label="Previous image"
+                  className="fixed left-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+                >
+                  <ChevronLeftIcon className="h-6 w-6" />
+                </button>
+                <button
+                  onClick={fsNext}
+                  aria-label="Next image"
+                  className="fixed right-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              </>
+            )}
+
+            <div className="fixed inset-0 z-40 overflow-hidden" ref={fsRef}>
+              <div className="flex h-full">
+                {(images.length ? images : [undefined]).map((src, i) => (
+                  <div
+                    key={"fs-" + i}
+                    className="relative shrink-0 grow-0 basis-full h-full"
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={`Product image ${i + 1}`}
+                        className="h-full w-full object-contain select-none"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="w-full h-full grid place-items-center text-neutral-400">
+                        No image
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      </main>
     </>
   );
 }

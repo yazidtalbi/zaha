@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Tag, Heart, ShoppingCart } from "lucide-react";
+import { Home, Tag, Heart, ShoppingCart, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -11,18 +11,13 @@ function clsx(...xs: (string | boolean | undefined)[]) {
 }
 
 export default function BottomNav() {
-  const pathname = usePathname(); // call unconditionally
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const path = mounted ? pathname : "";
 
   const [uid, setUid] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
-
-  // store state
-  const [storeAvatar, setStoreAvatar] = useState<string | null>(null);
-  const [storeChecked, setStoreChecked] = useState(false); // "we know if a store exists for this uid"
-  const fetchingStoreRef = useRef<string | null>(null); // avoid duplicate fetches
 
   const refreshCartCount = useCallback(
     async (nextUid = uid) => {
@@ -36,35 +31,13 @@ export default function BottomNav() {
       } else {
         try {
           const raw = localStorage.getItem("cart");
-          setCartCount(raw ? JSON.parse(raw)?.length ?? 0 : 0);
+          setCartCount(raw ? (JSON.parse(raw)?.length ?? 0) : 0);
         } catch {
           setCartCount(0);
         }
       }
     },
     [mounted, uid]
-  );
-
-  const fetchStoreFor = useCallback(
-    async (ownerId: string) => {
-      if (!mounted) return;
-      if (fetchingStoreRef.current === ownerId) return;
-      fetchingStoreRef.current = ownerId;
-      try {
-        const { data, error } = await supabase
-          .from("shops")
-          .select("avatar_url")
-          .eq("owner", ownerId)
-          .maybeSingle();
-        if (!error) {
-          setStoreAvatar(data?.avatar_url ?? null);
-          setStoreChecked(true);
-        }
-      } finally {
-        fetchingStoreRef.current = null;
-      }
-    },
-    [mounted]
   );
 
   // Initial auth read
@@ -75,55 +48,21 @@ export default function BottomNav() {
       const nextUid = data.user?.id ?? null;
       setUid(nextUid);
       await refreshCartCount(nextUid);
-
-      if (nextUid) {
-        setStoreChecked(false); // we'll determine it now
-        fetchStoreFor(nextUid);
-      } else {
-        // guest: no store
-        setStoreAvatar(null);
-        setStoreChecked(true);
-      }
     })();
-  }, [mounted, refreshCartCount, fetchStoreFor]);
+  }, [mounted, refreshCartCount]);
 
-  // Auth events — react only to specific events
+  // Auth events
   useEffect(() => {
     if (!mounted) return;
-
     const { data: sub } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         const nextUid = session?.user?.id ?? null;
         setUid(nextUid);
         refreshCartCount(nextUid);
-
-        if (event === "SIGNED_OUT") {
-          // hard reset for guests
-          setStoreAvatar(null);
-          setStoreChecked(true); // known: no store
-          return;
-        }
-
-        if (
-          event === "SIGNED_IN" ||
-          event === "TOKEN_REFRESHED" ||
-          event === "USER_UPDATED"
-        ) {
-          // Keep current avatar to avoid flicker, just ensure we know the state
-          if (nextUid) {
-            setStoreChecked((checked) => checked || false);
-            // Optionally refresh avatar in background (don’t unset while fetching)
-            fetchStoreFor(nextUid);
-          } else {
-            setStoreAvatar(null);
-            setStoreChecked(true);
-          }
-        }
       }
     );
-
     return () => sub.subscription.unsubscribe();
-  }, [mounted, refreshCartCount, fetchStoreFor]);
+  }, [mounted, refreshCartCount]);
 
   // Realtime cart (authed)
   useEffect(() => {
@@ -168,14 +107,12 @@ export default function BottomNav() {
     icon: Icon,
     match,
     badge,
-    image,
   }: {
     href: string;
     label: string;
-    icon?: any;
+    icon: any;
     match: string | string[];
     badge?: number;
-    image?: string | null;
   }) => {
     const isActive = useMemo(() => {
       if (!mounted) return false;
@@ -188,23 +125,20 @@ export default function BottomNav() {
       <Link href={href} className="block">
         <div
           className={clsx(
-            "flex flex-col items-center justify-center gap-1 py-2 text-xs",
-            isActive && "text-ink font-medium"
+            "flex flex-col items-center justify-center gap-1 py-2 text-xs transition-all duration-200",
+            isActive
+              ? "text-terracotta font-semibold   rounded-md"
+              : "text-gray-500 hover:text-ink"
           )}
         >
           <div className="relative">
-            {image ? (
-              <img
-                src={image}
-                alt="Store"
-                className={clsx(
-                  "w-5 h-5 rounded-sm object-cover ring-1 ring-border transition-all",
-                  isActive && "ring-terracotta scale-105"
-                )}
-              />
-            ) : (
-              Icon && <Icon size={20} />
-            )}
+            <Icon
+              size={20}
+              className={clsx(
+                "transition-transform duration-200",
+                isActive && "scale-110"
+              )}
+            />
             {!!badge && (
               <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-[16px] h-4 rounded-sm px-1 bg-terracotta text-white">
                 {badge > 99 ? "99+" : badge}
@@ -217,22 +151,20 @@ export default function BottomNav() {
     );
   };
 
-  // Render the Store tab only when we *know* the state (no flicker)
-  const showStore = mounted && storeChecked && !!uid && !!storeAvatar;
-
   if (!mounted) return null;
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 border-t bg-paper/95 backdrop-blur pb-[env(safe-area-inset-bottom)] bg-white">
-      <ul
-        className={clsx(
-          "max-w-screen-sm mx-auto grid",
-          showStore ? "grid-cols-5" : "grid-cols-4"
-        )}
-      >
+      <ul className="max-w-screen-sm mx-auto grid grid-cols-5">
         <li>
           <Item href="/home" label="Home" match="/home" icon={Home} />
         </li>
+
+        {/* Search / Shop (2nd position) */}
+        <li>
+          <Item href="/search" label="Shop" match={["/search"]} icon={Search} />
+        </li>
+
         <li>
           <Item href="/deals" label="Deals" match="/deals" icon={Tag} />
         </li>
@@ -253,16 +185,6 @@ export default function BottomNav() {
             badge={cartCount || undefined}
           />
         </li>
-        {showStore && (
-          <li>
-            <Item
-              href="/seller"
-              label="Store"
-              match="/seller"
-              image={storeAvatar}
-            />
-          </li>
-        )}
       </ul>
     </nav>
   );
