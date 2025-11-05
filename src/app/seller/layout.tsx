@@ -13,6 +13,7 @@ function cn(...xs: (string | false | undefined)[]) {
 const TABS = [
   { href: "/seller", label: "Dashboard" },
   { href: "/seller/orders", label: "Orders" },
+  { href: "/seller/orders", label: "Orders" },
   { href: "/seller/products", label: "Products" },
   { href: "/seller/customers", label: "Customers" },
   { href: "/seller/analytics", label: "Analytics" },
@@ -24,8 +25,8 @@ export default function SellerLayout({ children }: PropsWithChildren) {
 
   return (
     <div className="max-w-screen-sm mx-auto pb-24">
-      <div className="px-4 pt-4">
-        {/* Route-driven "tabs" */}
+      {/* <div className="px-4 pt-4">
+ 
         <div className="w-full overflow-x-auto">
           <div className="inline-flex min-w-full items-center gap-2 rounded-lg border bg-muted/30 p-1">
             {TABS.map(({ href, label }) => {
@@ -40,7 +41,7 @@ export default function SellerLayout({ children }: PropsWithChildren) {
                   className={cn(
                     "px-4 py-2 text-sm whitespace-nowrap rounded-md transition",
                     active
-                      ? "bg-background shadow text-foreground"
+                      ? "bg-yellow-200 shadow text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -50,9 +51,9 @@ export default function SellerLayout({ children }: PropsWithChildren) {
             })}
           </div>
         </div>
-      </div>
+      </div> */}
 
-      <div className="px-4 pt-4">{children}</div>
+      <div className="p2-4 pt-4">{children}</div>
     </div>
   );
 }

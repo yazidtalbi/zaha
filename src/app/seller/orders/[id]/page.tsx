@@ -1,8 +1,8 @@
 // app/seller/orders/[id]/page.tsx
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -16,6 +16,10 @@ import {
   PackageCheck,
   Clock,
   Ban,
+  ArrowLeft,
+  ArrowRight,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type OrderStatus =
   | "pending"
@@ -62,6 +67,7 @@ type Product = {
   price_mad: number;
   shop_id?: string;
   shop_owner?: string | null;
+  stock?: number | null; // optional
 };
 
 type Order = {
@@ -76,11 +82,11 @@ type Order = {
   product_id: string | null;
   products?: Product | null;
 
-  // ✅ New display fields
+  // ✅ display fields
   personalization?: string | null;
   options?: any | null;
 
-  // Optional quality-of-life columns (safe if missing)
+  // QoL (optional in DB)
   payment_confirmed?: boolean | null;
   tracking_number?: string | null;
   seller_notes?: string | null;
@@ -99,6 +105,15 @@ type OrderEvent = {
   created_at: string;
 };
 
+type FileObj = {
+  name: string;
+  id: string;
+  updated_at: string;
+  created_at: string;
+  last_accessed_at: string;
+  metadata: { size: number } | null;
+};
+
 const STATUS_OPTIONS: OrderStatus[] = [
   "pending",
   "confirmed",
@@ -107,7 +122,6 @@ const STATUS_OPTIONS: OrderStatus[] = [
   "cancelled",
 ];
 
-// Icon for status / timeline
 function statusIcon(s: OrderStatus) {
   switch (s) {
     case "pending":
@@ -128,12 +142,12 @@ function StatusBadge({ status }: { status: OrderStatus }) {
     status === "pending"
       ? "secondary"
       : status === "confirmed"
-      ? "outline"
-      : status === "shipped"
-      ? "default"
-      : status === "delivered"
-      ? "success"
-      : "destructive";
+        ? "outline"
+        : status === "shipped"
+          ? "default"
+          : status === "delivered"
+            ? "success"
+            : "destructive";
   return (
     <Badge variant={variant as any} className="capitalize">
       {status}
@@ -142,6 +156,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 export default function SellerOrderDetails() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const orderId = useMemo(
     () => (params?.id ? String(params.id) : ""),
@@ -152,38 +167,61 @@ export default function SellerOrderDetails() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Payment confirm sheet
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
 
-  async function confirmPaymentOneWay() {
-    if (!order || paymentConfirmed) return;
-    setSavingPayment(true);
-    const { error } = await supabase
-      .from("orders")
-      .update({ payment_confirmed: true })
-      .eq("id", order.id);
-
-    setSavingPayment(false);
-
-    if (error) {
-      toast.error("Couldn’t mark as paid", { description: error.message });
-      return;
-    }
-    setPaymentConfirmed(true); // lock
-    setShowPaymentSheet(false);
-    insertEvent?.("payment_confirmed", { value: true }); // if you have events table
-    toast.success("Payment marked as confirmed ✅");
-  }
-
-  // enrichments
+  // Timeline, buyer stats
   const [events, setEvents] = useState<OrderEvent[] | null>(null);
   const [buyerOrdersCount, setBuyerOrdersCount] = useState<number | null>(null);
 
-  // locals for editable fields
+  // Editable locals
   const [notes, setNotes] = useState("");
   const [tracking, setTracking] = useState("");
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+
+  // Printing: choose invoice vs label
+  const [printMode, setPrintMode] = useState<"invoice" | "label">("invoice");
+
+  // Attachments (Supabase Storage: order_proofs)
+  const [attachments, setAttachments] = useState<FileObj[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  // Optional stock decrement
+  const [decrementOnShip, setDecrementOnShip] = useState(true);
+
+  // Prev/next
+  const [prevId, setPrevId] = useState<string | null>(null);
+  const [nextId, setNextId] = useState<string | null>(null);
+
   const saveNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function safeUUID(): string {
+    // Prefer secure, modern APIs
+    try {
+      if (typeof crypto !== "undefined") {
+        // Newer browsers (secure context)
+        if (typeof (crypto as any).randomUUID === "function") {
+          return (crypto as any).randomUUID();
+        }
+        // Fallback: v4 using getRandomValues
+        if (typeof crypto.getRandomValues === "function") {
+          const b = new Uint8Array(16);
+          crypto.getRandomValues(b);
+          // Per RFC 4122
+          b[6] = (b[6] & 0x0f) | 0x40;
+          b[8] = (b[8] & 0x3f) | 0x80;
+          const toHex = (n: number) => n.toString(16).padStart(2, "0");
+          const h = Array.from(b, toHex).join("");
+          return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+        }
+      }
+    } catch {}
+    // Last-ditch (not RFC, but stable enough for React keys / optimistic UI)
+    return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   // Load data
   useEffect(() => {
@@ -210,8 +248,29 @@ export default function SellerOrderDetails() {
       setNotes(o?.seller_notes ?? "");
       setTracking(o?.tracking_number ?? "");
       setPaymentConfirmed(Boolean(o?.payment_confirmed));
+      setAddress(o?.address ?? "");
+      setCity(o?.city ?? "");
 
-      // Load buyer history if phone available
+      // Prev/next ids (by created_at)
+      if (o) {
+        const { data: prev } = await supabase
+          .from("orders")
+          .select("id")
+          .gt("created_at", o.created_at)
+          .order("created_at", { ascending: true })
+          .limit(1);
+        setPrevId(prev?.[0]?.id ?? null);
+
+        const { data: next } = await supabase
+          .from("orders")
+          .select("id")
+          .lt("created_at", o.created_at)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        setNextId(next?.[0]?.id ?? null);
+      }
+
+      // Buyer history
       if (o?.phone) {
         const { count, error: countErr } = await supabase
           .from("orders")
@@ -220,7 +279,7 @@ export default function SellerOrderDetails() {
         if (!countErr) setBuyerOrdersCount(count ?? 0);
       }
 
-      // Load timeline if table exists
+      // Timeline (optional)
       try {
         const { data: ev, error: evErr } = await supabase
           .from("order_events")
@@ -233,33 +292,46 @@ export default function SellerOrderDetails() {
         setEvents(null);
       }
 
+      // Storage attachments
+      try {
+        const { data: files } = await supabase.storage
+          .from("order_proofs")
+          .list(orderId, {
+            limit: 50,
+            offset: 0,
+            sortBy: { column: "created_at", order: "desc" },
+          });
+        setAttachments((files as any) ?? []);
+      } catch {
+        setAttachments([]);
+      }
+
       setLoading(false);
     })();
   }, [orderId]);
 
-  async function insertEvent(
-    type: OrderEvent["type"],
-    payload: Record<string, any> = {}
-  ) {
-    try {
-      await supabase
-        .from("order_events")
-        .insert({ order_id: orderId, type, payload });
-      // best-effort refresh
-      setEvents((prev) => [
-        ...(prev ?? []),
-        {
-          id: crypto.randomUUID(),
-          order_id: orderId,
-          type,
-          payload,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-    } catch {
-      // Table may not exist; silently ignore
-    }
-  }
+  const insertEvent = useCallback(
+    async (type: OrderEvent["type"], payload: Record<string, any> = {}) => {
+      try {
+        await supabase
+          .from("order_events")
+          .insert({ order_id: orderId, type, payload });
+        setEvents((prev) => [
+          ...(prev ?? []),
+          {
+            id: safeUUID(),
+            order_id: orderId,
+            type,
+            payload,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      } catch {
+        // ignore if table does not exist
+      }
+    },
+    [orderId]
+  );
 
   async function updateStatus(next: OrderStatus) {
     if (!order) return;
@@ -281,6 +353,17 @@ export default function SellerOrderDetails() {
       });
       setSaving(false);
       return;
+    }
+
+    // Optional: decrement stock when marking as shipped
+    if (next === "shipped" && decrementOnShip && order.products?.id) {
+      await supabase.rpc?.("noop"); // harmless attempt to keep types happy if no rpc
+      await supabase
+        .from("products")
+        .update({
+          stock: Math.max(0, (order.products.stock ?? 0) - (order.qty ?? 0)),
+        })
+        .eq("id", order.products.id);
     }
 
     setOrder((o) => (o ? { ...o, status: data.status as OrderStatus } : o));
@@ -325,6 +408,18 @@ export default function SellerOrderDetails() {
     }
   }
 
+  // Editable address/city autosave
+  useEffect(() => {
+    if (!order) return;
+    const t = setTimeout(async () => {
+      await supabase
+        .from("orders")
+        .update({ address, city })
+        .eq("id", order.id);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [address, city, order]);
+
   // Debounced notes autosave
   useEffect(() => {
     if (!order) return;
@@ -343,7 +438,31 @@ export default function SellerOrderDetails() {
     return () => {
       if (saveNotesTimer.current) clearTimeout(saveNotesTimer.current);
     };
-  }, [notes, order]);
+  }, [notes, order, insertEvent]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!order) return;
+      const k = e.key.toLowerCase();
+      if (k === "p") {
+        window.print();
+      } else if (k === "c" && order.status === "pending") {
+        updateStatus("confirmed");
+      } else if (k === "s" && order.status === "confirmed") {
+        updateStatus("shipped");
+      } else if (k === "d" && order.status === "shipped") {
+        updateStatus("delivered");
+      } else if (
+        k === "x" &&
+        (order.status === "pending" || order.status === "confirmed")
+      ) {
+        updateStatus("cancelled");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [order]);
 
   if (!orderId) return <main className="p-4">Invalid order id.</main>;
   if (loading) return <main className="p-4">Loading…</main>;
@@ -353,31 +472,161 @@ export default function SellerOrderDetails() {
   const phoneDigits = order.phone?.replace(/\D/g, "");
   const whatsappLink = phoneDigits
     ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
-        `Salam! 👋 I'm contacting you about your order "${
-          p?.title ?? "—"
-        }" (Order ID: ${order.id}).`
+        `Salam! 👋 Your order "${p?.title ?? "—"}" (ID: ${order.id}) — how can I help?`
+      )}`
+    : null;
+
+  const whatsappShip = phoneDigits
+    ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+        `Good news! Your order "${p?.title ?? "—"}" has been shipped. Tracking: ${order.tracking_number ?? "-"}`
+      )}`
+    : null;
+  const whatsappDeliver = phoneDigits
+    ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+        `Hello! Your order "${p?.title ?? "—"}" is out for delivery / delivered. Thank you!`
       )}`
     : null;
 
   const trackingDeepLink = tracking
-    ? `https://www.google.com/search?q=${encodeURIComponent(
-        "track " + tracking
-      )}`
+    ? `https://www.google.com/search?q=${encodeURIComponent("track " + tracking)}`
     : null;
 
   const nextAction: { label: string; to: OrderStatus } | null =
     order.status === "pending"
       ? { label: "Mark as confirmed", to: "confirmed" }
       : order.status === "confirmed"
-      ? { label: "Mark as shipped", to: "shipped" }
-      : order.status === "shipped"
-      ? { label: "Mark as delivered", to: "delivered" }
-      : null;
+        ? { label: "Mark as shipped", to: "shipped" }
+        : order.status === "shipped"
+          ? { label: "Mark as delivered", to: "delivered" }
+          : null;
+
+  // Get public URL for storage file
+  function filePublicURL(name: string) {
+    const { data } = supabase.storage
+      .from("order_proofs")
+      .getPublicUrl(`${order.id}/${name}`);
+    return data.publicUrl;
+  }
+
+  async function uploadFiles(files: FileList | null) {
+    if (!files || !files.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const key = `${order.id}/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage
+          .from("order_proofs")
+          .upload(key, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+        if (error) throw error;
+      }
+      const { data: list } = await supabase.storage
+        .from("order_proofs")
+        .list(order.id, {
+          limit: 50,
+          offset: 0,
+          sortBy: { column: "created_at", order: "desc" },
+        });
+      setAttachments((list as any) ?? []);
+      toast.success("Files uploaded");
+    } catch (e: any) {
+      toast.error("Upload failed", { description: e?.message });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteFile(name: string) {
+    try {
+      await supabase.storage
+        .from("order_proofs")
+        .remove([`${order.id}/${name}`]);
+      setAttachments((xs) => xs.filter((f) => f.name !== name));
+      toast.success("Attachment deleted");
+    } catch (e: any) {
+      toast.error("Delete failed", { description: e?.message });
+    }
+  }
 
   return (
-    <main className="pb-28 md:pb-6 p-4 mx-auto max-w-3xl space-y-6">
+    <main className="pb-28 md:pb-6 p-4 mx-auto max-w-3xl space-y-6 print:bg-white">
+      {/* Nav row */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/seller/orders")}
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" /> Orders
+          </Button>
+          <div className="hidden sm:flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!prevId}
+              onClick={() => prevId && router.push(`/seller/orders/${prevId}`)}
+              title="Previous (newer)"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!nextId}
+              onClick={() => nextId && router.push(`/seller/orders/${nextId}`)}
+              title="Next (older)"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Select
+            value={order.status}
+            onValueChange={(v) => updateStatus(v as OrderStatus)}
+            disabled={saving}
+          >
+            <SelectTrigger className="w-[150px] capitalize">
+              <SelectValue placeholder="Change status" />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={printMode}
+            onValueChange={(v) => setPrintMode(v as any)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="invoice">Print invoice</SelectItem>
+              <SelectItem value="label">Print shipping label</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => window.print()}
+            title="Print (P)"
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 not-print">
         <div>
           <h1 className="text-xl font-semibold">Order details</h1>
 
@@ -402,30 +651,6 @@ export default function SellerOrderDetails() {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={order.status} />
-          <Select
-            value={order.status}
-            onValueChange={(v) => updateStatus(v as OrderStatus)}
-            disabled={saving}
-          >
-            <SelectTrigger className="w-[150px] capitalize">
-              <SelectValue placeholder="Change status" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => window.print()}
-            title="Print invoice"
-          >
-            <Printer className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
@@ -451,19 +676,24 @@ export default function SellerOrderDetails() {
             <div className="text-sm text-muted-foreground">
               Qty {order.qty} · Total MAD {order.amount_mad}
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex items-center gap-2">
               <Link
                 href={`/product/${p?.id ?? ""}`}
                 className="text-xs underline"
               >
                 View product
               </Link>
+              {typeof p?.stock === "number" && (
+                <span className="text-xs text-muted-foreground">
+                  · Stock: {p.stock}
+                </span>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* ✅ Personalization + Options */}
+      {/* Customization */}
       {(order.personalization || order.options) && (
         <Card>
           <CardHeader className="pb-2">
@@ -480,7 +710,6 @@ export default function SellerOrderDetails() {
                 </div>
               </div>
             ) : null}
-
             {order.options ? (
               <div>
                 <Label className="text-xs text-muted-foreground">Options</Label>
@@ -516,7 +745,7 @@ export default function SellerOrderDetails() {
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
+                          <MessageCircle className="h-4 w-4 mr-1" /> Chat
                         </a>
                       </Button>
                     )}
@@ -537,18 +766,21 @@ export default function SellerOrderDetails() {
 
             <div className="space-y-1">
               <Label>City</Label>
-              <Input value={order.city ?? "—"} readOnly />
+              <Input value={city} onChange={(e) => setCity(e.target.value)} />
             </div>
 
             <div className="space-y-1 sm:col-span-2">
               <Label>Address</Label>
               <div className="flex items-center gap-2">
-                <Input value={order.address ?? "—"} readOnly />
+                <Input
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => {
-                    navigator.clipboard.writeText(order.address ?? "");
+                    navigator.clipboard.writeText(address);
                     toast.success("Address copied");
                   }}
                 >
@@ -569,8 +801,6 @@ export default function SellerOrderDetails() {
             </div>
             <div className="flex items-center gap-2">
               <Label className="text-sm">Payment confirmed</Label>
-
-              {/* One-way toggle: opens Sheet; once true it's disabled */}
               <Switch
                 checked={paymentConfirmed}
                 disabled={paymentConfirmed || savingPayment}
@@ -579,7 +809,6 @@ export default function SellerOrderDetails() {
                 }}
                 aria-label="Toggle payment confirmed"
               />
-
               <span className="ml-2 text-xs text-muted-foreground">
                 One-way action — cannot be undone.
               </span>
@@ -592,11 +821,9 @@ export default function SellerOrderDetails() {
                   <SheetTitle>Confirm payment?</SheetTitle>
                   <SheetDescription>
                     This will mark the order as <strong>paid</strong>. This
-                    action is <strong>permanent</strong> and cannot be reversed.
+                    action is permanent.
                   </SheetDescription>
                 </SheetHeader>
-
-                {/* Optional context summary */}
                 <div className="mt-3 text-sm space-y-1">
                   <div>
                     <span className="text-muted-foreground">Order ID:</span>{" "}
@@ -615,7 +842,6 @@ export default function SellerOrderDetails() {
                     </div>
                   )}
                 </div>
-
                 <SheetFooter className="mt-4">
                   <SheetClose asChild>
                     <Button variant="outline" disabled={savingPayment}>
@@ -623,8 +849,25 @@ export default function SellerOrderDetails() {
                     </Button>
                   </SheetClose>
                   <Button
-                    onClick={confirmPaymentOneWay}
-                    disabled={savingPayment}
+                    onClick={async () => {
+                      if (!order || paymentConfirmed) return;
+                      setSavingPayment(true);
+                      const { error } = await supabase
+                        .from("orders")
+                        .update({ payment_confirmed: true })
+                        .eq("id", order.id);
+                      setSavingPayment(false);
+                      if (error) {
+                        toast.error("Couldn’t mark as paid", {
+                          description: error.message,
+                        });
+                        return;
+                      }
+                      setPaymentConfirmed(true);
+                      setShowPaymentSheet(false);
+                      await insertEvent("payment_confirmed", { value: true });
+                      toast.success("Payment marked as confirmed ✅");
+                    }}
                   >
                     {savingPayment ? "Saving…" : "Yes, mark as paid"}
                   </Button>
@@ -667,8 +910,37 @@ export default function SellerOrderDetails() {
               </Button>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Add tracking for your courier; we’ll keep it for your records.
+
+          {/* Decrement stock toggle */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="dec-on-ship"
+              checked={decrementOnShip}
+              onCheckedChange={(v) => setDecrementOnShip(Boolean(v))}
+            />
+            <Label htmlFor="dec-on-ship" className="text-sm">
+              Decrease product stock when marking as “Shipped”.
+            </Label>
+          </div>
+
+          {/* WhatsApp quick templates */}
+          <div className="flex flex-wrap gap-2">
+            {whatsappShip && (
+              <Button asChild variant="outline">
+                <a href={whatsappShip} target="_blank" rel="noreferrer">
+                  <MessageCircle className="h-4 w-4 mr-1" /> Send shipping
+                  message
+                </a>
+              </Button>
+            )}
+            {whatsappDeliver && (
+              <Button asChild variant="outline">
+                <a href={whatsappDeliver} target="_blank" rel="noreferrer">
+                  <MessageCircle className="h-4 w-4 mr-1" /> Send delivery
+                  message
+                </a>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -688,6 +960,80 @@ export default function SellerOrderDetails() {
           <div className="text-xs text-muted-foreground">
             Autosaves after you stop typing.
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Attachments */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Attachments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 rounded-full border px-3 py-2 bg-white hover:bg-sand cursor-pointer">
+              <Upload className="h-4 w-4" />
+              <span className="text-sm">
+                {uploading ? "Uploading…" : "Upload files"}
+              </span>
+              <input
+                type="file"
+                className="hidden"
+                multiple
+                onChange={(e) => uploadFiles(e.target.files)}
+              />
+            </label>
+            <div className="text-xs text-muted-foreground">
+              JPG/PNG/PDF — stored in <code>order_proofs</code>
+            </div>
+          </div>
+
+          {!attachments.length ? (
+            <div className="text-sm text-muted-foreground">
+              No attachments yet.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {attachments.map((f) => {
+                const url = filePublicURL(f.name);
+                const isImg = /\.(png|jpe?g|gif|webp)$/i.test(f.name);
+                return (
+                  <li
+                    key={f.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border p-2 bg-white"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {isImg ? (
+                        <img
+                          src={url}
+                          alt={f.name}
+                          className="w-10 h-10 rounded object-cover border"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded grid place-items-center border text-xs">
+                          PDF
+                        </div>
+                      )}
+                      <a
+                        href={url}
+                        target="_blank"
+                        className="truncate underline"
+                      >
+                        {f.name}
+                      </a>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteFile(f.name)}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
 
@@ -714,14 +1060,12 @@ export default function SellerOrderDetails() {
           </CardContent>
         </Card>
 
-        {/* Activity timeline (statuses + payment) */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Activity timeline</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {/* Always show creation */}
               <li className="flex items-start gap-2 text-sm">
                 <Clock className="h-4 w-4 mt-0.5" />
                 <div>
@@ -732,7 +1076,6 @@ export default function SellerOrderDetails() {
                 </div>
               </li>
 
-              {/* Status change + payment confirmed events */}
               {events && events.length > 0 ? (
                 events
                   .filter(
@@ -782,15 +1125,8 @@ export default function SellerOrderDetails() {
         </Card>
       </div>
 
-      {/* Back link */}
-      <div className="pt-2">
-        <Link href="/seller/orders" className="text-sm underline">
-          Back to orders
-        </Link>
-      </div>
-
       {/* Sticky mobile actions */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3">
+      <div className="fixed bottom-0 left-0 right-0 md:hidden border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3 not-print">
         <div className="flex items-center gap-2">
           {phoneDigits && (
             <Button asChild variant="outline" className="flex-1">
@@ -817,6 +1153,87 @@ export default function SellerOrderDetails() {
             <span className="ml-2">{nextAction.label}</span>
           </Button>
         )}
+      </div>
+
+      {/* —— PRINT TEMPLATES —— */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            margin: 16mm;
+          }
+          .not-print {
+            display: none !important;
+          }
+          body {
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* Invoice */}
+      <div
+        className={printMode === "invoice" ? "print:block" : "print:hidden"}
+        style={{ display: "none" }}
+      >
+        <h2 style={{ fontSize: 20, marginBottom: 8 }}>Invoice</h2>
+        <div style={{ fontSize: 12, marginBottom: 12 }}>
+          <div>
+            <b>Order ID:</b> {order.id}
+          </div>
+          <div>
+            <b>Date:</b> {new Date(order.created_at).toLocaleString()}
+          </div>
+          <div>
+            <b>Status:</b> {order.status}
+          </div>
+        </div>
+        <hr />
+        <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Ship To</div>
+            <div>{order.phone ?? "-"}</div>
+            <div>{address || "-"}</div>
+            <div>{city || "-"}</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Items</div>
+            <div>{p?.title ?? "Product"}</div>
+            <div>Qty {order.qty}</div>
+            <div>Total MAD {order.amount_mad}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Shipping Label */}
+      <div
+        className={printMode === "label" ? "print:block" : "print:hidden"}
+        style={{ display: "none" }}
+      >
+        <div style={{ border: "1px dashed #000", padding: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+            SHIPPING LABEL
+          </div>
+          <div style={{ fontSize: 12 }}>
+            <div>
+              <b>Order:</b> {order.id}
+            </div>
+            <div>
+              <b>To:</b> {address || "-"}, {city || "-"}
+            </div>
+            <div>
+              <b>Phone:</b> {order.phone || "-"}
+            </div>
+            <div>
+              <b>Item:</b> {p?.title ?? "-"}
+            </div>
+            <div>
+              <b>Qty:</b> {order.qty}
+            </div>
+            <div>
+              <b>Tracking:</b> {tracking || "-"}
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );

@@ -162,8 +162,54 @@ export default function Header() {
     router.push("/login");
   };
 
+  function MenuSection({
+    title,
+    children,
+  }: {
+    title: string;
+    children: React.ReactNode;
+  }) {
+    return (
+      <section className="px-2 py-2">
+        <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {title}
+        </div>
+        <nav className="mt-1 space-y-1">{children}</nav>
+      </section>
+    );
+  }
+
+  // If you already have MenuItem, replace with this enhanced version (keeps your API).
+  function MenuItem({
+    href,
+    icon,
+    label,
+    highlight = false,
+  }: {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+    highlight?: boolean;
+  }) {
+    return (
+      <Link
+        href={href}
+        className={[
+          "flex items-center justify-between rounded-md px-3 py-2 transition",
+          highlight ? "bg-sand hover:bg-sand/80" : "hover:bg-sand",
+        ].join(" ")}
+      >
+        <div className="flex items-center gap-3">
+          {icon}
+          <span className="font-medium">{label}</span>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
+    );
+  }
+
   return (
-    <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-paper/60">
+    <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-paper/60 ">
       <div className="pt-[env(safe-area-inset-top)]" />
       <div className="mx-auto max-w-screen-sm px-3 py-2">
         <div className="grid grid-cols-3 items-center">
@@ -171,18 +217,30 @@ export default function Header() {
           <div className="justify-self-start">
             <Sheet>
               <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  aria-label="Open menu"
+                <button
+                  aria-label="Open account menu"
+                  className="rounded-full p-1.5 outline-none focus:outline-none focus:ring-ink/20"
                 >
-                  <Menu className="h-6 w-6 text-ink" strokeWidth={1.75} />
-                </Button>
+                  <Avatar className="h-10 w-10 ring-1 ring-black/5">
+                    {avatarUrl ? (
+                      <AvatarImage
+                        src={avatarUrl}
+                        alt={displayName}
+                        referrerPolicy="no-referrer"
+                        onError={() => setAvatarUrl(null)}
+                      />
+                    ) : (
+                      <AvatarFallback className="text-sm">
+                        {initials}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                </button>
               </SheetTrigger>
 
-              <SheetContent side="left" className="w-[88vw] sm:w-96 p-0">
-                <div className="px-4 pt-5 pb-4">
+              <SheetContent side="left" className="w-[75vw] sm:w-96 p-0">
+                {/* Header / Profile */}
+                <div className="px-4 pt-5 pb-4 bg-gradient-to-b from-sand/60 to-transparent">
                   <SheetHeader className="items-start">
                     <SheetTitle className="sr-only">Account menu</SheetTitle>
                   </SheetHeader>
@@ -195,7 +253,7 @@ export default function Header() {
                           src={avatarUrl}
                           alt={displayName}
                           referrerPolicy="no-referrer"
-                          onError={() => setAvatarUrl(null)} // fallback if broken
+                          onError={() => setAvatarUrl(null)}
                         />
                       ) : (
                         <AvatarFallback className="text-sm">
@@ -227,7 +285,7 @@ export default function Header() {
                   </div>
 
                   {/* Buyer / Seller segmented buttons */}
-                  <div className="mt-4 flex items-center gap-3">
+                  {/* <div className="mt-4 flex items-center gap-3">
                     <Button
                       variant={role === "buyer" ? "default" : "outline"}
                       className="rounded-full px-6"
@@ -242,13 +300,26 @@ export default function Header() {
                     >
                       Seller
                     </Button>
+                  </div> */}
+
+                  {/* Prominent Switch-to-Seller CTA */}
+                  <div className="mt-4">
+                    <Link
+                      href={uid ? "/seller" : "/login?next=%2Fseller"}
+                      className="block "
+                    >
+                      <Button
+                        className=" rounded-full h-10 bg-terracotta"
+                        variant="default"
+                      >
+                        Switch to Seller
+                      </Button>
+                    </Link>
                   </div>
                 </div>
 
-                <Separator />
-
-                {/* Menu items */}
-                <nav className="px-2 py-2">
+                {/* Account section */}
+                <MenuSection title="Account">
                   <MenuItem
                     href={uid ? "/profile" : "/login"}
                     icon={<User2 className="h-5 w-5" />}
@@ -260,20 +331,27 @@ export default function Header() {
                     label="My Orders"
                   />
                   <MenuItem
-                    href={uid ? "/seller" : "/login"}
-                    icon={<Store className="h-5 w-5" />}
-                    label="My Store"
-                  />
-                  <MenuItem
                     href="/settings"
                     icon={<SettingsIcon className="h-5 w-5" />}
                     label="Settings"
                   />
-                </nav>
+                </MenuSection>
 
                 <Separator />
 
-                {/* Logout */}
+                {/* Seller section (My Store separated) */}
+                <MenuSection title="Seller">
+                  <MenuItem
+                    href={uid ? "/seller" : "/login?next=%2Fseller"}
+                    icon={<Store className="h-5 w-5" />}
+                    label="Dashboard"
+                    highlight
+                  />
+                </MenuSection>
+
+                <Separator />
+
+                {/* Logout / Login */}
                 <div className="px-2 py-3">
                   {uid ? (
                     <button
@@ -313,15 +391,15 @@ export default function Header() {
           </div>
 
           {/* Right: Alerts */}
-          <div className="justify-self-end">
+          <div className="justify-self-end mr-2">
             <Link href="/notifications" aria-label="Notifications">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-11 w-11 rounded-full flex items-center justify-center"
-              >
-                <Bell className="h-7 w-7 text-ink" strokeWidth={1.75} />
-              </Button>
+              <button className="flex items-center justify-center h-8 w-8 rounded-ful  transition  ">
+                <Bell
+                  className="h-5 w-5 text-ink"
+                  strokeWidth={2.2}
+                  color="gray"
+                />
+              </button>
             </Link>
           </div>
         </div>
