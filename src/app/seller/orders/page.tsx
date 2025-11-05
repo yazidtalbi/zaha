@@ -976,7 +976,7 @@ Options: ${opts}
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
-                  <label className="pt-1">
+                  {/* <label className="pt-1">
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -990,7 +990,7 @@ Options: ${opts}
                       }
                       className="accent-terracotta h-4 w-4"
                     />
-                  </label>
+                  </label> */}
 
                   <div className="w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
                     {img ? (
@@ -1008,16 +1008,22 @@ Options: ${opts}
                   </div>
 
                   <div className="flex-1 min-w-0">
+                    {/* Top row: ID at left, status at right */}
                     <div className="flex items-center justify-between gap-2">
                       <Link
                         href={`/seller/orders/${o.id}`}
-                        className="font-semibold truncate hover:underline"
-                        title={o.products?.title ?? "Order"}
+                        className="text-sm font-medium underline decoration-ink/30 hover:decoration-ink"
+                        title={`Order #${o.id}`}
                       >
-                        {o.products?.title ?? "Order"}
+                        #{o.id.slice(0, 6)}
                       </Link>
                       <StatusBadge status={o.status} />
                     </div>
+
+                    {/* Title */}
+                    <h4 className="mt-0.5 font-semibold truncate">
+                      {o.products?.title ?? "Order"}
+                    </h4>
 
                     {/* Meta line */}
                     <div className="mt-0.5 text-xs text-ink/70 flex items-center gap-2">
@@ -1060,9 +1066,7 @@ Options: ${opts}
                           <button
                             onClick={async () => {
                               await navigator.clipboard.writeText(
-                                `${o.address ?? ""}${
-                                  o.city ? ", " + o.city : ""
-                                }`
+                                `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
                               );
                               toast.success("Address copied");
                             }}
@@ -1086,29 +1090,32 @@ Options: ${opts}
                       )}
                     </div>
 
-                    {/* Personalization */}
+                    {/* —— separator before personalization/options —— */}
+                    <div className="my-3 h-px bg-black/5" />
+
+                    {/* With personalization (below image + details) */}
                     {o.personalization ? (
-                      <section className="mt-3">
-                        <h4 className="text-xs font-semibold text-ink/70 mb-1">
+                      <section className="mb-2">
+                        <h5 className="text-xs font-semibold text-ink/70 mb-1">
                           With personalization
-                        </h4>
+                        </h5>
                         <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
                           {o.personalization}
                         </div>
                       </section>
                     ) : null}
 
-                    {/* Options */}
+                    {/* Options (below as well) */}
                     {o.options ? (
-                      <section className="mt-3">
-                        <h4 className="text-xs font-semibold text-ink/70 mb-1">
+                      <section>
+                        <h5 className="text-xs font-semibold text-ink/70 mb-1">
                           Options
-                        </h4>
+                        </h5>
                         <OptionsList options={o.options} />
                       </section>
                     ) : null}
 
-                    {/* Status controls */}
+                    {/* Status controls (keep as-is below everything) */}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {(
                         [
