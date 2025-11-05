@@ -58,6 +58,7 @@ import {
   Tag,
   CornerDownRight,
 } from "lucide-react";
+import DashboardHeader from "@/components/DashboardHeader";
 
 function ProductsHeaderCompact({
   counts,
@@ -127,15 +128,19 @@ function ProductsHeaderCompact({
   return (
     <header className="mb-3">
       {/* Title */}
-      <div className=" ">
-        {" "}
-        <p className="text-neutral-400 text-sm">Najoua Shop</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
-        <FabAddNew navHeight={80} />
+
+      <div className="mb-6 relative">
+        <DashboardHeader
+          title="Products"
+          subtitle="Add, edit, organize your products"
+          withDivider={false}
+          withBackButton={false}
+        />
       </div>
 
+      <FabAddNew navHeight={80} className="animate-appear" />
       {/* Big pill search */}
-      <div className="mt-8 relative">
+      <div className=" relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-ink/50" />
         <Input
           ref={inputRef}

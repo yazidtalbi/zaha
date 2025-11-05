@@ -35,8 +35,6 @@ import {
   MessageSquare,
   Search,
   Sparkles,
-  CornerDownRight,
-  ChevronDown,
 } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
 
@@ -104,7 +102,6 @@ function canTransition(from: Order["status"], to: Order["status"]) {
   return allowed[from]?.includes(to) ?? false;
 }
 
-/* ───────────────── Option Chips (small pills) ───────────────── */
 function OptionChips({ options }: { options: any }) {
   if (!options) return null;
 
@@ -204,7 +201,7 @@ function OrdersHeaderCompact({
 
   const pill = (active: boolean) =>
     [
-      "px-4 h-8 rounded-full text-sm inline-flex items-center gap-2 shrink-0",
+      "px-4 h-8 rounded-full  text-sm inline-flex items-center gap-2 shrink-0",
       active ? "bg-terracotta text-white" : "bg-white text-ink/90 border",
     ].join(" ");
 
@@ -246,7 +243,7 @@ function OrdersHeaderCompact({
         )}
       </div>
 
-      {/* ROW 1: Status | Sort | Range …… [Group by product toggle] */}
+      {/* ROW 1: Status + | + Range ……… [Group by product] */}
       <div className="mt-3 -mx-4 px-4">
         <div className="flex items-center gap-2">
           {/* Status */}
@@ -311,14 +308,13 @@ function OrdersHeaderCompact({
               ))}
             </SelectContent>
           </Select>
-
           {/* Vertical separator */}
-          <div className="mx-1 h-6 w-px bg-black/30 border-l" />
-
-          {/* Sort */}
+          <div className="mx-1 h-6 w-px bg-black/10" />
+          {/* Sort dropdown (like "All Statuses") */}
           <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
             <SelectTrigger
               className={pill(false) + " w-auto inline-flex shadow-none"}
+              aria-label="Sort by"
             >
               <SelectValue>
                 {sort === "new"
@@ -330,11 +326,32 @@ function OrdersHeaderCompact({
                       : "Amount ↑"}
               </SelectValue>
             </SelectTrigger>
+
             <SelectContent className="rounded-xl min-w-[180px] py-1">
-              <SelectItem value="new">Newest</SelectItem>
-              <SelectItem value="old">Oldest</SelectItem>
-              <SelectItem value="amount_desc">Amount ↓</SelectItem>
-              <SelectItem value="amount_asc">Amount ↑</SelectItem>
+              <SelectItem value="new" className="py-2">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-ink/30" />
+                  <span className="text-sm">Newest</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="old" className="py-2">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-ink/30" />
+                  <span className="text-sm">Oldest</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="amount_desc" className="py-2">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-ink/30" />
+                  <span className="text-sm">Amount ↓</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="amount_asc" className="py-2">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-ink/30" />
+                  <span className="text-sm">Amount ↑</span>
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
 
@@ -356,20 +373,52 @@ function OrdersHeaderCompact({
           <div className="flex-1" />
         </div>
       </div>
-      <div className="flex justify-between items-center mt-6">
-        {/* Tiny total */}
-        <div className="  flex items-center justify-between gap-2">
-          <p className="text-xs text-ink/70">{counts.total} total</p>
-        </div>
 
-        {/* Group by product toggle */}
+      {/* ROW 2: Sorting pills */}
+      {/* <div className="mt-2 -mx-4 px-4">
+        <div className="flex items-center gap-2">
+          <button
+            className={pill(sort === "new")}
+            onClick={() => setSort("new")}
+          >
+            Newest
+          </button>
+          <button
+            className={pill(sort === "old")}
+            onClick={() => setSort("old")}
+          >
+            Oldest
+          </button>
+          <button
+            className={pill(sort === "amount_desc")}
+            onClick={() => setSort("amount_desc")}
+          >
+            Amount ↓
+          </button>
+          <button
+            className={pill(sort === "amount_asc")}
+            onClick={() => setSort("amount_asc")}
+          >
+            Amount ↑
+          </button>
+        </div>
+      </div> */}
+
+      {/* Tiny total */}
+      <div className="mt-6 flex items-center justify-between gap-2">
+        <p className="text-xs text-ink/70">{counts.total} total</p>
+      </div>
+
+      {/* Group by product */}
+      <div className="mt-2 w-full justify-end">
+        {" "}
         <button
           className={pill(groupByProduct)}
           onClick={() => setGroupByProduct(!groupByProduct)}
           aria-pressed={groupByProduct}
         >
           <Sparkles className="h-4 w-4" />
-          Group by: Product
+          Group by product
         </button>
       </div>
     </header>
@@ -400,9 +449,6 @@ function OrdersInner() {
   const PAGE_SIZE = 12;
 
   const [groupByProduct, setGroupByProduct] = useState(false);
-
-  // track collapsible groups (open/closed)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // search debounced (surfaced in header)
   const [qLive, setQLive] = useState("");
@@ -626,6 +672,15 @@ Options: ${opts}
     return filteredVisible.slice(0, end);
   }, [filteredVisible, page]);
 
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function toggleSelectVisible() {
     const visible = groupByProduct ? filteredVisible : paged;
     setSelected((prev) => {
@@ -665,7 +720,7 @@ Options: ${opts}
       g.totalAmount += o.amount_mad || 0;
       map.set(productId, g);
     }
-    // sort groups by most orders
+    // sort groups by most orders (tweak to taste)
     return Array.from(map.values()).sort(
       (a, b) => b.orders.length - a.orders.length
     );
@@ -763,206 +818,150 @@ Options: ${opts}
         setGroupByProduct={setGroupByProduct}
       />
 
-      {/* Bulk bar: hidden when grouped */}
-      {/* {!groupByProduct && (
-        <div className="mt-2 flex items-center gap-2">
+      {/* Bulk bar (cleaner styles) */}
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          variant="outline"
+          className="rounded-full h-8 px-3"
+          onClick={toggleSelectVisible}
+        >
+          {selectedCount ? "Toggle visible selection" : "Select visible"}
+        </Button>
+        <Button
+          variant="outline"
+          className="rounded-full h-8 px-3"
+          onClick={() => setSelected(new Set())}
+        >
+          Clear
+        </Button>
+        <div className="ml-auto flex items-center gap-2">
           <Button
             variant="outline"
             className="rounded-full h-8 px-3"
-            onClick={toggleSelectVisible}
+            onClick={() => exportCSV(false)}
           >
-            {selectedCount ? "Toggle visible selection" : "Select visible"}
+            <Download className="h-4 w-4 mr-2" />
+            Export filtered
           </Button>
           <Button
             variant="outline"
-            className="rounded-full h-8 px-3"
-            onClick={() => setSelected(new Set())}
+            className="rounded-full h-8 px-3 disabled:opacity-50"
+            onClick={() => exportCSV(true)}
+            disabled={!selectedCount}
           >
-            Clear
+            <Download className="h-4 w-4 mr-2" />
+            Export selected ({selectedCount})
           </Button>
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3"
-              onClick={() => exportCSV(false)}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export filtered
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3 disabled:opacity-50"
-              onClick={() => exportCSV(true)}
-              disabled={!selectedCount}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export selected ({selectedCount})
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3 disabled:opacity-50"
-              onClick={printPickList}
-              disabled={!selectedCount && !paged.length}
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Print pick list
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            className="rounded-full h-8 px-3 disabled:opacity-50"
+            onClick={printPickList}
+            disabled={
+              !selectedCount &&
+              !(groupByProduct ? filteredVisible.length : paged.length)
+            }
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Print pick list
+          </Button>
         </div>
-      )} */}
+      </div>
 
       {/* Orders list */}
       {groupByProduct ? (
-        /* ——— GROUPED RENDER (collapsible) ——— */
+        /* ——— GROUPED RENDER ——— */
         <ul className="mt-3 space-y-3">
-          {groupedByProduct.map((g) => {
-            const isOpen = openGroups[g.productId] ?? true;
-            return (
-              <li key={g.productId} className="rounded-2xl border bg-white">
-                {/* Group header (click to toggle) */}
-                <button
-                  className="w-full p-3 flex items-center gap-3 text-left"
-                  onClick={() =>
-                    setOpenGroups((s) => ({
-                      ...s,
-                      [g.productId]: !(s[g.productId] ?? true),
-                    }))
-                  }
-                >
-                  <div className="w-12 h-12 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
-                    {g.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={g.thumb}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : null}
+          {groupedByProduct.map((g) => (
+            <li key={g.productId} className="rounded-2xl border bg-white p-3">
+              {/* Group header */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
+                  {g.thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.thumb}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold truncate">{g.title}</h3>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
+                      {g.orders.length} order{g.orders.length > 1 ? "s" : ""}
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold truncate">{g.title}</h3>
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
-                        {g.orders.length} order{g.orders.length > 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <div className="text-xs text-ink/70 mt-0.5">
-                      Total qty {g.totalQty} · MAD {g.totalAmount}
-                    </div>
+                  <div className="text-xs text-ink/70 mt-0.5">
+                    Total qty {g.totalQty} · MAD {g.totalAmount}
                   </div>
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
 
-                {/* Orders in group */}
-                {isOpen && (
-                  <ul className="px-3 pb-3 space-y-2">
-                    {g.orders.map((o) => {
-                      const img = o.products?.photos?.[0];
-                      return (
-                        <li
-                          key={o.id}
-                          className="rounded-xl bg-white p-3 border border-black/5"
-                        >
-                          <div className="flex items-start gap-3">
-                            {/* Corner icon instead of checkbox */}
-                            <div className="pt-1 text-ink/50 shrink-0">
-                              <CornerDownRight className="h-4 w-4" />
-                            </div>
+                  {/* Options rendered as small labels */}
+                </div>
+              </div>
 
-                            <div className="w-6 h-6 rounded-sm bg-neutral-100 overflow-hidden shrink-0">
-                              {img ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={img}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : null}
-                            </div>
+              {/* Orders in group */}
+              <ul className="mt-3 space-y-2">
+                {g.orders.map((o) => {
+                  const img = o.products?.photos?.[0];
+                  const isSelected = selected.has(o.id);
+                  return (
+                    <li
+                      key={o.id}
+                      className={[
+                        "rounded-xl bg-white p-3 border transition-shadow",
+                        isSelected
+                          ? "ring-2 ring-terracotta/50"
+                          : "border-black/5",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-start gap-3">
+                        <label className="pt-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(o.id)}
+                            className="accent-terracotta h-4 w-4"
+                          />
+                        </label>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <Link
-                                  href={`/seller/orders/${o.id}`}
-                                  className="font-medium truncate underline decoration-ink/30 hover:decoration-ink"
-                                >
-                                  #{o.id.slice(0, 6)}
-                                </Link>
-                                <StatusBadge status={o.status} />
-                              </div>
+                        <div className="w-12 h-12 rounded-lg bg-neutral-100 overflow-hidden shrink-0">
+                          {img ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={img}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : null}
+                        </div>
 
-                              {/* Meta line: (price removed) show options + personalization indicator */}
-
-                              <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
-                                <OptionChips options={o.options} />
-
-                                {o.personalization && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
-                                    With personalization
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* New line: Qty + Date (left aligned) */}
-                              <div className="text-xs text-ink/70 mt-1">
-                                Qty {o.qty} ·{" "}
-                                {new Date(o.created_at).toLocaleString()}
-                              </div>
-
-                              {/* Address under meta */}
-                              {(o.address || o.city) && (
-                                <div className="mt-2 text-xs text-ink/70 flex flex-wrap items-center gap-2">
-                                  <span className="inline-flex items-center gap-1 min-w-0">
-                                    <MapPin className="h-3.5 w-3.5" />
-                                    <span className="truncate">
-                                      {o.city ?? ""}
-                                    </span>
-                                  </span>
-                                  {/* <button
-                                    onClick={async () => {
-                                      await navigator.clipboard.writeText(
-                                        `${o.address ?? ""}${
-                                          o.city ? ", " + o.city : ""
-                                        }`
-                                      );
-                                      toast.success("Address copied");
-                                    }}
-                                    className="underline shrink-0"
-                                  >
-                                    <Copy className="h-3 w-3 inline mr-1" />
-                                    Copy
-                                  </button> */}
-                                  {/* {o.address && (
-                                    <a
-                                      className="underline shrink-0"
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                        `${o.address} ${o.city ?? ""}`
-                                      )}`}
-                                    >
-                                      Open map
-                                    </a>
-                                  )} */}
-                                </div>
-                              )}
-                            </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <Link
+                              href={`/seller/orders/${o.id}`}
+                              className="font-medium truncate underline decoration-ink/30 hover:decoration-ink"
+                            >
+                              #{o.id.slice(0, 6)}
+                            </Link>
+                            <StatusBadge status={o.status} />
                           </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
+
+                          <div className="text-xs text-ink/70">
+                            MAD {o.amount_mad} · Qty {o.qty} ·{" "}
+                            {new Date(o.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
         </ul>
       ) : (
-        /* ——— FLAT RENDER (existing list) ——— */
+        /* ——— FLAT RENDER (your existing list) ——— */
         <ul className="mt-3 space-y-2">
           {paged.map((o) => {
             const img = o.products?.photos?.[0];
@@ -980,14 +979,7 @@ Options: ${opts}
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() =>
-                        setSelected((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(o.id)) next.delete(o.id);
-                          else next.add(o.id);
-                          return next;
-                        })
-                      }
+                      onChange={() => toggleSelect(o.id)}
                       className="accent-terracotta h-4 w-4"
                     />
                   </label>
@@ -1028,6 +1020,49 @@ Options: ${opts}
                       <span>{new Date(o.created_at).toLocaleString()}</span>
                     </div>
 
+                    {/* Address + options shown only in grouped mode */}
+                    {groupByProduct && (
+                      <div className="mt-2 text-xs text-ink/70 space-y-1">
+                        {(o.address || o.city) && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
+                              {(o.address ?? "") +
+                                (o.city ? `, ${o.city}` : "")}
+                            </span>
+
+                            <button
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(
+                                  `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
+                                );
+                                toast.success("Address copied");
+                              }}
+                              className="underline shrink-0"
+                            >
+                              Copy
+                            </button>
+
+                            {o.address && (
+                              <a
+                                className="underline shrink-0"
+                                target="_blank"
+                                rel="noreferrer"
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                  `${o.address} ${o.city ?? ""}`
+                                )}`}
+                              >
+                                Open map
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Options rendered as small labels */}
+                        <OptionChips options={o.options} />
+                      </div>
+                    )}
+
                     {/* Contact row */}
                     <div className="text-xs text-ink/70 mt-2 flex flex-wrap items-center gap-2">
                       {o.phone && (
@@ -1060,9 +1095,7 @@ Options: ${opts}
                           <button
                             onClick={async () => {
                               await navigator.clipboard.writeText(
-                                `${o.address ?? ""}${
-                                  o.city ? ", " + o.city : ""
-                                }`
+                                `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
                               );
                               toast.success("Address copied");
                             }}
@@ -1090,7 +1123,7 @@ Options: ${opts}
                     {o.personalization ? (
                       <section className="mt-3">
                         <h4 className="text-xs font-semibold text-ink/70 mb-1">
-                          With personalization
+                          Personalization
                         </h4>
                         <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
                           {o.personalization}
@@ -1193,10 +1226,7 @@ function StatusBadge({ status }: { status: Order["status"] }) {
             ? "bg-green-200 text-green-900"
             : "bg-rose-200 text-rose-900";
   return (
-    <Badge
-      variant="secondary"
-      className={`text-[11px] rounded-full ${cls} capitalize`}
-    >
+    <Badge variant="secondary" className={`text-[11px] rounded-full ${cls}`}>
       {status}
     </Badge>
   );
