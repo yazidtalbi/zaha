@@ -30,7 +30,7 @@ export default function RecentlyViewed() {
           <Link
             key={p.id}
             href={`/product/${p.id}`}
-            className="block rounded-xl bg-sand border border-black/5 overflow-hidden"
+            className="block rounded-xl bg-sand border border-black/5 overflow-hidden "
           >
             <div className="aspect-square bg-white">
               {p.photo ? (
@@ -41,7 +41,7 @@ export default function RecentlyViewed() {
                 />
               ) : null}
             </div>
-            <div className="p-2">
+            <div className="p-2 ">
               <div className="text-sm line-clamp-2">{p.title}</div>
               <div className="text-xs text-ink/70 mt-1">MAD {p.price_mad}</div>
             </div>

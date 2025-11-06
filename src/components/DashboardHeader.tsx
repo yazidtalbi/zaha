@@ -52,7 +52,7 @@ export default function DashboardHeader({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 pb-4">
         <div className="flex items-center gap-3 min-w-0">
           {withBackButton && (
             <button

@@ -1,39 +1,11 @@
 // app/sell/page.tsx
 "use client";
 
-import React, { memo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { uploadCompressedToSupabase } from "@/lib/compressAndUpload";
-import { Switch } from "@/components/ui/switch";
+import { uploadCompressedToSupabase } from "@/lib/compressAndUpload"; // uses browser-image-compression under the hood
 import CategorySheetPicker from "@/components/listing/CategorySheetPicker";
-
-/* ---------------- Helpers ---------------- */
-function clsx(...xs: (string | false | null | undefined)[]) {
-  return xs.filter(Boolean).join(" ");
-}
-function uid() {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
-}
-function parseKeywords(raw: string): string[] {
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => s.slice(0, 40))
-    .slice(0, 7);
-}
-function joinKeywordsForDB(ks: string[]): string {
-  return ks.join(", ");
-}
-function toISO(dtLocal: string): string | null {
-  if (!dtLocal) return null;
-  const ms = Date.parse(dtLocal.replace(" ", "T"));
-  if (Number.isNaN(ms)) return null;
-  return new Date(ms).toISOString();
-}
 
 /* ---------------- Types ---------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
@@ -46,9 +18,10 @@ type OptionGroup = {
 
 type ShippingDetails = {
   mode: "free" | "fees";
+  fee_mad: number | null;
+  free_over_mad: number | null;
   estimate_days_min: number | null;
   estimate_days_max: number | null;
-  fee_mad: number | null;
   cod: boolean;
   pickup: boolean;
   tracking: boolean;
@@ -60,6 +33,7 @@ type ItemDetails = {
   width_cm: number | null;
   height_cm: number | null;
   weight_kg: number | null;
+  personalizable: boolean;
   ships_from: string | null;
   ships_to: string[];
   materials: string[];
@@ -67,783 +41,133 @@ type ItemDetails = {
   shipping?: ShippingDetails | null;
 };
 
-/* ---------------- Constants ---------------- */
-const MAX_PHOTOS = 5;
-const LIMITS = {
-  optionGroupName: 60,
-  optionValueLabel: 60,
-  persoInstr: 300,
+type NewProductInsert = {
+  title: string;
+  keywords?: string | null;
+  description?: string | null;
+
+  price_mad: number;
+  city: string | null;
+  active: boolean;
+  photos: string[];
+  shop_id: string;
+
+  // promo
+  promo_price_mad: number | null;
+  promo_starts_at: string | null;
+  promo_ends_at: string | null;
+
+  // options
+  options_config: OptionGroup[];
+
+  // personalization
+  personalization_enabled: boolean;
+  personalization_instructions: string | null;
+  personalization_max_chars: number | null;
+
+  // details
+  item_details?: ItemDetails | null;
 };
 
-/* ---------------- STEP COMPONENTS ---------------- */
+type NewProductInsertWithOwner = NewProductInsert & { shop_owner: string };
 
-const Step1Identity = memo(function Step1Identity({
-  photos,
-  uploading,
-  onSelect,
-  onRemove,
-  title,
-  setTitle,
-  categoryId,
-  categoryPath,
-  onCategoryChange,
-}: any) {
-  return (
-    <section className="space-y-4">
-      <label className="block">
-        <span className="text-sm font-medium">
-          Photos <span className="text-red-500">*</span>
-        </span>
-      </label>
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={onSelect}
-        disabled={photos.length >= MAX_PHOTOS}
-        className="block text-sm"
-      />
-      {uploading && <div className="text-sm mt-1">Uploading...</div>}
-      {photos.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 mt-3">
-          {photos.map((src: string, i: number) => (
-            <div key={src + i} className="relative rounded-lg overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" className="w-full h-28 object-cover" />
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                className="absolute top-1 right-1 text-xs bg-black/70 text-white px-2 py-1 rounded"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <label className="block">
-        <span className="text-sm font-medium">
-          Title <span className="text-red-500">*</span>
-        </span>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-          maxLength={100}
-        />
-      </label>
-
-      <div>
-        <span className="text-sm font-medium">
-          Category <span className="text-red-500">*</span>
-        </span>
-        <CategorySheetPicker
-          title={title}
-          value={categoryId}
-          onChange={onCategoryChange}
-        />
-        {categoryPath && (
-          <div className="text-xs text-neutral-600 mt-1">
-            Selected: {categoryPath}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-});
-
-const Step2Metadata = memo(function Step2Metadata({
-  keywordsInput,
-  setKeywordsInput,
-  description,
-  setDescription,
-  city,
-  setCity,
-}: any) {
-  return (
-    <section className="space-y-4">
-      <label className="block">
-        <span className="text-sm font-medium">Keywords</span>
-        <input
-          value={keywordsInput}
-          onChange={(e) => setKeywordsInput(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-          placeholder="poster, handmade, gift"
-        />
-      </label>
-
-      <label className="block">
-        <span className="text-sm font-medium">Description</span>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-          rows={5}
-        />
-      </label>
-
-      <label className="block">
-        <span className="text-sm font-medium">
-          City <span className="text-red-500">*</span>
-        </span>
-        <input
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-          placeholder="Casablanca"
-        />
-      </label>
-    </section>
-  );
-});
-
-const Step3Pricing = memo(function Step3Pricing({
-  price,
-  setPrice,
-  promoOn,
-  setPromoOn,
-  promoPrice,
-  setPromoPrice,
-  promoStart,
-  setPromoStart,
-  promoEnd,
-  setPromoEnd,
-}: any) {
-  return (
-    <section className="space-y-4">
-      <label className="block">
-        <span className="text-sm font-medium">
-          Base Price (MAD) <span className="text-red-500">*</span>
-        </span>
-        <input
-          type="number"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-          min={0}
-        />
-      </label>
-
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Promo</span>
-        <Switch checked={promoOn} onCheckedChange={setPromoOn} />
-      </div>
-
-      {promoOn && (
-        <div className="space-y-3 pl-2 border-l">
-          <label className="block">
-            <span className="text-sm font-medium">Promo Price (MAD)</span>
-            <input
-              type="number"
-              value={promoPrice}
-              onChange={(e) => setPromoPrice(e.target.value)}
-              className="mt-1 w-full border rounded px-3 py-2 bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium">Start</span>
-            <input
-              type="datetime-local"
-              value={promoStart}
-              onChange={(e) => setPromoStart(e.target.value)}
-              className="mt-1 w-full border rounded px-3 py-2 bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium">End</span>
-            <input
-              type="datetime-local"
-              value={promoEnd}
-              onChange={(e) => setPromoEnd(e.target.value)}
-              className="mt-1 w-full border rounded px-3 py-2 bg-white"
-            />
-          </label>
-        </div>
-      )}
-    </section>
-  );
-});
-
-/* ---------------------------------------------
-   STEP 4: Customization (Options + Personalization)
----------------------------------------------- */
-type Step4CustomizationProps = {
-  optionsOn: boolean;
-  setOptionsOn: (v: boolean) => void;
-  personalizationOn: boolean;
-  setPersonalizationOn: (v: boolean) => void;
-
-  groups: OptionGroup[];
-  addGroup: () => void;
-  removeGroup: (id: string) => void;
-  setGroupName: (id: string, name: string) => void;
-  toggleRequired: (id: string) => void;
-  addValue: (groupId: string) => void;
-  removeValue: (groupId: string, valueId: string) => void;
-  updateValue: (
-    groupId: string,
-    valueId: string,
-    patch: Partial<OptionValue>
-  ) => void;
-
-  persoInstr: string;
-  setPersoInstr: (v: string) => void;
-  persoMax: string;
-  setPersoMax: (v: string) => void;
-};
-
-const Step4Customization = memo(function Step4Customization({
-  optionsOn,
-  setOptionsOn,
-  personalizationOn,
-  setPersonalizationOn,
-  groups,
-  addGroup,
-  removeGroup,
-  setGroupName,
-  toggleRequired,
-  addValue,
-  removeValue,
-  updateValue,
-  persoInstr,
-  setPersoInstr,
-  persoMax,
-  setPersoMax,
-}: Step4CustomizationProps) {
-  return (
-    <section className="space-y-6">
-      {/* Options */}
-      <div className="rounded-xl border p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Options</div>
-          <Switch checked={optionsOn} onCheckedChange={setOptionsOn} />
-        </div>
-
-        {optionsOn && (
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-neutral-600">
-                Create dropdowns like <b>Size</b> or <b>Color</b>. Each value
-                may change the price.
-              </p>
-              <button
-                type="button"
-                onClick={addGroup}
-                className="text-sm rounded bg-black text-white px-3 py-1.5"
-              >
-                + Add option group
-              </button>
-            </div>
-
-            {groups.length === 0 ? (
-              <div className="text-sm text-neutral-500">No groups yet.</div>
-            ) : (
-              groups.map((g) => (
-                <div key={g.id} className="rounded-lg border p-3 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={g.name}
-                      onChange={(e) =>
-                        setGroupName(
-                          g.id,
-                          e.target.value.slice(0, LIMITS.optionGroupName)
-                        )
-                      }
-                      className="flex-1 rounded border px-3 py-2 bg-white"
-                      placeholder="Group name (e.g., Size)"
-                      maxLength={LIMITS.optionGroupName}
-                    />
-                    <label className="text-sm flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={g.required ?? true}
-                        onChange={() => toggleRequired(g.id)}
-                      />
-                      required
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => removeGroup(g.id)}
-                      className="text-sm rounded border px-2 py-1"
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {g.values.map((v) => (
-                      <div
-                        key={v.id}
-                        className="grid grid-cols-5 gap-2 items-center"
-                      >
-                        <input
-                          className="col-span-3 rounded border px-3 py-2 bg-white"
-                          value={v.label}
-                          onChange={(e) =>
-                            updateValue(g.id, v.id, {
-                              label: e.target.value.slice(
-                                0,
-                                LIMITS.optionValueLabel
-                              ),
-                            })
-                          }
-                          placeholder="Option label (e.g., M - Hoodie)"
-                          maxLength={LIMITS.optionValueLabel}
-                        />
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          className="col-span-1 rounded border px-3 py-2 bg-white"
-                          value={String(v.price_delta_mad ?? 0)}
-                          onChange={(e) =>
-                            updateValue(g.id, v.id, {
-                              price_delta_mad: Number(e.target.value || 0),
-                            })
-                          }
-                          placeholder="Δ MAD"
-                          title="Price delta relative to base price (can be 0 or negative)."
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeValue(g.id, v.id)}
-                          className="col-span-1 text-sm rounded border px-2 py-2"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => addValue(g.id)}
-                    className="text-sm rounded bg-neutral-100 px-3 py-1.5"
-                  >
-                    + Add value
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Personalization */}
-      <div className="rounded-xl border p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Personalization</div>
-          <Switch
-            checked={personalizationOn}
-            onCheckedChange={setPersonalizationOn}
-          />
-        </div>
-
-        {personalizationOn && (
-          <div className="mt-4 space-y-3">
-            <label className="block">
-              <div className="text-sm mb-1">
-                Buyer instructions (shown in sheet)
-              </div>
-              <textarea
-                className="w-full rounded border px-3 py-2 bg-white"
-                value={persoInstr}
-                onChange={(e) =>
-                  setPersoInstr(e.target.value.slice(0, LIMITS.persoInstr))
-                }
-                placeholder={`Tell the buyer what to write (e.g., "Enter the name to engrave…")`}
-                rows={3}
-                maxLength={LIMITS.persoInstr}
-              />
-              <div className="text-xs text-neutral-500 mt-1">
-                {persoInstr.length}/{LIMITS.persoInstr}
-              </div>
-            </label>
-
-            <label className="block">
-              <div className="text-sm mb-1">Max characters</div>
-              <input
-                type="number"
-                min={1}
-                className="w-full rounded border px-3 py-2 bg-white"
-                value={persoMax}
-                onChange={(e) => setPersoMax(e.target.value)}
-                inputMode="numeric"
-                placeholder="e.g., 80"
-              />
-            </label>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-});
-
-const Step5Details = memo(function Step5Details({
-  itemType,
-  setItemType,
-  width,
-  setWidth,
-  height,
-  setHeight,
-  weight,
-  setWeight,
-  shipsFrom,
-  setShipsFrom,
-  shipsTo,
-  setShipsTo,
-  materials,
-  setMaterials,
-  returns,
-  setReturns,
-}: any) {
-  return (
-    <section className="space-y-4">
-      <label className="block">
-        <span className="text-sm font-medium">Item Type</span>
-        <select
-          value={itemType}
-          onChange={(e) => setItemType(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-        >
-          <option value="physical">Physical</option>
-          <option value="digital">Digital</option>
-        </select>
-      </label>
-      <div className="grid grid-cols-3 gap-2">
-        <input
-          placeholder="Width (cm)"
-          type="number"
-          value={width}
-          onChange={(e) => setWidth(e.target.value)}
-          className="border rounded px-3 py-2"
-        />
-        <input
-          placeholder="Height (cm)"
-          type="number"
-          value={height}
-          onChange={(e) => setHeight(e.target.value)}
-          className="border rounded px-3 py-2"
-        />
-        <input
-          placeholder="Weight (kg)"
-          type="number"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-          className="border rounded px-3 py-2"
-        />
-      </div>
-      <input
-        placeholder="Ships from"
-        value={shipsFrom}
-        onChange={(e) => setShipsFrom(e.target.value)}
-        className="border rounded px-3 py-2 w-full"
-      />
-      <input
-        placeholder="Ships to (comma separated)"
-        value={shipsTo}
-        onChange={(e) => setShipsTo(e.target.value)}
-        className="border rounded px-3 py-2 w-full"
-      />
-      <input
-        placeholder="Materials"
-        value={materials}
-        onChange={(e) => setMaterials(e.target.value)}
-        className="border rounded px-3 py-2 w-full"
-      />
-      <label className="block">
-        <span className="text-sm font-medium">Returns</span>
-        <select
-          value={returns}
-          onChange={(e) => setReturns(e.target.value)}
-          className="mt-1 w-full border rounded px-3 py-2 bg-white"
-        >
-          <option value="accepted">Accepted</option>
-          <option value="not_accepted">Not accepted</option>
-        </select>
-      </label>
-    </section>
-  );
-});
-
-const Step6Shipping = memo(function Step6Shipping({
-  shipMode,
-  setShipMode,
-  shipFee,
-  setShipFee,
-  estDaysMin,
-  setEstDaysMin,
-  estDaysMax,
-  setEstDaysMax,
-  shipCOD,
-  setShipCOD,
-  shipPickup,
-  setShipPickup,
-  shipTracking,
-  setShipTracking,
-  shipNotes,
-  setShipNotes,
-}: any) {
-  return (
-    <section className="space-y-4">
-      <select
-        value={shipMode}
-        onChange={(e) => setShipMode(e.target.value)}
-        className="border rounded px-3 py-2 w-full"
-      >
-        <option value="free">Free shipping</option>
-        <option value="fees">Shipping with fees</option>
-      </select>
-
-      {shipMode === "fees" && (
-        <input
-          type="number"
-          placeholder="Fee (MAD)"
-          value={shipFee}
-          onChange={(e) => setShipFee(e.target.value)}
-          className="border rounded px-3 py-2 w-full"
-        />
-      )}
-
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          placeholder="Min days"
-          type="number"
-          value={estDaysMin}
-          onChange={(e) => setEstDaysMin(e.target.value)}
-          className="border rounded px-3 py-2"
-        />
-        <input
-          placeholder="Max days"
-          type="number"
-          value={estDaysMax}
-          onChange={(e) => setEstDaysMax(e.target.value)}
-          className="border rounded px-3 py-2"
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={shipCOD}
-            onChange={(e) => setShipCOD(e.target.checked)}
-          />
-          COD
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={shipPickup}
-            onChange={(e) => setShipPickup(e.target.checked)}
-          />
-          Pickup
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={shipTracking}
-            onChange={(e) => setShipTracking(e.target.checked)}
-          />
-          Tracking
-        </label>
-      </div>
-
-      <textarea
-        placeholder="Shipping notes"
-        value={shipNotes}
-        onChange={(e) => setShipNotes(e.target.value)}
-        className="border rounded px-3 py-2 w-full"
-        rows={3}
-      />
-    </section>
-  );
-});
-
-const Step7Review = memo(function Step7Review({ all }: any) {
-  return (
-    <section className="space-y-4 text-sm">
-      <div className="font-medium text-base">Review before publishing</div>
-      <div className="grid gap-3">
-        {all.photos.length > 0 && (
-          <div>
-            <div className="font-medium mb-1">Photos</div>
-            <div className="grid grid-cols-3 gap-2">
-              {all.photos.map((src: string, i: number) => (
-                <img
-                  key={i}
-                  src={src}
-                  alt=""
-                  className="rounded-md object-cover w-full h-28"
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        <div>
-          <b>Title:</b> {all.title}
-        </div>
-        <div>
-          <b>Category:</b> {all.categoryPath || "—"}
-        </div>
-        <div>
-          <b>City:</b> {all.city}
-        </div>
-        <div>
-          <b>Keywords:</b> {all.keywordsInput}
-        </div>
-        <div>
-          <b>Description:</b> {all.description || "—"}
-        </div>
-        <div>
-          <b>Base Price:</b> {all.price} MAD
-        </div>
-        {all.promoOn && (
-          <div>
-            <b>Promo:</b> {all.promoPrice} MAD ({all.promoStart} →{" "}
-            {all.promoEnd})
-          </div>
-        )}
-        <div>
-          <b>Options Enabled:</b> {all.optionsOn ? "Yes" : "No"}
-          {all.optionsOn && all.groups?.length > 0 && (
-            <ul className="list-disc ml-5 mt-1">
-              {all.groups.map((g: OptionGroup) => (
-                <li key={g.id}>
-                  <span className="font-medium">{g.name}</span> (
-                  {g.required ? "required" : "optional"}):{" "}
-                  {g.values.map((v) => v.label).join(", ")}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <b>Personalization:</b> {all.personalizationOn ? "Yes" : "No"}
-          {all.personalizationOn && (
-            <div className="mt-1">
-              <div>
-                <b>Instructions:</b> {all.persoInstr || "—"}
-              </div>
-              <div>
-                <b>Max chars:</b> {all.persoMax || "—"}
-              </div>
-            </div>
-          )}
-        </div>
-        <div>
-          <b>Item Type:</b> {all.itemType}
-        </div>
-        <div>
-          <b>Ships From:</b> {all.shipsFrom}
-        </div>
-        <div>
-          <b>Ships To:</b> {all.shipsTo}
-        </div>
-        <div>
-          <b>Materials:</b> {all.materials}
-        </div>
-        <div>
-          <b>Returns:</b> {all.returns}
-        </div>
-      </div>
-    </section>
-  );
-});
-
-function SegmentedStepperHeader({
-  steps, // full steps array INCLUDING the "review" step
-  current, // 0-based index (includes review)
-  labels, // array of labels for the first 6 visual steps
-  partial = 1, // fill of current pill
-}: {
-  steps: { key: string; label: string }[];
-  current: number;
-  labels: string[];
-  partial?: number;
-}) {
-  const total = Math.max(1, steps.length - 1);
-  const visualIdx = Math.min(current, total - 1);
-
-  return (
-    <div className="sticky top-0 z-10 bg-white/80 backdrop-blur">
-      <div className="mx-auto max-w-2xl px-4 pt-3">
-        <div className="text-sm text-neutral-700 mb-2">
-          Step {visualIdx + 1} of {total} —{" "}
-          {labels[visualIdx] ?? steps[visualIdx].label}
-        </div>
-
-        <div className="flex items-center gap-4">
-          {Array.from({ length: total }).map((_, i) => {
-            const past = i < visualIdx;
-            const isCurrent = i === visualIdx;
-            return (
-              <div
-                key={i}
-                className="relative h-[6px] flex-1 rounded-full bg-neutral-200 overflow-hidden"
-              >
-                <div
-                  className="absolute inset-y-0 left-0 bg-black transition-[width] duration-300"
-                  style={{
-                    width: past
-                      ? "100%"
-                      : isCurrent
-                        ? `${Math.round(partial * 100)}%`
-                        : "0%",
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mt-3 border-b" />
-    </div>
-  );
+/* ---------------- Helpers ---------------- */
+function uid() {
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
 }
 
-/* ---------------- PAGE ---------------- */
+const LIMITS = {
+  title: 100,
+  keywordMax: 7,
+  keywordLen: 40,
+  description: 2000,
+  city: 60,
+  shipsFrom: 60,
+  shipsTo: 200,
+  materials: 200,
+  shipNotes: 500,
+  persoInstr: 300,
+  optionGroupName: 60,
+  optionValueLabel: 60,
+};
 
+const MAX_PHOTOS = 5;
+
+function parseKeywords(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.slice(0, LIMITS.keywordLen))
+    .slice(0, LIMITS.keywordMax);
+}
+
+function joinKeywordsForDB(ks: string[]): string {
+  return ks.join(", ");
+}
+
+/* ---------------- Page ---------------- */
 export default function SellPage() {
   const router = useRouter();
 
-  const steps = [
-    { key: "identity", label: "Photos, Title, Category" },
-    { key: "metadata", label: "Keywords, Description, City" },
-    { key: "pricing", label: "Pricing" },
-    { key: "custom", label: "Customization" },
-    { key: "details", label: "Item Details" },
-    { key: "shipping", label: "Shipping" },
-    { key: "review", label: "Review" },
-  ];
-
-  const [current, setCurrent] = useState(0);
-  const atFirst = current === 0;
-  const atLast = current === steps.length - 1;
-
-  /* --- State --- */
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
+  // basics
   const [title, setTitle] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [categoryPath, setCategoryPath] = useState("");
-
-  const [keywordsInput, setKeywordsInput] = useState("");
+  const [keywordsInput, setKeywordsInput] = useState(""); // user typing
+  const [keywordsCount, setKeywordsCount] = useState(0);
   const [description, setDescription] = useState("");
+
+  const [price, setPrice] = useState<string>("");
   const [city, setCity] = useState("");
 
-  const [price, setPrice] = useState("");
-  const [promoOn, setPromoOn] = useState(false);
-  const [promoPrice, setPromoPrice] = useState("");
-  const [promoStart, setPromoStart] = useState("");
-  const [promoEnd, setPromoEnd] = useState("");
+  // inside your create/edit product form component
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryPath, setCategoryPath] = useState<string>("");
 
-  // Customization toggles
-  const [optionsOn, setOptionsOn] = useState(false);
-  const [personalizationOn, setPersonalizationOn] = useState(false);
+  // photos
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  // Options builder state + CRUD
+  // promo
+  const [promoPrice, setPromoPrice] = useState<string>("");
+  const [promoStart, setPromoStart] = useState<string>("");
+  const [promoEnd, setPromoEnd] = useState<string>("");
+
+  // options
   const [groups, setGroups] = useState<OptionGroup[]>([]);
+
+  // personalization
+  const [persoEnabled, setPersoEnabled] = useState(false);
+  const [persoInstr, setPersoInstr] = useState("");
+  const [persoMax, setPersoMax] = useState<string>("");
+
+  // item details
+  const [itemType, setItemType] = useState<"physical" | "digital">("physical");
+  const [width, setWidth] = useState<string>("");
+  const [height, setHeight] = useState<string>("");
+  const [weight, setWeight] = useState<string>("");
+  const [shipsFrom, setShipsFrom] = useState("");
+  const [shipsTo, setShipsTo] = useState("");
+  const [materials, setMaterials] = useState("");
+  const [returns, setReturns] = useState<"accepted" | "not_accepted">(
+    "not_accepted"
+  );
+
+  // shipping (simplified, no same city express)
+  const [shipMode, setShipMode] = useState<"free" | "fees">("free");
+  const [shipFee, setShipFee] = useState<string>("");
+  const [shipFreeOver, setShipFreeOver] = useState<string>("");
+  const [estDaysMin, setEstDaysMin] = useState<string>("");
+  const [estDaysMax, setEstDaysMax] = useState<string>("");
+  const [shipCOD, setShipCOD] = useState(false);
+  const [shipPickup, setShipPickup] = useState(false);
+  const [shipTracking, setShipTracking] = useState(true);
+  const [shipNotes, setShipNotes] = useState("");
+
+  const [saving, setSaving] = useState(false);
+
+  /* ------------- Options CRUD ------------- */
   function addGroup() {
     setGroups((gs) => [
       ...gs,
@@ -922,35 +246,22 @@ export default function SellPage() {
     );
   }
 
-  // Personalization fields
-  const [persoInstr, setPersoInstr] = useState("");
-  const [persoMax, setPersoMax] = useState("");
-
-  // Details
-  const [itemType, setItemType] = useState("physical");
-  const [width, setWidth] = useState("");
-  const [height, setHeight] = useState("");
-  const [weight, setWeight] = useState("");
-  const [shipsFrom, setShipsFrom] = useState("");
-  const [shipsTo, setShipsTo] = useState("");
-  const [materials, setMaterials] = useState("");
-  const [returns, setReturns] = useState("accepted");
-
-  // Shipping
-  const [shipMode, setShipMode] = useState("free");
-  const [shipFee, setShipFee] = useState("");
-  const [estDaysMin, setEstDaysMin] = useState("");
-  const [estDaysMax, setEstDaysMax] = useState("");
-  const [shipCOD, setShipCOD] = useState(false);
-  const [shipPickup, setShipPickup] = useState(false);
-  const [shipTracking, setShipTracking] = useState(true);
-  const [shipNotes, setShipNotes] = useState("");
-
-  /* --- Handlers --- */
-  const handleSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  /* ------------- Photos ------------- */
+  async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
     if (!picked.length) return;
-    if (photos.length >= MAX_PHOTOS) return alert("Max photos reached");
+
+    // Enforce max count BEFORE uploads
+    if (photos.length >= MAX_PHOTOS) {
+      alert(`You already have ${photos.length}/${MAX_PHOTOS} photos.`);
+      e.currentTarget.value = "";
+      return;
+    }
+    const remaining = MAX_PHOTOS - photos.length;
+    const toProcess = picked.slice(0, remaining);
+    if (picked.length > toProcess.length) {
+      alert(`Only ${remaining} more photo(s) allowed (max ${MAX_PHOTOS}).`);
+    }
 
     setUploading(true);
     try {
@@ -960,151 +271,875 @@ export default function SellPage() {
       if (!user) throw new Error("Not signed in");
 
       const urls = await Promise.all(
-        picked
-          .slice(0, MAX_PHOTOS - photos.length)
-          .map((f) => uploadCompressedToSupabase(f, user.id, "products"))
+        toProcess.map(async (file) => {
+          // Guard against weird types (e.g., HEIC)
+          if (!/^image\/(jpeg|png|webp|gif|bmp)$/i.test(file.type)) {
+            throw new Error(
+              `Unsupported image type: ${
+                file.type || file.name
+              }. Please use JPG/PNG/WEBP.`
+            );
+          }
+          return uploadCompressedToSupabase(file, user.id, "products");
+        })
       );
-      setPhotos((p) => [...p, ...urls.filter(Boolean)]);
+
+      setPhotos((prev) => [...prev, ...urls.filter(Boolean)]);
+    } catch (err) {
+      alert((err as Error).message);
     } finally {
       setUploading(false);
+      e.currentTarget.value = ""; // allow reselecting same files
     }
-  };
-  const removePhoto = (i: number) =>
-    setPhotos((p) => p.filter((_, j) => j !== i));
-  const onCategoryChange = (id: string | null, path: string) => {
-    setCategoryId(id);
-    setCategoryPath(path);
-  };
+  }
 
-  const goPrev = () => !atFirst && setCurrent((c) => c - 1);
-  const goNext = () => !atLast && setCurrent((c) => c + 1);
+  function removePhoto(i: number) {
+    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
-  /* --- Rendering --- */
-  const stepProps = {
-    photos,
-    uploading,
-    onSelect: handleSelect,
-    onRemove: removePhoto,
-    title,
-    setTitle,
-    categoryId,
-    categoryPath,
-    onCategoryChange,
-    keywordsInput,
-    setKeywordsInput,
-    description,
-    setDescription,
-    city,
-    setCity,
-    price,
-    setPrice,
-    promoOn,
-    setPromoOn,
-    promoPrice,
-    setPromoPrice,
-    promoStart,
-    setPromoStart,
-    promoEnd,
-    setPromoEnd,
-    optionsOn,
-    setOptionsOn,
-    personalizationOn,
-    setPersonalizationOn,
+  /* ------------- Shop ------------- */
+  async function getOrCreateMyShop(): Promise<string> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not signed in");
 
-    // Options builder
-    groups,
-    addGroup,
-    removeGroup,
-    setGroupName,
-    toggleRequired,
-    addValue,
-    removeValue,
-    updateValue,
+    const { data: existing, error: selErr } = await supabase
+      .from("shops")
+      .select("id, owner")
+      .eq("owner", user.id)
+      .maybeSingle();
 
-    // Personalization
-    persoInstr,
-    setPersoInstr,
-    persoMax,
-    setPersoMax,
+    if (selErr) throw selErr;
+    if (existing?.id) return existing.id;
 
-    // Details
-    itemType,
-    setItemType,
-    width,
-    setWidth,
-    height,
-    setHeight,
-    weight,
-    setWeight,
-    shipsFrom,
-    setShipsFrom,
-    shipsTo,
-    setShipsTo,
-    materials,
-    setMaterials,
-    returns,
-    setReturns,
+    const { data: created, error: insErr } = await supabase
+      .from("shops")
+      .insert({ owner: user.id, title: "My shop" })
+      .select("id")
+      .maybeSingle();
 
-    // Shipping
-    shipMode,
-    setShipMode,
-    shipFee,
-    setShipFee,
-    estDaysMin,
-    setEstDaysMin,
-    estDaysMax,
-    setEstDaysMax,
-    shipCOD,
-    setShipCOD,
-    shipPickup,
-    setShipPickup,
-    shipTracking,
-    setShipTracking,
-    shipNotes,
-    setShipNotes,
-  };
+    if (insErr) throw insErr;
+    return created!.id;
+  }
 
-  const all = { ...stepProps };
+  /* ------------- Promo ------------- */
+  function toISO(dtLocal: string): string | null {
+    if (!dtLocal) return null;
+    const ms = Date.parse(dtLocal.replace(" ", "T"));
+    if (Number.isNaN(ms)) return null;
+    return new Date(ms).toISOString();
+  }
 
+  /* ------------- Save ------------- */
+  async function handleSave() {
+    try {
+      const base = Number(price);
+
+      // ——— Basic validations ———
+      if (!title.trim()) throw new Error("Title is required");
+      if (title.trim().length > LIMITS.title)
+        throw new Error(`Title must be ≤ ${LIMITS.title} characters`);
+      if (!Number.isFinite(base) || base <= 0)
+        throw new Error("Enter a valid price");
+      if (!photos.length) throw new Error("Add at least one photo");
+      if (!categoryId) throw new Error("Please select a category.");
+
+      // keywords enforcement (max 7, each ≤ 40)
+      const kw = parseKeywords(keywordsInput);
+      if (kw.length > LIMITS.keywordMax)
+        throw new Error(`Use at most ${LIMITS.keywordMax} keywords`);
+
+      // ——— Options validation ———
+      for (const g of groups) {
+        if (!g.name.trim()) throw new Error("Option group needs a name");
+        if (g.name.length > LIMITS.optionGroupName)
+          throw new Error(
+            `Option group names must be ≤ ${LIMITS.optionGroupName} chars`
+          );
+        if (!g.values.length)
+          throw new Error(`"${g.name}" needs at least one value`);
+        for (const v of g.values) {
+          if (!v.label.trim())
+            throw new Error(`A value in "${g.name}" is missing a label`);
+          if (v.label.length > LIMITS.optionValueLabel)
+            throw new Error(
+              `Option value labels must be ≤ ${LIMITS.optionValueLabel} chars`
+            );
+          if (
+            v.price_delta_mad != null &&
+            !Number.isFinite(Number(v.price_delta_mad))
+          ) {
+            throw new Error(`Invalid price delta in "${g.name}"`);
+          }
+        }
+      }
+
+      // ——— Promo validation ———
+      let promo_price_mad: number | null = null;
+      let promo_starts_at: string | null = null;
+      let promo_ends_at: string | null = null;
+      if (promoPrice || promoStart || promoEnd) {
+        const p = Number(promoPrice);
+        if (!Number.isFinite(p) || p <= 0)
+          throw new Error("Enter a valid promo price");
+        if (p >= base)
+          throw new Error("Promo price must be lower than base price");
+        if (!promoStart || !promoEnd)
+          throw new Error("Select both promo start and end");
+        const sISO = toISO(promoStart)!;
+        const eISO = toISO(promoEnd)!;
+        if (new Date(eISO).getTime() <= new Date(sISO).getTime())
+          throw new Error("Promo end must be after start");
+        promo_price_mad = Math.round(p);
+        promo_starts_at = sISO;
+        promo_ends_at = eISO;
+      }
+
+      // ——— Personalization ———
+      let personalization_enabled = !!persoEnabled;
+      let personalization_instructions: string | null = null;
+      let personalization_max_chars: number | null = null;
+
+      if (personalization_enabled) {
+        const max = Number(persoMax);
+        if (!Number.isFinite(max) || max <= 0)
+          throw new Error("Enter a valid max characters for personalization");
+        if (!persoInstr.trim())
+          throw new Error("Add buyer instructions for personalization");
+        if (persoInstr.length > LIMITS.persoInstr)
+          throw new Error(
+            `Personalization instructions must be ≤ ${LIMITS.persoInstr} chars`
+          );
+        personalization_instructions = persoInstr.trim();
+        personalization_max_chars = Math.round(max);
+      } else {
+        personalization_enabled = false;
+        personalization_instructions = null;
+        personalization_max_chars = null;
+      }
+
+      // ——— Field lengths ———
+      if (description.length > LIMITS.description)
+        throw new Error(`Description must be ≤ ${LIMITS.description} chars`);
+      if (city.length > LIMITS.city)
+        throw new Error(`City must be ≤ ${LIMITS.city} chars`);
+      if (shipsFrom.length > LIMITS.shipsFrom)
+        throw new Error(`"Ships from" must be ≤ ${LIMITS.shipsFrom} chars`);
+      if (shipsTo.length > LIMITS.shipsTo)
+        throw new Error(`"Ships to" must be ≤ ${LIMITS.shipsTo} chars`);
+      if (materials.length > LIMITS.materials)
+        throw new Error(`Materials must be ≤ ${LIMITS.materials} chars`);
+      if (shipNotes.length > LIMITS.shipNotes)
+        throw new Error(`Shipping notes must be ≤ ${LIMITS.shipNotes} chars`);
+
+      // ——— Shipping JSON ———
+      const shipping: ShippingDetails = {
+        mode: shipMode,
+        fee_mad: shipMode === "fees" ? (shipFee ? Number(shipFee) : 0) : null,
+        free_over_mad: shipFreeOver ? Number(shipFreeOver) : null,
+        estimate_days_min: estDaysMin !== "" ? Number(estDaysMin) : null,
+        estimate_days_max: estDaysMax !== "" ? Number(estDaysMax) : null,
+        cod: shipCOD,
+        pickup: shipPickup,
+        tracking: shipTracking,
+        notes: shipNotes.trim() || null,
+      };
+
+      // ——— Item details JSON ———
+      const item_details: ItemDetails = {
+        type: itemType,
+        width_cm: width !== "" ? Number(width) : null,
+        height_cm: height !== "" ? Number(height) : null,
+        weight_kg: weight !== "" ? Number(weight) : null,
+        personalizable: personalization_enabled,
+        ships_from: shipsFrom || city || null,
+        ships_to: shipsTo
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        materials: materials
+          .split(",")
+          .map((m) => m.trim())
+          .filter(Boolean),
+        returns,
+        shipping,
+      };
+
+      setSaving(true);
+
+      // ——— 1) shop + user ———
+      const shopId = await getOrCreateMyShop();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      // ——— 2) insert product as draft ———
+      const payload: NewProductInsertWithOwner = {
+        title: title.trim(),
+        keywords: kw.length ? joinKeywordsForDB(kw) : null,
+        description: description.trim() || null,
+        price_mad: Math.round(base),
+        city: city.trim() || null,
+        active: false, // draft
+        photos,
+        shop_id: shopId,
+        shop_owner: user.id,
+        promo_price_mad,
+        promo_starts_at,
+        promo_ends_at,
+        options_config: groups,
+        personalization_enabled,
+        personalization_instructions,
+        personalization_max_chars,
+        item_details,
+      };
+
+      const { data: prod, error: insErr } = await supabase
+        .from("products")
+        .insert(payload)
+        .select("id")
+        .maybeSingle();
+      if (insErr) throw insErr;
+      const productId = prod!.id as string;
+
+      // ——— 3) link selected category as primary ———
+      const { error: catErr } = await supabase
+        .from("product_categories")
+        .upsert(
+          [
+            {
+              product_id: productId,
+              category_id: categoryId!,
+              is_primary: true,
+            },
+          ],
+          { onConflict: "product_id,category_id" }
+        );
+      if (catErr) throw catErr;
+
+      // (optional) denormalize for fast reads if column exists in your DB:
+      // await supabase.from("products")
+      //   .update({ primary_category_id: categoryId })
+      //   .eq("id", productId);
+
+      // ——— 4) activate product ———
+      const { error: actErr } = await supabase
+        .from("products")
+        .update({ active: true })
+        .eq("id", productId);
+      if (actErr) throw actErr;
+
+      alert("Product created!");
+      router.push(`/product/${productId}`);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /* ------------- Keywords live enforcement ------------- */
+  useEffect(() => {
+    const ks = parseKeywords(keywordsInput);
+    setKeywordsCount(ks.length);
+    // Soft-enforce visually: rewrite field to trimmed version if user exceeds
+    const normalized = joinKeywordsForDB(ks);
+    // Only update if user clearly exceeded (prevents cursor jump every keystroke)
+    const currentTokens = keywordsInput.split(",").filter(Boolean).length;
+    if (currentTokens > LIMITS.keywordMax || keywordsInput.length > 400) {
+      setKeywordsInput(normalized);
+    }
+  }, [keywordsInput]);
+
+  const formInvalid =
+    saving ||
+    uploading ||
+    !title.trim() ||
+    !price ||
+    !photos.length ||
+    !categoryId;
+
+  /* ------------- Render ------------- */
   return (
-    <main className="max-w-2xl mx-auto p-4 space-y-6">
-      <SegmentedStepperHeader
-        steps={steps}
-        current={current}
-        labels={[
-          "Photos, Title, Category",
-          "Keywords, Description, City",
-          "Pricing",
-          "Customization",
-          "Item Details",
-          "Shipping",
-        ]}
-      />
+    <main className="min-h-screen bg-white text-ink">
+      <div className="mx-auto max-w-2xl p-4 space-y-4">
+        <h1 className="text-xl font-semibold">Sell an item</h1>
 
-      {/* Step content */}
-      {steps[current].key === "identity" && <Step1Identity {...stepProps} />}
-      {steps[current].key === "metadata" && <Step2Metadata {...stepProps} />}
-      {steps[current].key === "pricing" && <Step3Pricing {...stepProps} />}
-      {steps[current].key === "custom" && <Step4Customization {...stepProps} />}
-      {steps[current].key === "details" && <Step5Details {...stepProps} />}
-      {steps[current].key === "shipping" && <Step6Shipping {...stepProps} />}
-      {steps[current].key === "review" && <Step7Review all={all} />}
+        {/* Photos */}
+        <label className="block">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm">Photos</div>
+            <div className="text-xs text-neutral-500">
+              {photos.length}/{MAX_PHOTOS}
+            </div>
+          </div>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+            multiple
+            onChange={handleSelect}
+            disabled={photos.length >= MAX_PHOTOS}
+          />
+          {uploading && <div className="text-sm mt-1">Uploading…</div>}
+          {photos.length >= MAX_PHOTOS && (
+            <div className="text-xs text-neutral-500 mt-1">
+              You reached the maximum of {MAX_PHOTOS} photos.
+            </div>
+          )}
+        </label>
 
-      {/* Nav buttons */}
-      <div className="flex justify-between border-t pt-4">
+        {!!photos.length && (
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((src, i) => (
+              <div
+                key={src + i}
+                className="relative rounded-lg overflow-hidden"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt="" className="w-full h-28 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(i)}
+                  className="absolute top-1 right-1 rounded bg-black/60 text-white text-xs px-2 py-1"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Title */}
+        <label htmlFor="title" className="block text-sm mt-4">
+          Title
+          <input
+            id="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded border px-3 py-2 bg-white"
+          />{" "}
+        </label>
+
+        {/* Category */}
+        <label className="block">
+          <div className="text-sm mb-1">Category</div>
+          <CategorySheetPicker
+            title={title}
+            value={categoryId}
+            onChange={(id, path) => {
+              setCategoryId(id);
+              setCategoryPath(path);
+            }}
+          />
+        </label>
+
+        {/* Keywords */}
+        <label className="block">
+          <div className="text-sm mb-1">Keywords / Tags</div>
+          <input
+            value={keywordsInput}
+            onChange={(e) => setKeywordsInput(e.target.value)}
+            className="w-full rounded border px-3 py-2 bg-white"
+            placeholder="The Great Wave, Hokusai, Japanese Art, Poster"
+          />
+          <div className="text-xs text-neutral-500 mt-1">
+            {keywordsCount}/{LIMITS.keywordMax} tags (each ≤ {LIMITS.keywordLen}{" "}
+            chars)
+          </div>
+          <p className="text-xs text-neutral-500">
+            Separate with commas — shown beneath the title.
+          </p>
+        </label>
+
+        {/* Description */}
+        <label className="block">
+          <div className="text-sm mb-1">Description</div>
+          <textarea
+            value={description}
+            onChange={(e) =>
+              setDescription(e.target.value.slice(0, LIMITS.description))
+            }
+            className="w-full rounded border px-3 py-2 bg-white"
+            placeholder="Write anything — new lines, emojis, etc. ✨"
+            rows={5}
+            maxLength={LIMITS.description}
+          />
+          <div className="text-xs text-neutral-500 mt-1">
+            {description.length}/{LIMITS.description}
+          </div>
+        </label>
+
+        {/* Price */}
+        <label className="block">
+          <div className="text-sm mb-1">Base Price (MAD)</div>
+          <input
+            type="number"
+            min={0}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="w-full rounded border px-3 py-2 bg-white"
+            inputMode="numeric"
+          />
+        </label>
+
+        {/* City (filtering) */}
+        <label className="block">
+          <div className="text-sm mb-1">
+            City{" "}
+            <span className="text-neutral-500">(used for search filters)</span>
+          </div>
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value.slice(0, LIMITS.city))}
+            className="w-full rounded border px-3 py-2 bg-white"
+            placeholder="Tetouan"
+            maxLength={LIMITS.city}
+          />
+          <div className="text-xs text-neutral-500 mt-1">
+            {city.length}/{LIMITS.city}
+          </div>
+        </label>
+
+        {/* Item Details */}
+        <div className="rounded-xl border p-3 space-y-3 bg-white">
+          <div className="text-sm font-medium">Item Details</div>
+
+          <div>
+            <div className="text-sm mb-1">Item type</div>
+            <select
+              value={itemType}
+              onChange={(e) =>
+                setItemType(e.target.value as "physical" | "digital")
+              }
+              className="w-full rounded border px-3 py-2 bg-white"
+            >
+              <option value="physical">Physical item</option>
+              <option value="digital">Digital download</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <div className="text-sm mb-1">Width (cm)</div>
+              <input
+                type="number"
+                value={width}
+                onChange={(e) => setWidth(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+              />
+            </label>
+            <label className="block">
+              <div className="text-sm mb-1">Height (cm)</div>
+              <input
+                type="number"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <div className="text-sm mb-1">Weight (kg)</div>
+            <input
+              type="number"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              className="w-full rounded border px-3 py-2 bg-white"
+            />
+          </label>
+
+          {/* Ships from (buyer-facing) */}
+          <label className="block">
+            <div className="text-sm mb-1">
+              Ships from{" "}
+              <span className="text-neutral-500">(shown to buyers)</span>
+            </div>
+            <input
+              value={shipsFrom}
+              onChange={(e) =>
+                setShipsFrom(e.target.value.slice(0, LIMITS.shipsFrom))
+              }
+              className="w-full rounded border px-3 py-2 bg-white"
+              placeholder="Casablanca"
+              maxLength={LIMITS.shipsFrom}
+            />
+            <div className="text-xs text-neutral-500 mt-1">
+              {shipsFrom.length}/{LIMITS.shipsFrom}
+            </div>
+          </label>
+
+          <label className="block">
+            <div className="text-sm mb-1">Only ships to (comma separated)</div>
+            <input
+              value={shipsTo}
+              onChange={(e) =>
+                setShipsTo(e.target.value.slice(0, LIMITS.shipsTo))
+              }
+              className="w-full rounded border px-3 py-2 bg-white"
+              placeholder="Casablanca, Rabat, Marrakech"
+              maxLength={LIMITS.shipsTo}
+            />
+            <div className="text-xs text-neutral-500 mt-1">
+              {shipsTo.length}/{LIMITS.shipsTo}
+            </div>
+          </label>
+
+          <label className="block">
+            <div className="text-sm mb-1">Materials</div>
+            <input
+              value={materials}
+              onChange={(e) =>
+                setMaterials(e.target.value.slice(0, LIMITS.materials))
+              }
+              className="w-full rounded border px-3 py-2 bg-white"
+              placeholder="Wood, Bamboo, Plastics, Electronics"
+              maxLength={LIMITS.materials}
+            />
+            <div className="text-xs text-neutral-500 mt-1">
+              {materials.length}/{LIMITS.materials}
+            </div>
+          </label>
+
+          <label className="block">
+            <div className="text-sm mb-1">Returns & exchanges</div>
+            <select
+              value={returns}
+              onChange={(e) =>
+                setReturns(e.target.value as "accepted" | "not_accepted")
+              }
+              className="w-full rounded border px-3 py-2 bg-white"
+            >
+              <option value="accepted">Accepted</option>
+              <option value="not_accepted">Not accepted</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Shipping */}
+        <div className="rounded-xl border p-3 space-y-3 bg-white">
+          <div className="text-sm font-medium">Shipping</div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <div className="text-sm mb-1">Pricing</div>
+              <select
+                value={shipMode}
+                onChange={(e) => setShipMode(e.target.value as "free" | "fees")}
+                className="w-full rounded border px-3 py-2 bg-white"
+              >
+                <option value="free">Free shipping</option>
+                <option value="fees">+ Fees (flat)</option>
+              </select>
+            </label>
+
+            {shipMode === "fees" && (
+              <label className="block">
+                <div className="text-sm mb-1">Flat fee (MAD)</div>
+                <input
+                  type="number"
+                  min={0}
+                  value={shipFee}
+                  onChange={(e) => setShipFee(e.target.value)}
+                  className="w-full rounded border px-3 py-2 bg-white"
+                  placeholder="e.g., 29"
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="block">
+              <div className="text-sm mb-1">Free over (MAD)</div>
+              <input
+                type="number"
+                min={0}
+                value={shipFreeOver}
+                onChange={(e) => setShipFreeOver(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+                placeholder="optional"
+              />
+            </label>
+
+            <label className="block">
+              <div className="text-sm mb-1">Estimate (min days)</div>
+              <input
+                type="number"
+                min={0}
+                value={estDaysMin}
+                onChange={(e) => setEstDaysMin(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+                placeholder="e.g., 3"
+              />
+            </label>
+
+            <label className="block">
+              <div className="text-sm mb-1">Estimate (max days)</div>
+              <input
+                type="number"
+                min={0}
+                value={estDaysMax}
+                onChange={(e) => setEstDaysMax(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+                placeholder="e.g., 7"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={shipCOD}
+                onChange={(e) => setShipCOD(e.target.checked)}
+              />
+              Cash on delivery (COD)
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={shipPickup}
+                onChange={(e) => setShipPickup(e.target.checked)}
+              />
+              Pickup available
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={shipTracking}
+                onChange={(e) => setShipTracking(e.target.checked)}
+              />
+              Tracking provided
+            </label>
+          </div>
+
+          <label className="block">
+            <div className="text-sm mb-1">
+              Shipping notes / policy (optional)
+            </div>
+            <textarea
+              className="w-full rounded border px-3 py-2 bg-white"
+              value={shipNotes}
+              onChange={(e) =>
+                setShipNotes(e.target.value.slice(0, LIMITS.shipNotes))
+              }
+              rows={3}
+              placeholder="Packaging care, cut-off time, carrier, etc."
+              maxLength={LIMITS.shipNotes}
+            />
+            <div className="text-xs text-neutral-500 mt-1">
+              {shipNotes.length}/{LIMITS.shipNotes}
+            </div>
+          </label>
+        </div>
+
+        {/* Options */}
+        <div className="rounded-xl border p-3 space-y-3 bg-white">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">
+              Options (custom dropdowns)
+            </div>
+            <button
+              type="button"
+              onClick={addGroup}
+              className="text-sm rounded bg-black text-white px-3 py-1.5"
+            >
+              + Add option group
+            </button>
+          </div>
+
+          {!groups.length && (
+            <p className="text-sm text-neutral-500">
+              Add groups like <b>Size</b> or <b>Fabric Color</b>. Each value can
+              change the price relative to the base price.
+            </p>
+          )}
+
+          {groups.map((g) => (
+            <div
+              key={g.id}
+              className="rounded-lg border p-3 space-y-3 bg-white"
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  value={g.name}
+                  onChange={(e) => setGroupName(g.id, e.target.value)}
+                  className="flex-1 rounded border px-3 py-2 bg-white"
+                  placeholder="Group name (e.g., Size)"
+                  maxLength={LIMITS.optionGroupName}
+                />
+                <label className="text-sm flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={g.required ?? true}
+                    onChange={() => toggleRequired(g.id)}
+                  />
+                  required
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeGroup(g.id)}
+                  className="text-sm rounded border px-2 py-1"
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {g.values.map((v) => (
+                  <div
+                    key={v.id}
+                    className="grid grid-cols-5 gap-2 items-center"
+                  >
+                    <input
+                      className="col-span-3 rounded border px-3 py-2 bg-white"
+                      value={v.label}
+                      onChange={(e) =>
+                        updateValue(g.id, v.id, {
+                          label: e.target.value,
+                        })
+                      }
+                      placeholder="Option label (e.g., M - Hoodie)"
+                      maxLength={LIMITS.optionValueLabel}
+                    />
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className="col-span-1 rounded border px-3 py-2 bg-white"
+                      value={String(v.price_delta_mad ?? 0)}
+                      onChange={(e) =>
+                        updateValue(g.id, v.id, {
+                          price_delta_mad: Number(e.target.value || 0),
+                        })
+                      }
+                      placeholder="Δ MAD"
+                      title="Price delta relative to base price (can be 0 or negative)."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeValue(g.id, v.id)}
+                      className="col-span-1 text-sm rounded border px-2 py-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => addValue(g.id)}
+                className="text-sm rounded bg-neutral-100 px-3 py-1.5"
+              >
+                + Add value
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Personalization */}
+        <div className="rounded-xl border p-3 space-y-3 bg-white">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">Personalization</div>
+            <label className="text-sm flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={persoEnabled}
+                onChange={(e) => setPersoEnabled(e.target.checked)}
+              />
+              Enable
+            </label>
+          </div>
+
+          {persoEnabled && (
+            <>
+              <label className="block">
+                <div className="text-sm mb-1">
+                  Buyer instructions (shown in sheet)
+                </div>
+                <textarea
+                  className="w-full rounded border px-3 py-2 bg-white"
+                  value={persoInstr}
+                  onChange={(e) =>
+                    setPersoInstr(e.target.value.slice(0, LIMITS.persoInstr))
+                  }
+                  placeholder="Tell the buyer what to write (e.g., 'Enter the name to engrave…')"
+                  rows={3}
+                  maxLength={LIMITS.persoInstr}
+                />
+                <div className="text-xs text-neutral-500 mt-1">
+                  {persoInstr.length}/{LIMITS.persoInstr}
+                </div>
+              </label>
+
+              <label className="block">
+                <div className="text-sm mb-1">Max characters</div>
+                <input
+                  type="number"
+                  min={1}
+                  className="w-full rounded border px-3 py-2 bg-white"
+                  value={persoMax}
+                  onChange={(e) => setPersoMax(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="e.g., 80"
+                />
+              </label>
+              <p className="text-xs text-neutral-500">
+                The “Add a personalization” button appears on the product page
+                only when personalization is enabled.
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Promo */}
+        <div className="rounded-xl border p-3 space-y-3 bg-white">
+          <div className="text-sm font-medium">Promo (optional)</div>
+          <label className="block">
+            <div className="text-sm mb-1">Promo Price (MAD)</div>
+            <input
+              type="number"
+              min={0}
+              value={promoPrice}
+              onChange={(e) => setPromoPrice(e.target.value)}
+              className="w-full rounded border px-3 py-2 bg-white"
+              inputMode="numeric"
+              placeholder="e.g., 199"
+            />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <div className="text-sm mb-1">Promo starts</div>
+              <input
+                type="datetime-local"
+                value={promoStart}
+                onChange={(e) => setPromoStart(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+              />
+            </label>
+            <label className="block">
+              <div className="text-sm mb-1">Promo ends</div>
+              <input
+                type="datetime-local"
+                value={promoEnd}
+                onChange={(e) => setPromoEnd(e.target.value)}
+                className="w-full rounded border px-3 py-2 bg-white"
+              />
+            </label>
+          </div>
+          <p className="text-xs text-neutral-500">
+            If you set a promo price, both start and end are required.
+          </p>
+        </div>
+
         <button
-          onClick={goPrev}
-          disabled={atFirst}
-          className="px-4 py-2 rounded border disabled:opacity-40"
+          onClick={handleSave}
+          disabled={formInvalid}
+          className="w-full rounded-xl px-4 py-3 bg-black text-white font-medium disabled:opacity-50"
         >
-          Back
-        </button>
-        <button
-          onClick={goNext}
-          disabled={atLast}
-          className="px-4 py-2 rounded bg-black text-white"
-        >
-          {atLast ? "Publish" : "Next"}
+          {saving ? "Saving…" : "Publish"}
         </button>
       </div>
     </main>

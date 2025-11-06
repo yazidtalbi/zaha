@@ -258,7 +258,7 @@ export default function BottomNav() {
     return (
       <nav
         className={clsx(
-          "fixed bottom-0 inset-x-0 z-50 border-t",
+          "fixed bottom-0 inset-x-0 z-50  ",
           // softer, glassy bar with rounded top
           "bg-white",
           "shadow-none"
@@ -330,82 +330,83 @@ export default function BottomNav() {
                   side="bottom"
                   className={clsx(
                     "max-w-screen-sm mx-auto",
-                    "rounded-t-2xl border-t shadow-xl",
-                    "pb-[env(safe-area-inset-bottom)] px-4 pt-3",
-                    // hide the built-in close button from shadcn/radix
+                    "rounded-t-2xl bg-white shadow-2xl   border-ink/10",
+                    "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
                     "[&_[data-radix-sheet-close]]:hidden"
                   )}
                 >
-                  <SheetHeader className="flex flex-row items-center justify-between">
-                    <SheetTitle className="text-base opacity-0">
-                      More
-                    </SheetTitle>
+                  {/* grabber */}
+                  <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+                  {/* optional top button */}
+                  <div className="px-4 pb-2 flex items-center justify-end">
                     <Link href="/home" onClick={() => setMenuOpen(false)}>
-                      <Button className="bg-terracotta hover:bg-terracotta/90 text-white h-9 px-3 rounded-full">
+                      <Button className="h-9 px-3 rounded-full bg-terracotta text-white hover:bg-terracotta/90">
                         Switch to buyer
                       </Button>
                     </Link>
-                  </SheetHeader>
+                  </div>
 
-                  {/* Simple sections */}
-                  <div className="mt-4 space-y-6">
+                  {/* LISTS */}
+                  <div className="px-1">
                     {/* SHOP */}
-                    <section>
-                      <div className="text-xs text-ink/70 mb-2">Shop</div>
-                      <ul className="grid gap-2">
-                        <li>
-                          <Link
-                            href={shopPath ?? "/seller"}
-                            onClick={() => setMenuOpen(false)}
-                            className="rounded-xl border px-3 py-2 flex items-center gap-2 hover:bg-sand transition"
-                          >
-                            <Store size={18} />
-                            <span className="text-sm">
-                              View my shop on Zaha
-                            </span>
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            href="/seller/reviews"
-                            onClick={() => setMenuOpen(false)}
-                            className="rounded-xl border px-3 py-2 flex items-center gap-2 hover:bg-sand transition"
-                          >
-                            <MessageSquareText size={18} />
-                            <span className="text-sm">Reviews</span>
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            href="/seller/analytics"
-                            onClick={() => setMenuOpen(false)}
-                            className="rounded-xl border px-3 py-2 flex items-center gap-2 hover:bg-sand transition"
-                          >
-                            <BarChart3 size={18} />
-                            <span className="text-sm">Analytics</span>
-                          </Link>
-                        </li>
-                      </ul>
-                    </section>
+                    <ul className="grid">
+                      <li>
+                        <Link
+                          href={shopPath ?? "/seller"}
+                          onClick={() => setMenuOpen(false)}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                        >
+                          <Store size={20} className="text-ink" />
+                          <span className="text-[15px] font-medium text-ink">
+                            View my shop
+                          </span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/seller/reviews"
+                          onClick={() => setMenuOpen(false)}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                        >
+                          <MessageSquareText size={20} className="text-ink" />
+                          <span className="text-[15px] font-medium text-ink">
+                            Reviews
+                          </span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/seller/analytics"
+                          onClick={() => setMenuOpen(false)}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                        >
+                          <BarChart3 size={20} className="text-ink" />
+                          <span className="text-[15px] font-medium text-ink">
+                            Analytics
+                          </span>
+                        </Link>
+                      </li>
+                    </ul>
 
-                    {/* SHOP SETTINGS */}
-                    <section>
-                      <div className="text-xs text-ink/70 mb-2">
-                        Shop Settings
-                      </div>
-                      <ul className="grid gap-2">
-                        <li>
-                          <Link
-                            href="/seller/settings"
-                            onClick={() => setMenuOpen(false)}
-                            className="rounded-xl border px-3 py-2 flex items-center gap-2 hover:bg-sand transition"
-                          >
-                            <Settings size={18} />
-                            <span className="text-sm">Manage</span>
-                          </Link>
-                        </li>
-                      </ul>
-                    </section>
+                    {/* separator */}
+                    <div className="my-2 h-px bg-ink/10" />
+
+                    {/* SETTINGS */}
+                    <ul className="grid">
+                      <li>
+                        <Link
+                          href="/seller/settings"
+                          onClick={() => setMenuOpen(false)}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                        >
+                          <Settings size={20} className="text-ink" />
+                          <span className="text-[15px] font-medium text-ink">
+                            Shop settings
+                          </span>
+                        </Link>
+                      </li>
+                    </ul>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -420,13 +421,13 @@ export default function BottomNav() {
   return (
     <nav
       className={clsx(
-        "fixed bottom-0 inset-x-0 z-50 border-t",
+        "fixed bottom-0 inset-x-0 z-50  ",
         "bg-white",
         "shadow-none"
       )}
     >
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
-        <ul className="grid grid-cols-5 px-2 pt-1 pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-5 px-2  pb-[env(safe-area-inset-bottom)]">
           <li>
             <Item href="/home" label="Home" match="/home" icon={Home} />
           </li>

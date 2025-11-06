@@ -20,7 +20,21 @@ import {
   Search as SearchIcon,
   AlertTriangle,
   Truck,
+  ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
+import Image from "next/image";
+import {
+  Select,
+  SelectContent,
+  SelectIcon,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@radix-ui/react-select";
+import DashboardHeader from "@/components/DashboardHeader";
+import { Button } from "@/components/ui/button";
+import Home from "../page";
 
 /* ---------------- Types (defensive/optional) ---------------- */
 type Order = {
@@ -41,7 +55,9 @@ type Order = {
 
 type Shop = {
   id: string;
-  name?: string | null;
+  title?: string | null;
+  is_verified?: boolean | null;
+  avatar_url?: string | null;
   slug?: string | null;
   banner_url?: string | null;
   payout_enabled?: boolean | null; // optional, handled defensively
@@ -133,7 +149,7 @@ function KpiCard({
         ? "bg-green-50"
         : "bg-red-50";
   return (
-    <div className="rounded-xl border bg-sand px-3 py-3 flex items-center gap-3">
+    <div className="rounded-xl    bg-neutral-50  px-3 py-3 flex items-center gap-3">
       <div className="w-9 h-9 rounded-lg grid place-items-center bg-white border">
         <Icon size={18} />
       </div>
@@ -456,6 +472,14 @@ function OverviewInner() {
     }
   }, [orders, range]);
 
+  // put this near the top of the file (below RangeKey type)
+  const RANGE_LABEL: Record<RangeKey, string> = {
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
+    "90d": "Last 90 days",
+    all: "All time",
+  };
+
   const shareShop = useCallback(async () => {
     const url = shop?.slug
       ? `${location.origin}/shop/${shop.slug}`
@@ -514,80 +538,90 @@ function OverviewInner() {
       )}
 
       {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={exportCSV}
-            className="rounded-full border bg-white hover:bg-sand transition grid place-items-center h-9 px-3 text-sm gap-2 inline-flex"
-          >
-            <Download size={16} />
-            Export
-          </button>
-          <button
-            onClick={shareShop}
-            className="rounded-full border bg-white hover:bg-sand transition grid place-items-center h-9 px-3 text-sm gap-2 inline-flex"
-          >
-            <Share2 size={16} />
-            Share
-          </button>
-          {shop?.id && (
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(shop.id);
-              }}
-              className="rounded-full border bg-white hover:bg-sand transition grid place-items-center w-9 h-9"
-              title="Copy shop id"
-            >
-              <Copy size={16} />
-            </button>
-          )}
-          <Link
-            href="/seller/settings"
-            aria-label="Settings"
-            className="rounded-full border bg-white hover:bg-sand transition grid place-items-center w-9 h-9"
-          >
-            <Settings size={18} />
-          </Link>
-        </div>
-        <a ref={downloadRef} className="hidden" />
+      <div className="mb-6 relative flex justify-between">
+        <DashboardHeader
+          title="Dashboard"
+          subtitle="Manage your shop"
+          withDivider={false}
+          withBackButton={false}
+        />
+
+        <Link
+          href="/home"
+          aria-label="Return to buyer"
+          className="
+    rounded-full border border-ink/15 bg-white
+    hover:bg-sand transition
+    h-9 px-3
+    inline-flex items-center gap-1.5
+    text-sm text-ink/80
+  "
+        >
+          <ArrowLeft className="h-[15px] w-[15px] opacity-70" /> Switch to buyer
+        </Link>
       </div>
 
       {/* Store card + checklist */}
-      <div className="rounded-xl border bg-white p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg border grid place-items-center bg-sand">
-              <Store size={18} />
-            </div>
-            <div>
-              <div className="font-medium">{shop?.name || "Your shop"}</div>
-              <div className="text-xs text-ink/70">
-                {shop?.is_active ? "Active" : "Inactive"} ·{" "}
-                {shop?.payout_enabled ? "Payouts enabled" : "Payouts disabled"}
+
+      <Link href={`/shop/${shop?.slug ?? shop?.id}`}>
+        <div className="rounded-xl   bg-neutral-50 ring ring-neutral-200   p-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 ">
+              <div className="w-10 h-10 border grid place-items-center  bg-neutral-50 rounded-md overflow-hidden">
+                {shop?.avatar_url ? (
+                  <img
+                    src={shop.avatar_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Store size={18} />
+                )}
+              </div>
+              <div>
+                <div className="font-medium text-terracotta">
+                  {shop?.title || "Your shop"}
+                </div>
+                <div className="text-xs  font-medium text-ink/70">
+                  {shop?.is_verified ? (
+                    <div className="flex">
+                      {" "}
+                      <Image
+                        src="/icons/verified_zaha.svg"
+                        alt="Verified"
+                        width={14}
+                        height={14}
+                        className="opacity-90"
+                      />{" "}
+                      <span className="ml-1">Verified</span>
+                    </div>
+                  ) : (
+                    "Unverified"
+                  )}{" "}
+                  {/* {shop?.payout_enabled ? "Payouts enabled" : "Payouts disabled"} */}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {shop?.id && (
-              <Link
-                href={`/shop/${shop.slug ?? shop.id}`}
-                className="rounded-full border px-3 py-1.5 text-sm bg-white hover:bg-sand transition inline-flex items-center gap-1"
-              >
-                <Eye size={16} /> Preview
-              </Link>
-            )}
-            <Link
+            <div className="flex items-center gap-2">
+              {shop?.id && (
+                <Link
+                  href={`/shop/${shop.slug ?? shop.id}`}
+                  className="rounded-full border px-2 py-1 text-sm bg-white hover: bg-neutral-50  transition inline-flex items-center gap-1"
+                >
+                  <Eye size={16} /> Preview
+                </Link>
+              )}
+              {/* <Link
               href="/seller/settings"
-              className="rounded-full border px-3 py-1.5 text-sm bg-white hover:bg-sand transition"
+              className="rounded-full border px-3 py-1.5 text-sm bg-white hover: bg-neutral-50  transition"
             >
               Manage
-            </Link>
+            </Link> */}
+            </div>
           </div>
-        </div>
 
-        {/* Checklist */}
-        <div className="space-y-2">
+          {/* Checklist */}
+          {/* <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <div className="font-medium">Setup checklist</div>
             <div className="text-ink/70">
@@ -629,38 +663,61 @@ function OverviewInner() {
               </li>
             ))}
           </ul>
+        </div> */}
         </div>
-      </div>
+      </Link>
 
       {/* Date range + analytics link */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {(["7d", "30d", "90d", "all"] as RangeKey[]).map((rk) => {
-            const active = range === rk;
-            const label =
-              rk === "7d"
-                ? "Last 7d"
-                : rk === "30d"
-                  ? "Last 30d"
-                  : rk === "90d"
-                    ? "Last 90d"
-                    : "All time";
-            return (
-              <button
-                key={rk}
-                onClick={() => setRange(rk)}
-                className={[
-                  "px-3 py-1.5 rounded-full border text-sm transition",
-                  active
-                    ? "bg-terracotta text-white border-terracotta"
-                    : "bg-white hover:bg-sand",
-                ].join(" ")}
-              >
-                {label}
-              </button>
-            );
-          })}
+        {/* Date range + analytics link */}
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline text-xs text-ink/60">Range</span>
+
+          <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+            <SelectTrigger
+              aria-label="Select date range"
+              className="
+          h-9 w-[168px]
+          rounded-full
+          border border-ink/15 bg-white
+          pl-3 pr-8
+          text-sm text-ink
+          justify-start
+          data-[placeholder]:text-ink/60
+        "
+            >
+              {/* shows the selected item's label; placeholder used only if none selected */}
+              <SelectValue placeholder="Select range" />
+              {/* guaranteed chevron on the right */}
+              <SelectIcon asChild>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </SelectIcon>
+            </SelectTrigger>
+
+            <SelectContent className="rounded-xl">
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+              <SelectItem value="90d">Last 90 days</SelectItem>
+              <SelectItem value="all">All time</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+
+        <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+          <SelectTrigger className={" w-auto inline-flex shadow-none"}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="rounded-xl">
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Link
           href="/seller/analytics"
           className="text-sm underline whitespace-nowrap"
@@ -670,7 +727,7 @@ function OverviewInner() {
       </div>
 
       {/* KPIs + status bar */}
-      <div className="rounded-xl border bg-white p-3 space-y-3">
+      <div className="">
         <div className="grid grid-cols-2 gap-3">
           <KpiCard
             label="Gross sales"
@@ -709,35 +766,35 @@ function OverviewInner() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* <div className="grid grid-cols-3 gap-3">
         <Link
           href="/sell"
-          className="rounded-xl border bg-white hover:bg-sand transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
         >
-          <div className="w-9 h-9 rounded-lg grid place-items-center bg-sand border">
+          <div className="w-9 h-9 rounded-lg grid place-items-center ">
             <Plus size={18} />
           </div>
           <div className="text-sm font-medium">Add listing</div>
         </Link>
         <Link
           href="/seller/products"
-          className="rounded-xl border bg-white hover:bg-sand transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
         >
-          <div className="w-9 h-9 rounded-lg grid place-items-center bg-sand border">
+          <div className="w-9 h-9 rounded-lg grid place-items-center   ">
             <Package size={18} />
           </div>
           <div className="text-sm font-medium">Products</div>
         </Link>
         <Link
           href="/seller/orders"
-          className="rounded-xl border bg-white hover:bg-sand transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
         >
-          <div className="w-9 h-9 rounded-lg grid place-items-center bg-sand border">
+          <div className="w-9 h-9 rounded-lg grid place-items-center   ">
             <ClipboardList size={18} />
           </div>
           <div className="text-sm font-medium">Orders</div>
         </Link>
-      </div>
+      </div> */}
 
       {/* Fulfillment queue + Low stock */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -796,7 +853,7 @@ function OverviewInner() {
                     </div>
                     <Link
                       href={`/seller/orders/${o.id}`}
-                      className="rounded-full border px-3 py-1 text-xs hover:bg-sand transition"
+                      className="rounded-full border px-3 py-1 text-xs hover: bg-neutral-50  transition"
                     >
                       Open
                     </Link>
@@ -860,7 +917,7 @@ function OverviewInner() {
                   "px-3 py-1.5 rounded-full border text-sm transition",
                   active
                     ? "bg-terracotta text-white border-terracotta"
-                    : "bg-white hover:bg-sand",
+                    : "bg-white hover: bg-neutral-50 ",
                 ].join(" ")}
               >
                 {f.label}
@@ -919,7 +976,7 @@ function OverviewInner() {
             <div className="mt-3">
               <Link
                 href="/sell"
-                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm bg-white hover:bg-sand transition"
+                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm bg-white hover: bg-neutral-50  transition"
               >
                 <Plus size={16} />
                 Add your first listing
@@ -958,7 +1015,7 @@ function OverviewInner() {
                     </div>
                     <Link
                       href={`/seller/orders/${o.id}`}
-                      className="rounded-full border px-3 py-1 text-xs hover:bg-sand transition"
+                      className="rounded-full border px-3 py-1 text-xs hover: bg-neutral-50  transition"
                     >
                       Open
                     </Link>
@@ -970,7 +1027,7 @@ function OverviewInner() {
               <div className="pt-2">
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  className="w-full rounded-xl border bg-white hover:bg-sand transition px-4 py-2 text-sm"
+                  className="w-full rounded-xl border bg-white hover: bg-neutral-50  transition px-4 py-2 text-sm"
                 >
                   Load more
                 </button>

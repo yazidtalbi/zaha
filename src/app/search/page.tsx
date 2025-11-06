@@ -1,7 +1,8 @@
 // app/search/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, SlidersHorizontal } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
@@ -112,6 +113,12 @@ export default function SearchPage() {
   const [page, setPage] = useState(0);
   const pageSize = 24;
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // focus after mount
+    inputRef.current?.focus();
+  }, []);
+
   const paramsKey = useMemo(() => {
     const p = new URLSearchParams();
     if (committed.q) p.set("q", committed.q);
@@ -152,7 +159,9 @@ export default function SearchPage() {
       if (error) throw error;
 
       setItems((prev) =>
-        reset ? (data as Item[]) ?? [] : [...prev, ...((data as Item[]) ?? [])]
+        reset
+          ? ((data as Item[]) ?? [])
+          : [...prev, ...((data as Item[]) ?? [])]
       );
     } catch (e) {
       console.error(e);
@@ -274,32 +283,36 @@ export default function SearchPage() {
         className="p-4 sticky top-0 bg-neutral-50 z-10"
       >
         <div className="relative">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder='Search for "sweatshirt with left hand embroidery"'
-            className="w-full rounded-full bg-white px-4 py-3 pl-10 pr-24 shadow-sm text-sm"
-          />
-          {/* Clear X (only when there is text) */}
-          {q.trim().length > 0 && (
+          <div className="flex items-center gap-2 rounded-full border bg-white pl-10 pr-24 h-12 ">
+            <Search className="absolute left-3 h-4 w-4 opacity-60" />
+            <input
+              ref={inputRef}
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search handmade goods…"
+              className="flex-1 outline-none text-sm placeholder:text-neutral-400 bg-transparent"
+            />
+
+            {/* Clear X (only when there is text) */}
+            {q.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                aria-label="Clear search"
+                className="absolute right-24 top-1.5 h-9 w-9 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
+              >
+                <X size={16} />
+              </button>
+            )}
+
             <button
-              type="button"
-              onClick={clearAll}
-              aria-label="Clear search"
-              className="absolute right-24 top-2.5 h-7 w-7 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
+              type="submit"
+              className="absolute right-1 top-1 rounded-full px-4 h-10 text-sm bg-black text-white"
             >
-              <X size={16} />
+              Search
             </button>
-          )}
-          <button
-            type="submit"
-            className="absolute right-1 top-1 rounded-full px-4 py-2 text-sm bg-black text-white"
-          >
-            Search
-          </button>
-          <span className="absolute left-3 top-3.5 text-neutral-400 text-lg">
-            🔍
-          </span>
+          </div>
         </div>
 
         {/* Filters row */}
@@ -308,10 +321,10 @@ export default function SearchPage() {
             <SheetTrigger asChild>
               <button
                 type="button"
-                className="relative h-9 w-9 grid place-items-center rounded-full border bg-transparent"
+                className="relative h-9  grid place-items-center rounded-full border bg-transparent min-w-14"
                 aria-label="Filters"
               >
-                <FilterIcon size={16} />
+                <SlidersHorizontal size={16} />
                 {selectedCount > 0 && (
                   <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] rounded-full bg-black text-white text-[10px] leading-[18px] text-center px-1">
                     {selectedCount}
@@ -454,9 +467,9 @@ export default function SearchPage() {
                   <button
                     key={v.id}
                     onClick={() => router.push(`/product/${v.id}`)}
-                    className="min-w-[120px] rounded-xl bg-white shadow-sm border overflow-hidden"
+                    className="min-w-[100px] rounded-xl bg-white border overflow-hidden"
                   >
-                    <div className="h-[96px] bg-neutral-100">
+                    <div className="h-[100px] bg-neutral-100">
                       {v.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -467,12 +480,14 @@ export default function SearchPage() {
                         />
                       ) : null}
                     </div>
-                    <div className="p-2">
-                      <div className="text-xs line-clamp-2">{v.title}</div>
+                    {/* <div className="p-2  text-left">
+                      <div className="text-xs line-clamp-2 font-semibold truncate">
+                        {v.title}
+                      </div>
                       <div className="text-xs mt-1 text-neutral-500">
                         MAD {v.price_mad}
                       </div>
-                    </div>
+                    </div> */}
                   </button>
                 ))}
               </div>

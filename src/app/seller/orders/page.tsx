@@ -135,13 +135,13 @@ function OptionChips({ options }: { options: any }) {
       {pairs.slice(0, 6).map((p, i) => (
         <span
           key={i}
-          className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-ink/10"
+          className="text-[11px] px-2 py-0.5 rounded-full bg-sand text-ink  "
         >
           {p.label}: <span className="font-medium">{p.value}</span>
         </span>
       ))}
       {pairs.length > 6 && (
-        <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-ink/10">
+        <span className="text-[11px] px-2 py-0.5 rounded-full bg-sand border border-ink/10">
           +{pairs.length - 6}
         </span>
       )}
@@ -149,7 +149,7 @@ function OptionChips({ options }: { options: any }) {
   );
 }
 
-/* ───────────────── Header (inspired by Products) ───────────────── */
+/* ───────────────── Header ───────────────── */
 function OrdersHeaderCompact({
   counts,
   qLive,
@@ -356,9 +356,9 @@ function OrdersHeaderCompact({
           <div className="flex-1" />
         </div>
       </div>
+
       <div className="flex justify-between items-center mt-6">
-        {/* Tiny total */}
-        <div className="  flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <p className="text-xs text-ink/70">{counts.total} total</p>
         </div>
 
@@ -464,27 +464,7 @@ function OrdersInner() {
     toast.success(`Status changed to ${next} ✅`);
   }
 
-  // bulk actions
-  async function bulkUpdate(next: Order["status"]) {
-    if (!selected.size) return;
-    const ids = Array.from(selected);
-    // optimistic
-    setRows((xs) =>
-      xs.map((o) => (selected.has(o.id) ? { ...o, status: next } : o))
-    );
-    setSelected(new Set());
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: next })
-      .in("id", ids);
-    if (error) {
-      toast.error(error.message);
-      load();
-      return;
-    }
-    toast.success(`Updated ${ids.length} orders → ${next}`);
-  }
-
+  // bulk helpers kept (bar hidden in grouped)
   function exportCSV(onlySelected = false) {
     const data = (
       onlySelected ? rows.filter((r) => selected.has(r.id)) : filteredVisible
@@ -514,9 +494,7 @@ function OrdersInner() {
   }
 
   function printPickList() {
-    const data = (
-      selected.size ? rows.filter((r) => selected.has(r.id)) : filteredVisible
-    ).map((o) => {
+    const data = filteredVisible.map((o) => {
       const opts =
         o.options && typeof o.options === "object"
           ? JSON.stringify(o.options)
@@ -570,8 +548,8 @@ Options: ${opts}
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
       xs = xs.filter((r) => {
-        const title = r.products?.title?.toLowerCase() ?? "";
-        const id = r.id.toLowerCase();
+        const title = (r.products?.title ?? "").toLowerCase();
+        const id = (r.id ?? "").toLowerCase();
         const phone = (r.phone ?? "").toLowerCase();
         const city = (r.city ?? "").toLowerCase();
         return (
@@ -626,18 +604,6 @@ Options: ${opts}
     return filteredVisible.slice(0, end);
   }, [filteredVisible, page]);
 
-  function toggleSelectVisible() {
-    const visible = groupByProduct ? filteredVisible : paged;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      visible.forEach((o) => {
-        if (next.has(o.id)) next.delete(o.id);
-        else next.add(o.id);
-      });
-      return next;
-    });
-  }
-
   /* ────────────── grouping ────────────── */
   type ProductGroup = {
     productId: string;
@@ -665,7 +631,6 @@ Options: ${opts}
       g.totalAmount += o.amount_mad || 0;
       map.set(productId, g);
     }
-    // sort groups by most orders
     return Array.from(map.values()).sort(
       (a, b) => b.orders.length - a.orders.length
     );
@@ -744,8 +709,6 @@ Options: ${opts}
     );
   }
 
-  const selectedCount = selected.size;
-
   return (
     <main className="pb-24 px-4 max-w-screen-sm mx-auto">
       <OrdersHeaderCompact
@@ -762,54 +725,6 @@ Options: ${opts}
         groupByProduct={groupByProduct}
         setGroupByProduct={setGroupByProduct}
       />
-
-      {/* Bulk bar: hidden when grouped */}
-      {/* {!groupByProduct && (
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="rounded-full h-8 px-3"
-            onClick={toggleSelectVisible}
-          >
-            {selectedCount ? "Toggle visible selection" : "Select visible"}
-          </Button>
-          <Button
-            variant="outline"
-            className="rounded-full h-8 px-3"
-            onClick={() => setSelected(new Set())}
-          >
-            Clear
-          </Button>
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3"
-              onClick={() => exportCSV(false)}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export filtered
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3 disabled:opacity-50"
-              onClick={() => exportCSV(true)}
-              disabled={!selectedCount}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export selected ({selectedCount})
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full h-8 px-3 disabled:opacity-50"
-              onClick={printPickList}
-              disabled={!selectedCount && !paged.length}
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Print pick list
-            </Button>
-          </div>
-        </div>
-      )} */}
 
       {/* Orders list */}
       {groupByProduct ? (
@@ -831,7 +746,6 @@ Options: ${opts}
                 >
                   <div className="w-12 h-12 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
                     {g.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={g.thumb}
                         alt=""
@@ -851,9 +765,7 @@ Options: ${opts}
                     </div>
                   </div>
                   <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
+                    className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
                   />
                 </button>
 
@@ -875,7 +787,6 @@ Options: ${opts}
 
                             <div className="w-6 h-6 rounded-sm bg-neutral-100 overflow-hidden shrink-0">
                               {img ? (
-                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={img}
                                   alt=""
@@ -895,48 +806,45 @@ Options: ${opts}
                                 <StatusBadge status={o.status} />
                               </div>
 
-                              {/* Meta line: (price removed) show options + personalization indicator */}
-
+                              {/* Options + personalization badge (price removed) */}
                               <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
                                 <OptionChips options={o.options} />
-
                                 {o.personalization && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
+                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
                                     With personalization
                                   </span>
                                 )}
                               </div>
 
-                              {/* New line: Qty + Date (left aligned) */}
+                              {/* New line: Qty + Date (left) */}
                               <div className="text-xs text-ink/70 mt-1">
                                 Qty {o.qty} ·{" "}
                                 {new Date(o.created_at).toLocaleString()}
                               </div>
 
-                              {/* Address under meta */}
+                              {/* Address under that line (with Copy / Open map) */}
                               {(o.address || o.city) && (
                                 <div className="mt-2 text-xs text-ink/70 flex flex-wrap items-center gap-2">
                                   <span className="inline-flex items-center gap-1 min-w-0">
                                     <MapPin className="h-3.5 w-3.5" />
                                     <span className="truncate">
-                                      {o.city ?? ""}
+                                      {(o.address ?? "") +
+                                        (o.city ? `, ${o.city}` : "")}
                                     </span>
                                   </span>
-                                  {/* <button
+                                  <button
                                     onClick={async () => {
                                       await navigator.clipboard.writeText(
-                                        `${o.address ?? ""}${
-                                          o.city ? ", " + o.city : ""
-                                        }`
+                                        `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
                                       );
                                       toast.success("Address copied");
                                     }}
-                                    className="underline shrink-0"
+                                    className="underline shrink-0 inline-flex items-center gap-1"
                                   >
-                                    <Copy className="h-3 w-3 inline mr-1" />
+                                    <Copy className="h-3 w-3" />
                                     Copy
-                                  </button> */}
-                                  {/* {o.address && (
+                                  </button>
+                                  {o.address && (
                                     <a
                                       className="underline shrink-0"
                                       target="_blank"
@@ -947,7 +855,7 @@ Options: ${opts}
                                     >
                                       Open map
                                     </a>
-                                  )} */}
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -962,81 +870,70 @@ Options: ${opts}
           })}
         </ul>
       ) : (
-        /* ——— FLAT RENDER (existing list) ——— */
+        /* ——— FLAT RENDER ——— */
         <ul className="mt-3 space-y-2">
           {paged.map((o) => {
             const img = o.products?.photos?.[0];
-            const isSelected = selected.has(o.id);
             return (
-              <li
-                key={o.id}
-                className={[
-                  "rounded-xl bg-white p-3 border transition-shadow",
-                  isSelected ? "ring-2 ring-terracotta/50" : "border-black/5",
-                ].join(" ")}
-              >
-                <div className="flex items-start gap-3">
-                  {/* <label className="pt-1">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() =>
-                        setSelected((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(o.id)) next.delete(o.id);
-                          else next.add(o.id);
-                          return next;
-                        })
-                      }
-                      className="accent-terracotta h-4 w-4"
-                    />
-                  </label> */}
+              <Link href={`/seller/orders/${o.id}`}>
+                {" "}
+                <li
+                  key={o.id}
+                  className="rounded-xl bg-white p-3 border border-black/5"
+                >
+                  <div className="flex gap-2">
+                    <div className="w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
+                      {img ? (
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
+                          No image
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
-                    {img ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
-                        No image
+                    <div className="flex-1 min-w-0">
+                      {/* Row: ID + Status */}
+                      <div className="flex   justify-between gap-2 items-end">
+                        <span className="text-xs text-ink/60 font-medium">
+                          #{o.id.slice(0, 6)}
+                        </span>
+
+                        <StatusBadge status={o.status} />
                       </div>
-                    )}
+
+                      {/* Title below */}
+                      <h4
+                        className="mt-0.5 font-semibold truncate"
+                        title={o.products?.title ?? "Order"}
+                      >
+                        {o.products?.title ?? "Order"}
+                      </h4>
+
+                      {/* Meta */}
+                      <div className="mt-1 text-xs text-ink/70 flex items-center gap-2">
+                        <span className="font-medium">MAD {o.amount_mad}</span>
+                        <span>·</span>
+                        <span>Qty {o.qty}</span>
+                        <span>·</span>
+                        <span>{new Date(o.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    {/* Top row: ID at left, status at right */}
-                    <div className="flex items-center justify-between gap-2">
-                      <Link
-                        href={`/seller/orders/${o.id}`}
-                        className="text-sm font-medium underline decoration-ink/30 hover:decoration-ink"
-                        title={`Order #${o.id}`}
-                      >
-                        #{o.id.slice(0, 6)}
-                      </Link>
-                      <StatusBadge status={o.status} />
-                    </div>
+                  <div className="  h-px bg-black/5 my-2 opacity-0 " />
 
-                    {/* Title */}
-                    <h4 className="mt-0.5 font-semibold truncate">
-                      {o.products?.title ?? "Order"}
-                    </h4>
+                  <div className="block items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      {/* Top row: ID at left, status + ⋯ at right */}
 
-                    {/* Meta line */}
-                    <div className="mt-0.5 text-xs text-ink/70 flex items-center gap-2">
-                      <span className="font-medium">MAD {o.amount_mad}</span>
-                      <span>·</span>
-                      <span>Qty {o.qty}</span>
-                      <span>·</span>
-                      <span>{new Date(o.created_at).toLocaleString()}</span>
-                    </div>
-
-                    {/* Contact row */}
-                    <div className="text-xs text-ink/70 mt-2 flex flex-wrap items-center gap-2">
-                      {o.phone && (
+                      {/* Contact row */}
+                      <div className="text-xs text-ink/70 mt-2 flex flex-wrap items-center gap-2 ">
+                        {/* {o.phone && (
                         <>
                           <a
                             className="inline-flex items-center gap-1 underline"
@@ -1055,15 +952,16 @@ Options: ${opts}
                             <MessageSquare size={12} /> WhatsApp
                           </a>
                         </>
-                      )}
-                      {(o.address || o.city) && (
-                        <>
-                          <span className="opacity-50">·</span>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin size={12} />
-                            {o.city ?? ""}
-                          </span>
-                          <button
+                      )} */}
+
+                        {(o.address || o.city) && (
+                          <>
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin size={12} />
+                              {(o.address ?? "") +
+                                (o.city ? `, ${o.city}` : "")}
+                            </span>
+                            {/* <button
                             onClick={async () => {
                               await navigator.clipboard.writeText(
                                 `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
@@ -1073,8 +971,8 @@ Options: ${opts}
                             className="inline-flex items-center gap-1 underline"
                           >
                             <Copy size={12} /> Copy
-                          </button>
-                          {o.address && (
+                          </button> */}
+                            {/* {o.address && (
                             <a
                               className="underline"
                               target="_blank"
@@ -1085,71 +983,41 @@ Options: ${opts}
                             >
                               Open map
                             </a>
-                          )}
-                        </>
+                          )} */}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Separator before personalization/options */}
+                      {(o.personalization || o.options) && (
+                        <div className="  h-px bg-black/5 my-2 opacity-0 " />
                       )}
-                    </div>
 
-                    {/* —— separator before personalization/options —— */}
-                    <div className="my-3 h-px bg-black/5" />
+                      {/* With personalization */}
+                      {o.personalization ? (
+                        <section className="mb-2">
+                          <h5 className="text-xs font-semibold text-ink/70 mb-1">
+                            With personalization
+                          </h5>
+                          <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
+                            {o.personalization}
+                          </div>
+                        </section>
+                      ) : null}
 
-                    {/* With personalization (below image + details) */}
-                    {o.personalization ? (
-                      <section className="mb-2">
-                        <h5 className="text-xs font-semibold text-ink/70 mb-1">
-                          With personalization
-                        </h5>
-                        <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
-                          {o.personalization}
-                        </div>
-                      </section>
-                    ) : null}
-
-                    {/* Options (below as well) */}
-                    {o.options ? (
-                      <section>
-                        <h5 className="text-xs font-semibold text-ink/70 mb-1">
-                          Options
-                        </h5>
-                        <OptionsList options={o.options} />
-                      </section>
-                    ) : null}
-
-                    {/* Status controls (keep as-is below everything) */}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {(
-                        [
-                          { key: "confirmed", label: "Confirm", icon: Check },
-                          { key: "shipped", label: "Ship", icon: Truck },
-                          { key: "delivered", label: "Deliver", icon: Package },
-                          { key: "cancelled", label: "Cancel", icon: XCircle },
-                        ] as const
-                      ).map(({ key, label, icon: Icon }) => {
-                        const enabled = canTransition(o.status, key);
-                        return (
-                          <button
-                            key={key}
-                            disabled={busyId === o.id || !enabled}
-                            onClick={() => updateStatus(o.id, key)}
-                            className={[
-                              "rounded-full border px-3 py-1 text-xs inline-flex items-center gap-1",
-                              enabled
-                                ? "bg-white hover:bg-sand"
-                                : "bg-white opacity-40 cursor-not-allowed",
-                            ].join(" ")}
-                            title={
-                              enabled ? "" : "Not available from current status"
-                            }
-                          >
-                            <Icon size={14} />
-                            {label}
-                          </button>
-                        );
-                      })}
+                      {/* Options */}
+                      {o.options ? (
+                        <section>
+                          <h5 className="text-xs font-semibold text-ink/70 mb-1">
+                            Options
+                          </h5>
+                          <OptionsList options={o.options} />
+                        </section>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              </li>
+                </li>
+              </Link>
             );
           })}
         </ul>
@@ -1216,7 +1084,7 @@ function OptionsList({ options }: { options: any }) {
   if (Array.isArray(options)) {
     if (!options.length) return null;
     return (
-      <ul className="text-sm rounded-lg border border-black/5 bg-paper px-3 py-2 space-y-1">
+      <ul className="text-sm rounded-lg border border-black/5 bg-paper px-3 py-2 divide-y divide-dashed divide-black/10">
         {options.map((opt: any, i: number) => {
           const group =
             opt.group ?? opt.name ?? opt.key ?? opt.title ?? "Option";
@@ -1224,7 +1092,10 @@ function OptionsList({ options }: { options: any }) {
           const price =
             opt.price_delta_mad != null ? ` (+${opt.price_delta_mad} MAD)` : "";
           return (
-            <li key={i} className="flex items-start justify-between gap-4">
+            <li
+              key={i}
+              className="flex items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"
+            >
               <span className="text-ink/80">{group}</span>
               <span className="font-medium">
                 {String(value)}
@@ -1257,6 +1128,51 @@ function OptionsList({ options }: { options: any }) {
   return (
     <div className="text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
       {String(options)}
+    </div>
+  );
+}
+
+function ActionMenu({
+  status,
+  busy,
+  onChange,
+}: {
+  status: Order["status"];
+  busy: boolean;
+  onChange: (next: Order["status"]) => void;
+}) {
+  return (
+    <div className="relative">
+      <details className="group">
+        <summary className="cursor-pointer list-none flex items-center gap-1 text-xs text-ink/70 hover:text-ink">
+          <span>⋯</span>
+        </summary>
+
+        <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow-lg p-1 text-sm z-50">
+          {[
+            { key: "confirmed", label: "Confirm", icon: Check },
+            { key: "shipped", label: "Ship", icon: Truck },
+            { key: "delivered", label: "Deliver", icon: Package },
+            { key: "cancelled", label: "Cancel", icon: XCircle },
+          ].map(({ key, label, icon: Icon }) => {
+            const can = canTransition(status, key);
+            return (
+              <button
+                key={key}
+                disabled={busy || !can}
+                onClick={() => onChange(key as Order["status"])}
+                className={[
+                  "w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+                  can ? "hover:bg-neutral-50" : "opacity-40 cursor-not-allowed",
+                ].join(" ")}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </details>
     </div>
   );
 }

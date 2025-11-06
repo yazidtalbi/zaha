@@ -386,7 +386,7 @@ export default function Header() {
               className="font-semibold tracking-tight text-2xl"
               aria-label="Zaha home"
             >
-              zaha
+              Zaha
             </Link>
           </div>
 

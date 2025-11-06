@@ -15,6 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Download } from "lucide-react";
+import DashboardHeader from "@/components/DashboardHeader";
 
 /* ───────────────── Types ───────────────── */
 type Order = {
@@ -338,63 +339,72 @@ function AnalyticsInner() {
 
   return (
     <main className="space-y-6 p-4 max-w-screen-md mx-auto pb-24">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Analytics</h1>
-        <div className="flex items-center gap-2">
-          {/* Range */}
-          <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="180d">Last 180 days</SelectItem>
-              <SelectItem value="365d">Last 365 days</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Cancelled toggle */}
-          <div className="flex items-center gap-2 pl-2">
-            <Switch
-              checked={includeCancelled}
-              onCheckedChange={(v) => setIncludeCancelled(Boolean(v))}
-              id="inc-cancel"
-            />
-            <Label htmlFor="inc-cancel" className="text-sm">
-              Include cancelled
-            </Label>
-          </div>
-
-          {/* Granularity */}
-          <Select
-            value={granularity}
-            onValueChange={(v) => setGranularity(v as Granularity)}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto</SelectItem>
-              <SelectItem value="daily">Daily</SelectItem>
-              <SelectItem value="weekly">Weekly</SelectItem>
-              <SelectItem value="monthly">Monthly</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            onClick={exportCSV}
-            className="ml-2 inline-flex items-center gap-2"
-          >
-            <Download className="h-4 w-4" /> Export CSV
-          </Button>
-        </div>
+      {/* Header */}
+      <div className="mb-2">
+        <DashboardHeader
+          title="Analytics"
+          subtitle="Track performance and revenue"
+          withDivider={false}
+          withBackButton={false}
+        />
       </div>
 
-      {/* KPIs */}
+      {/* Controls row (wraps on mobile) */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Range */}
+        <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+          <SelectTrigger className="w-[140px] rounded-xl">
+            <SelectValue placeholder="Range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+            <SelectItem value="180d">Last 180 days</SelectItem>
+            <SelectItem value="365d">Last 365 days</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Cancelled toggle */}
+        <div className="flex items-center gap-2 pl-1">
+          <Switch
+            checked={includeCancelled}
+            onCheckedChange={(v) => setIncludeCancelled(Boolean(v))}
+            id="inc-cancel"
+          />
+          <Label htmlFor="inc-cancel" className="text-sm">
+            Include cancelled
+          </Label>
+        </div>
+
+        {/* Granularity */}
+        <Select
+          value={granularity}
+          onValueChange={(v) => setGranularity(v as Granularity)}
+        >
+          <SelectTrigger className="w-[140px] rounded-xl">
+            <SelectValue placeholder="Granularity" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto</SelectItem>
+            <SelectItem value="daily">Daily</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          variant="outline"
+          onClick={exportCSV}
+          className="ml-auto sm:ml-0 rounded-xl"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export CSV
+        </Button>
+      </div>
+
+      {/* KPIs (white, no bg-sand) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <CardStat
           label="Revenue"
@@ -408,9 +418,9 @@ function AnalyticsInner() {
         />
       </div>
 
-      {/* Trend (SVG graph) */}
+      {/* Trend (compact) */}
       <section className="space-y-3">
-        <h2 className="font-semibold capitalize">
+        <h2 className="font-semibold">
           {granularity === "auto"
             ? "Revenue trend"
             : `${granularity} revenue trend`}
@@ -565,11 +575,11 @@ function RevenueChart({
   data: { label: string; value: number }[];
   max: number;
 }) {
-  // Responsive SVG with simple tooltip
-  const height = 160; // compact
+  // Responsive SVG with simple tooltip (compact)
+  const height = 160;
   const paddingX = 24;
   const paddingY = 16;
-  const W = 1000; // viewBox width (responsive)
+  const W = 1000;
   const H = height;
 
   const n = data.length;
@@ -579,7 +589,6 @@ function RevenueChart({
   };
   const y = (v: number) => {
     const t = (v / max) * (H - paddingY * 2);
-    // invert (0 bottom -> top)
     return H - paddingY - t;
   };
 
@@ -591,7 +600,6 @@ function RevenueChart({
     .map((d, i) => `L ${x(i)} ${y(d.value)}`)
     .join(" ")} L ${x(n - 1)} ${H - paddingY} L ${x(0)} ${H - paddingY} Z`;
 
-  // Tooltip state
   const [hover, setHover] = useState<{
     i: number;
     cx: number;
@@ -604,7 +612,6 @@ function RevenueChart({
     <div className="rounded-xl border bg-white p-3">
       <div className="relative w-full">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[160px]">
-          {/* grid (subtle) */}
           {[0.25, 0.5, 0.75, 1].map((p) => (
             <line
               key={p}
@@ -617,10 +624,7 @@ function RevenueChart({
             />
           ))}
 
-          {/* area */}
           <path d={area} fill="rgba(217, 87, 59, 0.15)" />
-
-          {/* line */}
           <path
             d={path}
             fill="none"
@@ -628,17 +632,15 @@ function RevenueChart({
             strokeWidth={2}
           />
 
-          {/* hit targets */}
-          {data.map((d, i) => (
+          {data.map((_, i) => (
             <g key={i}>
               <circle
                 cx={x(i)}
-                cy={y(d.value)}
+                cy={y(data[i].value)}
                 r={3}
                 fill="rgb(217,87,59)"
                 opacity={0.9}
               />
-              {/* transparent hit area for easy hover */}
               <rect
                 x={x(i) - (W - paddingX * 2) / Math.max(10, n * 2)}
                 y={0}
@@ -652,7 +654,6 @@ function RevenueChart({
           ))}
         </svg>
 
-        {/* tooltip */}
         {hover && (
           <div
             className="absolute z-10 -translate-x-1/2 -translate-y-full px-2 py-1 rounded bg-ink text-white text-xs shadow"
@@ -669,7 +670,6 @@ function RevenueChart({
         )}
       </div>
 
-      {/* x-axis labels (sparse) */}
       <div className="mt-2 grid grid-cols-6 text-[11px] text-ink/70">
         {data.length <= 6
           ? data.map((d, i) => (
@@ -693,10 +693,10 @@ function RevenueChart({
   );
 }
 
-/* ───────────────── UI bits ───────────────── */
+/* ───────────────── UI bits (clean, no bg-sand) ───────────────── */
 function CardStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border bg-sand p-3">
+    <div className="rounded-xl border bg-white p-3">
       <div className="text-xs text-ink/70">{label}</div>
       <div className="text-lg font-semibold">{value}</div>
     </div>
@@ -705,7 +705,7 @@ function CardStat({ label, value }: { label: string; value: string }) {
 
 function Legend({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded bg-sand px-2 py-1">
+    <div className="flex items-center justify-between rounded-xl border bg-white px-2 py-1">
       <span className="text-xs">{label}</span>
       <span className="text-xs font-medium">MAD {value.toLocaleString()}</span>
     </div>

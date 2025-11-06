@@ -49,6 +49,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import useEmblaCarousel from "embla-carousel-react";
 import ProductReviewsStrip from "@/components/reviews/ProductReviewsStrip";
 import ProductCard from "@/components/ProductCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* —————————————————————————————————————————————
    Types
@@ -225,6 +226,64 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
       <div className="text-xs text-neutral-500">{label}</div>
       <div className="mt-1 text-sm font-medium text-neutral-900">{value}</div>
     </div>
+  );
+}
+
+function VisibleAreaSkeleton() {
+  return (
+    <main className="pb-24 bg-neutral-50 min-h-screen">
+      {/* overlay buttons */}
+
+      {/* image / carousel */}
+      <div className="px-4 pt-4">
+        <div className="relative rounded-2xl bg-white p-0">
+          <div className="overflow-hidden rounded-xl">
+            <div className="aspect-[7/8] sm:aspect-[4/3]">
+              <Skeleton className="h-full w-full" />
+            </div>
+          </div>
+
+          {/* dots placeholder */}
+        </div>
+      </div>
+
+      {/* meta / price / title */}
+      <div className="px-4 pt-4 space-y-4">
+        {/* promo / price */}
+        <div className="-space-y-1 mt-4">
+          <div className="mt-2 flex items-center gap-3">
+            <Skeleton className="h-7 w-40 rounded-md" />
+          </div>
+        </div>
+
+        {/* title + tags + category + by shop */}
+        <div className="-space-y-1">
+          <Skeleton className="h-5 w-4/5 rounded-md" />
+          <div className="mt-2 flex gap-2">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-14 rounded-full" />
+          </div>
+          <Skeleton className="mt-2 h-4 w-44 rounded-md" />
+          <Skeleton className="mt-2 h-4 w-52 rounded-md" />
+        </div>
+
+        {/* stat pills */}
+        <div className="mt-6 flex items-stretch gap-2">
+          <div className="flex-1 rounded-lg bg-white p-3">
+            <Skeleton className="h-3 w-20 rounded" />
+            <Skeleton className="mt-2 h-4 w-16 rounded" />
+          </div>
+          <div className="flex-1 rounded-lg bg-white p-3">
+            <Skeleton className="h-3 w-20 rounded" />
+            <Skeleton className="mt-2 h-4 w-16 rounded" />
+          </div>
+          <div className="flex-1 rounded-lg bg-white p-3">
+            <Skeleton className="h-3 w-20 rounded" />
+            <Skeleton className="mt-2 h-4 w-16 rounded" />
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
 
@@ -423,6 +482,37 @@ export default function ProductPage() {
     [shop]
   );
 
+  type CatLink = {
+    id: string;
+    path: string;
+    slug: string;
+    name_en: string | null;
+    depth: number | null;
+    is_primary: boolean;
+  };
+
+  const [catLinks, setCatLinks] = useState<CatLink[]>([]);
+  const [catLoading, setCatLoading] = useState(true);
+
+  function prettify(seg: string) {
+    return seg
+      .replace(/-/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /** Return breadcrumb parts: [{ href, label }] for a categories.path like "home/decor/wall-art"  */
+  function breadcrumbParts(path: string) {
+    const segs = path.split("/").filter(Boolean);
+    const parts: { href: string; label: string }[] = [];
+    for (let i = 0; i < segs.length; i++) {
+      const href = `/c/${segs.slice(0, i + 1).join("/")}`;
+      const label = prettify(segs[i]);
+      parts.push({ href, label });
+    }
+    return parts;
+  }
+
   // Auth / owner detection
   const [uid, setUid] = useState<string | null>(null);
   useEffect(() => {
@@ -503,29 +593,68 @@ export default function ProductPage() {
   // pick deepest primary (fallback: deepest linked)
   useEffect(() => {
     if (!p?.id) return;
+    remember(p);
+
+    // Similar (by category subtree)
+    loadSimilarByCategory(p.id);
+
+    // More from this shop (keep your current logic)
     (async () => {
+      if (!p.shop_id) return;
+      const { data } = await supabase
+        .from("products")
+        .select("*")
+        .eq("active", true)
+        .eq("unavailable", false)
+        .eq("shop_id", p.shop_id)
+        .neq("id", p.id)
+        .limit(10);
+
+      setMoreFromShop((data as any[]) ?? []);
+    })();
+  }, [p?.id]);
+
+  useEffect(() => {
+    if (!p?.id) return;
+    (async () => {
+      setCatLoading(true);
       const { data, error } = await supabase
         .from("product_categories")
-        .select("is_primary, categories!inner(id, path, name_en, slug, depth)")
+        .select(
+          `
+        is_primary,
+        categories:categories!inner (
+          id, path, slug, name_en, depth
+        )
+      `
+        )
         .eq("product_id", p.id);
 
       if (error || !data?.length) {
-        setCategoryPath(null);
-        setCategoryId(null);
+        setCatLinks([]);
+        setCatLoading(false);
         return;
       }
 
-      // prefer primary, otherwise deepest by depth (or path length)
-      const rows = data as any[];
-      const primary =
-        rows.find((r) => r.is_primary) ??
-        rows
-          .sort((a, b) => (a.categories.depth ?? 0) - (b.categories.depth ?? 0))
-          .pop();
+      // Flatten and normalize
+      const rows: CatLink[] = (data as any[]).map((r) => ({
+        id: r.categories.id,
+        path: r.categories.path,
+        slug: r.categories.slug,
+        name_en: r.categories.name_en ?? null,
+        depth: r.categories.depth ?? null,
+        is_primary: Boolean(r.is_primary),
+      }));
 
-      const cat = primary.categories;
-      setCategoryPath(cat?.path ?? null); // e.g. "clothing/womens-clothing"
-      setCategoryId(cat?.id ?? null);
+      // Sort: primary first, then deepest
+      rows.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (b.is_primary && !a.is_primary) return 1;
+        return (b.depth ?? 0) - (a.depth ?? 0);
+      });
+
+      setCatLinks(rows);
+      setCatLoading(false);
     })();
   }, [p?.id]);
 
@@ -730,6 +859,89 @@ export default function ProductPage() {
   // remember + related
   const [similar, setSimilar] = useState<any[]>([]);
   const [moreFromShop, setMoreFromShop] = useState<any[]>([]);
+
+  async function loadSimilarByCategory(productId: string) {
+    // 1) get primary or deepest category for this product
+    const { data: links, error: catLinkErr } = await supabase
+      .from("product_categories")
+      .select("is_primary, categories:categories!inner(id, path, depth)")
+      .eq("product_id", productId);
+
+    if (catLinkErr || !links?.length) {
+      setSimilar([]);
+      return;
+    }
+
+    const pick =
+      links.find((r: any) => r.is_primary) ??
+      [...links]
+        .sort(
+          (a: any, b: any) =>
+            (a.categories?.depth ?? 0) - (b.categories?.depth ?? 0)
+        )
+        .pop();
+
+    const basePath: string | null = pick?.categories?.path ?? null;
+    if (!basePath) {
+      setSimilar([]);
+      return;
+    }
+
+    // 2) all descendant categories in this subtree
+    const { data: cats, error: catsErr } = await supabase
+      .from("categories")
+      .select("id")
+      .like("path", `${basePath}%`);
+
+    if (catsErr) {
+      setSimilar([]);
+      return;
+    }
+
+    const catIds = (cats ?? []).map((c: any) => c.id);
+    if (!catIds.length) {
+      setSimilar([]);
+      return;
+    }
+
+    // 3) all product ids linked to any of those category ids (except current)
+    const { data: pc, error: pcErr } = await supabase
+      .from("product_categories")
+      .select("product_id")
+      .in("category_id", catIds)
+      .neq("product_id", productId)
+      .limit(200);
+
+    if (pcErr) {
+      setSimilar([]);
+      return;
+    }
+
+    const productIds = Array.from(
+      new Set((pc ?? []).map((x: any) => x.product_id))
+    ).slice(0, 24);
+    if (!productIds.length) {
+      setSimilar([]);
+      return;
+    }
+
+    // 4) fetch the actual product rows
+    const { data: prods, error: prodErr } = await supabase
+      .from("products")
+      .select("*")
+      .in("id", productIds)
+      .eq("active", true)
+      .eq("unavailable", false)
+      .limit(24);
+
+    if (prodErr) {
+      setSimilar([]);
+      return;
+    }
+
+    setSimilar((prods ?? []).filter(Boolean));
+  }
+
   useEffect(() => {
     if (!p) return;
     remember(p);
@@ -924,6 +1136,44 @@ export default function ProductPage() {
     })();
   }, [p?.id]);
 
+  const [canGoBack, setCanGoBack] = useState(false);
+
+  useEffect(() => {
+    // consider it a real “back” if there’s a referrer from same origin or history has entries
+    try {
+      const hasHistory = window.history.length > 1;
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      const sameOriginRef = ref && ref.origin === window.location.origin;
+      setCanGoBack(Boolean(hasHistory || sameOriginRef));
+    } catch {
+      setCanGoBack(false);
+    }
+  }, []);
+
+  function handleBack() {
+    if (canGoBack) router.back();
+    else router.push("/home");
+  }
+
+  async function handleShare() {
+    const url = window.location.href;
+    const title = p?.title ?? "Zaha";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied to clipboard");
+      }
+    } catch {
+      // user cancelled or share failed → try copy
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied to clipboard");
+      } catch {}
+    }
+  }
+
   // delivery ETA (for stat pill)
   const details = useMemo(() => {
     const d = (p?.item_details ?? {}) as any;
@@ -965,7 +1215,7 @@ export default function ProductPage() {
     details.shipping?.estimate_days_min,
   ]);
 
-  if (loading) return <main className="p-4">Loading…</main>;
+  if (loading) return <VisibleAreaSkeleton />;
   if (err) return <main className="p-4">Error: {err}</main>;
   if (!p) return <main className="p-4">Not found.</main>;
 
@@ -981,9 +1231,10 @@ export default function ProductPage() {
     <>
       {/* overlay nav buttons */}
 
-      <main className="pb-24 bg-neutral-50  min-h-screen">
+      <main className="pb-10 bg-neutral-50  min-h-screen">
         <section className="">
-          <div className="absolute z-10 top-3 left-3 flex items-center gap-2">
+          {" "}
+          <div className="  z-10 top-3 left-3 flex items-center gap-2 p-4 fixed">
             <button
               onClick={() => router.back()}
               className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
@@ -991,7 +1242,7 @@ export default function ProductPage() {
               <ChevronLeft size={18} />
             </button>
           </div>
-          <div className="absolute z-10 top-3 right-3 flex items-center gap-2">
+          <div className="  z-10 top-3 right-3 flex items-center gap-2 p-4 fixed">
             <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
               <MessageSquare size={16} />
             </button>
@@ -1019,37 +1270,64 @@ export default function ProductPage() {
                 : "opacity-0 -translate-y-4 pointer-events-none"
             }`}
           >
-            <div className="px-4 py-2">
+            <div className="px-4  py-3">
               <div className="flex items-center gap-2">
-                <div className="text-[15px] font-semibold truncate">
-                  {p.title}
-                </div>
+                {/* Back button */}
                 <button
                   type="button"
-                  className="ml-auto h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                  onClick={handleBack}
+                  className="h-8 w-8 shrink-0 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                  aria-label="Go back"
                 >
-                  <Heart className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-              </div>
-              <div className="mt-1 flex items-center gap-2 text-sm">
-                <div className="font-semibold">
-                  {promoActive
-                    ? `MAD${(promoTotal as number).toLocaleString("en-US")}`
-                    : `MAD${currentTotal.toLocaleString("en-US")}`}
-                </div>
-                {promoActive && (
-                  <div className="line-through text-neutral-400 text-xs">
-                    MAD{currentTotal.toLocaleString("en-US")}
+
+                {/* Title */}
+                <div>
+                  <div className="text-md font-semibold truncate">
+                    {p.title}
                   </div>
-                )}
-                <div className="ml-2 text-neutral-500 truncate flex-1 text-xs">
-                  {keywordArray(p.keywords).slice(0, 3).join(", ")}
-                  {keywordArray(p.keywords).length > 3 && "…"}
+                  <div className=" flex items-center gap-2 text-sm">
+                    <div className="font-normal">
+                      {promoActive
+                        ? `MA D${(promoTotal as number).toLocaleString("en-US")}`
+                        : `MAD ${currentTotal.toLocaleString("en-US")}`}
+                    </div>
+                    {promoActive && (
+                      <div className="line-through text-neutral-400 text-xs">
+                        MAD{currentTotal.toLocaleString("en-US")}
+                      </div>
+                    )}
+                    {/* <div className="ml-2 text-neutral-500 truncate flex-1 text-xs">
+                      {keywordArray(p.keywords).slice(0, 3).join(", ")}
+                      {keywordArray(p.keywords).length > 3 && "…"}
+                    </div> */}
+                  </div>
+                </div>
+
+                {/* Right actions */}
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                    aria-label="Share"
+                    title="Share"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                    aria-label="Save"
+                    title="Save"
+                  >
+                    <Heart className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-
           {/* ——— Carousel ——— */}
           <ProductCarousel
             images={images}
@@ -1059,7 +1337,6 @@ export default function ProductPage() {
               setFsOpen(true);
             }}
           />
-
           {/* ——— Title + meta ——— */}
           <div className="px-4 pt-3 space-y-4">
             {/* sentinel for sticky top bar */}
@@ -1080,10 +1357,10 @@ export default function ProductPage() {
               {promoActive ? (
                 <div className=" flex items-center gap-3 flex-wrap ">
                   <div className="text-xl font-bold text-emerald-800">
-                    MAD{(promoTotal as number).toLocaleString("en-US")}
+                    MAD {(promoTotal as number).toLocaleString("en-US")}
                   </div>
                   <div className="line-through text-neutral-400">
-                    MAD{currentTotal.toLocaleString("en-US")}
+                    MAD {currentTotal.toLocaleString("en-US")}
                   </div>
                 </div>
               ) : showPriceRange ? (
@@ -1093,7 +1370,7 @@ export default function ProductPage() {
                 </div>
               ) : (
                 <div className="mt-1 text-xl font-bold">
-                  MAD{currentTotal.toLocaleString("en-US")}
+                  MAD {currentTotal.toLocaleString("en-US")}
                 </div>
               )}
             </section>
@@ -1102,26 +1379,34 @@ export default function ProductPage() {
               {" "}
               <h1 className="text-lg font-semibold leading-snug">{p.title}</h1>
               <TagList items={keywordArray(p.keywords)} />
-              {categoryPath && (
+              {/* Primary breadcrumb */}
+              {!catLoading && catLinks.length > 0 && (
                 <div className="mt-1 text-sm text-neutral-600">
-                  in{" "}
-                  <Link
-                    href={`/c/${categoryPath}`}
-                    className="underline hover:text-black"
-                  >
-                    {categoryPath
-                      .split("/")
-                      .map((s) =>
-                        s
-                          .replace(/-/g, " ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase())
-                      )
-                      .join(" / ")}
-                  </Link>
+                  In{" "}
+                  {(() => {
+                    const primary =
+                      catLinks.find((c) => c.is_primary) ?? catLinks[0];
+                    const crumbs = breadcrumbParts(primary.path);
+                    return (
+                      <span className="break-words">
+                        {crumbs.map((c, i) => (
+                          <span key={c.href}>
+                            <Link
+                              href={c.href}
+                              className="underline hover:text-black"
+                            >
+                              {c.label}
+                            </Link>
+                            {i < crumbs.length - 1 && " / "}
+                          </span>
+                        ))}
+                      </span>
+                    );
+                  })()}
                 </div>
               )}
               <div className="text-sm text-neutral-600 mt-2">
-                by{" "}
+                By{" "}
                 {p.shop_id ? (
                   <Link
                     href={`/shop/${p.shop_id}`}
@@ -1193,7 +1478,6 @@ export default function ProductPage() {
               </div>
             )}
           </div>
-
           {/* ——— Options ——— */}
           {optionGroups.map((g) => {
             const valueId = selected[g.id] ?? "";
@@ -1228,7 +1512,6 @@ export default function ProductPage() {
               </Section>
             );
           })}
-
           {/* ——— Personalization (inline CTA variant) ——— */}
           {personalizationConfig.enabled && (
             <Section title="Personalization">
@@ -1546,6 +1829,18 @@ export default function ProductPage() {
           <ShopMoreSection shop={shop} products={moreFromShop} />
         )}
 
+        {!!similar.length && (
+          <Section title="Compare similar items">
+            <div className="grid grid-cols-2 gap-3">
+              {similar.map((x) => (
+                <div key={x.id} className="min-w-0">
+                  <ProductCard p={x} />
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* ——— Compare similar ——— */}
         {!!similar.length && (
           <Section title="Compare similar items">
@@ -1738,6 +2033,7 @@ export default function ProductPage() {
                   className="fixed left-3 top-1/2 -translate-y-1/2 z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur text-white hover:bg-white/20"
                 >
                   <ChevronLeftIcon className="h-6 w-6" />
+                  ss
                 </button>
                 <button
                   onClick={fsNext}

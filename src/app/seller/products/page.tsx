@@ -25,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
+  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,8 +58,14 @@ import {
   Loader2,
   Tag,
   CornerDownRight,
+  PauseCircle,
+  PlayCircle,
+  LinkIcon,
+  MoreVertical,
 } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
+import clsx from "clsx";
+import { cn } from "@/lib/utils";
 
 function ProductsHeaderCompact({
   counts,
@@ -425,7 +432,11 @@ function Inner() {
       toast.error(error.message);
       setRows(old); // revert
     } else {
-      toast.success(next ? "Activated" : "Deactivated");
+      toast.success(
+        next
+          ? "Product activated on your shop"
+          : "Product desactivated from your shop"
+      );
     }
   }
 
@@ -637,7 +648,7 @@ function Inner() {
             return (
               <li key={p.id} className="flex items-center gap-3 space-y-2">
                 {/* Thumb */}
-                <div className="w-16 h-16 rounded-xl bg-white overflow-hidden shrink-0">
+                <div className="w-16 h-16 rounded-md bg-white overflow-hidden shrink-0">
                   {img ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -708,62 +719,235 @@ function Inner() {
                 </div>
 
                 {/* Right: kebab menu with icons */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      aria-label="More actions"
-                    >
-                      <MoreHorizontal className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
+                {/* MOBILE: Spotify-like bottom drawer */}
+                <div className="md:hidden">
+                  <Sheet>
+                    <SheetTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full"
+                        aria-label="More actions"
+                      >
+                        <MoreVertical className="h-5 w-5" />
+                      </Button>
+                    </SheetTrigger>
 
-                  <DropdownMenuContent
-                    align="end"
-                    className="rounded-xl min-w-44 p-1 flex flex-col space-y-1"
-                  >
-                    <DropdownMenuItem asChild>
-                      <Link
-                        href={`/seller/edit/${p.id}`}
+                    <SheetContent
+                      side="bottom"
+                      className={cn(
+                        "max-w-screen-sm mx-auto",
+                        "rounded-t-2xl bg-white shadow-2xl border-t border-ink/10",
+                        "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
+                        // ✅ hide close button everywhere
+                        "[&>button[data-radix-sheet-close]]:hidden"
+                      )}
+                    >
+                      {/* grabber */}
+                      <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+                      {/* PRODUCT HEADER */}
+                      <div className="px-4 pb-3">
+                        <div className="flex items-center gap-3">
+                          {/* Image */}
+                          <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 flex-shrink-0">
+                            {p.photos?.[0] ? (
+                              <img
+                                src={p.photos[0]}
+                                alt={p.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-sand" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            {/* Name */}
+                            <div className="font-medium text-[15px] text-ink truncate">
+                              {p.title}
+                            </div>
+
+                            {/* Sub details: state · orders */}
+                            <div className="mt-0.5 text-xs text-ink/70 flex items-center gap-1">
+                              <span
+                                className={[
+                                  "px-2 py-0.5 rounded-full text-[11px] font-medium",
+                                  p.active
+                                    ? "bg-green-100 text-green-800 "
+                                    : "bg-neutral-100 text-neutral-700 ",
+                                ].join(" ")}
+                              >
+                                {p.active ? "Active" : "Inactive"}
+                              </span>
+
+                              <span className="ml-1">
+                                {p.orders_count ?? 0} orders
+                              </span>
+                              <span>·</span>
+                              <span className=" ">MAD {p.price_mad}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Separator */}
+                      <div className="h-px bg-ink/10 mb-1" />
+
+                      <ul className="px-1 grid">
+                        <li>
+                          <Link
+                            href={`/seller/edit/${p.id}`}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          >
+                            <Pencil className="h-5 w-5 text-ink" />
+                            <span className="text-[15px] font-medium text-ink">
+                              Edit
+                            </span>
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            href={`/product/${p.id}`}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          >
+                            <Eye className="h-5 w-5 text-ink" />
+                            <span className="text-[15px] font-medium text-ink">
+                              Preview on Zaha
+                            </span>
+                          </Link>
+                        </li>
+
+                        <li>
+                          <button
+                            onClick={() => setPickerOpenFor(p.id)}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition text-left"
+                          >
+                            <FolderPlus className="h-5 w-5 text-ink" />
+                            <span className="text-[15px] font-medium text-ink">
+                              Add to collection
+                            </span>
+                          </button>
+                        </li>
+
+                        <li>
+                          <button
+                            onClick={() =>
+                              navigator.clipboard.writeText(
+                                `${origin}/product/${p.id}`
+                              )
+                            }
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          >
+                            <LinkIcon className="h-5 w-5 text-ink" />
+                            <span className="text-[15px] font-medium text-ink">
+                              Copy link
+                            </span>
+                          </button>
+                        </li>
+
+                        <li className="my-1 h-px bg-ink/10" />
+
+                        <li>
+                          <button
+                            onClick={() => toggleActive(p.id, !p.active)}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          >
+                            {p.active ? (
+                              <>
+                                <PauseCircle className="h-5 w-5 text-ink" />
+                                <span className="text-[15px] font-medium text-ink">
+                                  Deactivate
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <PlayCircle className="h-5 w-5 text-ink" />
+                                <span className="text-[15px] font-medium text-ink">
+                                  Activate
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </li>
+
+                        {/* separator */}
+                        <li className="my-1 h-px bg-ink/10" />
+
+                        <li>
+                          <button
+                            onClick={() => remove(p.id)}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-rose-50 active:bg-rose-100 transition text-rose-600"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                            <span className="text-[15px] font-medium">
+                              Delete
+                            </span>
+                          </button>
+                        </li>
+                      </ul>
+                    </SheetContent>
+                  </Sheet>
+                </div>
+
+                {/* DESKTOP: keep the dropdown for precision */}
+                <div className="hidden md:block">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full"
+                        aria-label="More actions"
+                      >
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent
+                      align="end"
+                      className="rounded-xl min-w-44 p-1 flex flex-col space-y-1"
+                    >
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/seller/edit/${p.id}`}
+                          className="flex items-center gap-2"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/product/${p.id}`}
+                          className="flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => setPickerOpenFor(p.id)}
                         className="flex items-center gap-2"
                       >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </Link>
-                    </DropdownMenuItem>
+                        <FolderPlus className="h-4 w-4" />
+                        Add to collection
+                      </DropdownMenuItem>
 
-                    <DropdownMenuItem asChild>
-                      <Link
-                        href={`/product/${p.id}`}
-                        className="flex items-center gap-2"
+                      <DropdownMenuSeparator />
+
+                      <DropdownMenuItem
+                        className="text-rose-600 flex items-center gap-2"
+                        onClick={() => remove(p.id)}
                       >
-                        <Eye className="h-4 w-4" />
-                        View
-                      </Link>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem
-                      onClick={() => setPickerOpenFor(p.id)}
-                      className="flex items-center gap-2"
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                      Add to collection
-                    </DropdownMenuItem>
-
-                    {/* Divider */}
-                    <DropdownMenuSeparator />
-
-                    <DropdownMenuItem
-                      className="text-rose-600 flex items-center gap-2"
-                      onClick={() => remove(p.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </li>
             );
           })}

@@ -20,6 +20,11 @@ import {
   ArrowRight,
   Upload,
   Trash2,
+  ChevronDown,
+  FileText,
+  Download,
+  AlertTriangle,
+  PackageX,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,11 +36,9 @@ import {
   SheetDescription,
   SheetFooter,
   SheetClose,
+  SheetTrigger,
 } from "@/components/ui/sheet";
 
-// ————————————————————————————————————————
-// shadcn/ui
-// ————————————————————————————————————————
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +55,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 
 type OrderStatus =
   | "pending"
@@ -67,7 +72,7 @@ type Product = {
   price_mad: number;
   shop_id?: string;
   shop_owner?: string | null;
-  stock?: number | null; // optional
+  stock?: number | null;
 };
 
 type Order = {
@@ -82,14 +87,14 @@ type Order = {
   product_id: string | null;
   products?: Product | null;
 
-  // ✅ display fields
   personalization?: string | null;
   options?: any | null;
 
-  // QoL (optional in DB)
   payment_confirmed?: boolean | null;
   tracking_number?: string | null;
   seller_notes?: string | null;
+
+  invoice_url?: string | null;
 };
 
 type OrderEvent = {
@@ -114,13 +119,13 @@ type FileObj = {
   metadata: { size: number } | null;
 };
 
-const STATUS_OPTIONS: OrderStatus[] = [
-  "pending",
-  "confirmed",
-  "shipped",
-  "delivered",
-  "cancelled",
-];
+const NEXT_STATUS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["shipped", "cancelled"],
+  shipped: ["delivered", "cancelled"],
+  delivered: [],
+  cancelled: [],
+};
 
 function statusIcon(s: OrderStatus) {
   switch (s) {
@@ -155,6 +160,13 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   );
 }
 
+function cn(...xs: (string | false | null | undefined)[]) {
+  return xs.filter(Boolean).join(" ");
+}
+function capitalize(s: string) {
+  return s[0].toUpperCase() + s.slice(1);
+}
+
 export default function SellerOrderDetails() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -163,9 +175,20 @@ export default function SellerOrderDetails() {
     [params]
   );
 
+  const didFetch = useRef(false);
+
+  // ——— SHEETS (mutually exclusive) ———
+  const [confirmOpen, setConfirmOpen] = useState(false); // advance sheet
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false); // cancel sheet
+  const [nextChoice, setNextChoice] = useState<OrderStatus | "">("");
+
   const [order, setOrder] = useState<Order | null>(null);
+  // ——— Loading UX control ———
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loadingShown, setLoadingShown] = useState(false);
+  const loadSeq = useRef(0); // increments each fetch
+  const showTimer = useRef<number>(); // delay before showing spinner
+  const hideTimer = useRef<number>(); // min visible enforcement
 
   // Payment confirm sheet
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
@@ -196,21 +219,27 @@ export default function SellerOrderDetails() {
   const [prevId, setPrevId] = useState<string | null>(null);
   const [nextId, setNextId] = useState<string | null>(null);
 
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [invUploading, setInvUploading] = useState(false);
+  const [invRemoving, setInvRemoving] = useState(false);
   const saveNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const locked = order?.status === "cancelled";
+  const reachedEnd = order?.status === "delivered";
+  const nextOptions = useMemo(
+    () => (order ? NEXT_STATUS[order.status] : []),
+    [order]
+  );
+
   function safeUUID(): string {
-    // Prefer secure, modern APIs
     try {
       if (typeof crypto !== "undefined") {
-        // Newer browsers (secure context)
         if (typeof (crypto as any).randomUUID === "function") {
           return (crypto as any).randomUUID();
         }
-        // Fallback: v4 using getRandomValues
         if (typeof crypto.getRandomValues === "function") {
           const b = new Uint8Array(16);
           crypto.getRandomValues(b);
-          // Per RFC 4122
           b[6] = (b[6] & 0x0f) | 0x40;
           b[8] = (b[8] & 0x3f) | 0x80;
           const toHex = (n: number) => n.toString(16).padStart(2, "0");
@@ -219,15 +248,27 @@ export default function SellerOrderDetails() {
         }
       }
     } catch {}
-    // Last-ditch (not RFC, but stable enough for React keys / optimistic UI)
-    return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `id-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
   }
 
   // Load data
   useEffect(() => {
     if (!orderId) return;
+
+    const seq = ++loadSeq.current; // token for this run
+    setLoading(true);
+
+    // delay showing spinner to avoid flash on ultra-fast loads
+    window.clearTimeout(showTimer.current);
+    showTimer.current = window.setTimeout(() => {
+      // only show if still on the same run and still loading
+      if (loadSeq.current === seq) setLoadingShown(true);
+    }, 120);
+
     (async () => {
-      setLoading(true);
+      const t0 = performance.now();
 
       const { data, error } = await supabase
         .from("orders")
@@ -235,11 +276,25 @@ export default function SellerOrderDetails() {
         .eq("id", orderId)
         .maybeSingle();
 
+      if (loadSeq.current !== seq) return; // stale result
+
       if (error) {
         console.error(error);
         toast.error("Failed to load order", { description: error.message });
         setOrder(null);
+        // ensure at least 400ms visibility if spinner was shown
+        const elapsed = performance.now() - t0;
+        const settle = async () => {
+          if (loadingShown) {
+            const minVisible = 400;
+            const sinceShow = performance.now() - t0;
+            const remaining = Math.max(0, minVisible - sinceShow);
+            await new Promise((r) => setTimeout(r, remaining));
+          }
+        };
+        await settle();
         setLoading(false);
+        setLoadingShown(false);
         return;
       }
 
@@ -251,63 +306,74 @@ export default function SellerOrderDetails() {
       setAddress(o?.address ?? "");
       setCity(o?.city ?? "");
 
-      // Prev/next ids (by created_at)
-      if (o) {
-        const { data: prev } = await supabase
-          .from("orders")
-          .select("id")
-          .gt("created_at", o.created_at)
-          .order("created_at", { ascending: true })
-          .limit(1);
-        setPrevId(prev?.[0]?.id ?? null);
-
-        const { data: next } = await supabase
-          .from("orders")
-          .select("id")
-          .lt("created_at", o.created_at)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        setNextId(next?.[0]?.id ?? null);
-      }
-
-      // Buyer history
-      if (o?.phone) {
-        const { count, error: countErr } = await supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("phone", o.phone);
-        if (!countErr) setBuyerOrdersCount(count ?? 0);
-      }
-
-      // Timeline (optional)
-      try {
-        const { data: ev, error: evErr } = await supabase
-          .from("order_events")
-          .select("*")
-          .eq("order_id", orderId)
-          .order("created_at", { ascending: true });
-        if (!evErr && ev) setEvents(ev as OrderEvent[]);
-        else setEvents(null);
-      } catch {
-        setEvents(null);
-      }
-
-      // Storage attachments
-      try {
-        const { data: files } = await supabase.storage
-          .from("order_proofs")
-          .list(orderId, {
+      // parallel dependent loads
+      const [prevRes, nextRes, buyerCountRes, eventsRes, filesRes] =
+        await Promise.all([
+          o
+            ? supabase
+                .from("orders")
+                .select("id")
+                .gt("created_at", o.created_at)
+                .order("created_at", { ascending: true })
+                .limit(1)
+            : Promise.resolve({ data: [] as any[] }),
+          o
+            ? supabase
+                .from("orders")
+                .select("id")
+                .lt("created_at", o.created_at)
+                .order("created_at", { ascending: false })
+                .limit(1)
+            : Promise.resolve({ data: [] as any[] }),
+          o?.phone
+            ? supabase
+                .from("orders")
+                .select("id", { count: "exact", head: true })
+                .eq("phone", o.phone)
+            : Promise.resolve({ count: 0 } as any),
+          supabase
+            .from("order_events")
+            .select("*")
+            .eq("order_id", orderId)
+            .order("created_at", { ascending: true }),
+          supabase.storage.from("order_proofs").list(orderId, {
             limit: 50,
             offset: 0,
             sortBy: { column: "created_at", order: "desc" },
-          });
-        setAttachments((files as any) ?? []);
-      } catch {
-        setAttachments([]);
-      }
+          }),
+        ]);
 
-      setLoading(false);
+      if (loadSeq.current !== seq) return; // stale guard
+
+      setPrevId((prevRes as any)?.data?.[0]?.id ?? null);
+      setNextId((nextRes as any)?.data?.[0]?.id ?? null);
+      setBuyerOrdersCount((buyerCountRes as any)?.count ?? 0);
+      setEvents((eventsRes.data as OrderEvent[]) ?? null);
+      setAttachments((filesRes.data as any) ?? []);
+
+      // ensure spinner stays at least 400ms if it was shown
+      const minVisible = 400;
+      const sinceStart = performance.now() - t0;
+
+      if (loadingShown && sinceStart < minVisible) {
+        window.clearTimeout(hideTimer.current);
+        hideTimer.current = window.setTimeout(() => {
+          if (loadSeq.current === seq) {
+            setLoading(false);
+            setLoadingShown(false);
+          }
+        }, minVisible - sinceStart);
+      } else {
+        setLoading(false);
+        setLoadingShown(false);
+      }
     })();
+
+    return () => {
+      // cleanup timers when orderId changes or unmounts
+      window.clearTimeout(showTimer.current);
+      window.clearTimeout(hideTimer.current);
+    };
   }, [orderId]);
 
   const insertEvent = useCallback(
@@ -333,11 +399,27 @@ export default function SellerOrderDetails() {
     [orderId]
   );
 
-  async function updateStatus(next: OrderStatus) {
+  // ——— Mutually exclusive open helpers ———
+  function openConfirmFor(choice: OrderStatus) {
+    setNextChoice(choice);
+    setConfirmCancelOpen(false); // close cancel sheet
+    setConfirmOpen(true); // open advance sheet
+  }
+  function openCancelSheet() {
+    setConfirmOpen(false); // close advance sheet
+    setConfirmCancelOpen(true); // open cancel sheet
+  }
+
+  async function persistStatus(next: OrderStatus) {
     if (!order) return;
-    setSaving(true);
-    const prev = order;
-    setOrder({ ...order, status: next }); // optimistic
+    const allowed = NEXT_STATUS[order.status];
+    if (!allowed.includes(next)) {
+      toast.error("This transition isn’t allowed");
+      return;
+    }
+
+    setSavingStatus(true);
+    const prev = order.status;
 
     const { data, error } = await supabase
       .from("orders")
@@ -346,18 +428,16 @@ export default function SellerOrderDetails() {
       .select("id, status")
       .maybeSingle();
 
+    setSavingStatus(false);
+
     if (error || !data) {
-      setOrder(prev);
       toast.error("Failed to update status", {
         description: error?.message ?? "Try again.",
       });
-      setSaving(false);
       return;
     }
 
-    // Optional: decrement stock when marking as shipped
-    if (next === "shipped" && decrementOnShip && order.products?.id) {
-      await supabase.rpc?.("noop"); // harmless attempt to keep types happy if no rpc
+    if (next === "shipped" && order.products?.id) {
       await supabase
         .from("products")
         .update({
@@ -367,11 +447,33 @@ export default function SellerOrderDetails() {
     }
 
     setOrder((o) => (o ? { ...o, status: data.status as OrderStatus } : o));
-    toast.success("Status changed ✅", {
-      description: `Order set to “${data.status}”.`,
-    });
-    insertEvent("status_changed", { from: prev.status, to: next });
-    setSaving(false);
+    insertEvent("status_changed", { from: prev, to: next });
+    toast.success(`Advanced to “${data.status}”`);
+    setConfirmOpen(false);
+    setConfirmCancelOpen(false);
+    setNextChoice("");
+  }
+
+  async function cancelOrder() {
+    if (!order) return;
+    if (order.status === "cancelled") return;
+
+    setSavingStatus(true);
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" as OrderStatus })
+      .eq("id", order.id);
+    setSavingStatus(false);
+
+    if (error) {
+      toast.error("Could not cancel order", { description: error.message });
+      return;
+    }
+    setOrder((o) => (o ? { ...o, status: "cancelled" } : o));
+    insertEvent("status_changed", { from: order.status, to: "cancelled" });
+    toast.success("Order cancelled");
+    setConfirmCancelOpen(false);
+    setConfirmOpen(false);
   }
 
   async function savePaymentConfirmed(next: boolean) {
@@ -440,33 +542,59 @@ export default function SellerOrderDetails() {
     };
   }, [notes, order, insertEvent]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!order) return;
-      const k = e.key.toLowerCase();
-      if (k === "p") {
-        window.print();
-      } else if (k === "c" && order.status === "pending") {
-        updateStatus("confirmed");
-      } else if (k === "s" && order.status === "confirmed") {
-        updateStatus("shipped");
-      } else if (k === "d" && order.status === "shipped") {
-        updateStatus("delivered");
-      } else if (
-        k === "x" &&
-        (order.status === "pending" || order.status === "confirmed")
-      ) {
-        updateStatus("cancelled");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [order]);
-
+  // Keyboard shortcuts (respect one-way)
+  // useEffect(() => {
+  //   const onKey = (e: KeyboardEvent) => {
+  //     if (!order || locked || reachedEnd) return;
+  //     const k = e.key.toLowerCase();
+  //     if (k === "p") {
+  //       window.print();
+  //     } else if (k === "c" && order.status === "pending") {
+  //       openConfirmFor("confirmed");
+  //     } else if (k === "s" && order.status === "confirmed") {
+  //       openConfirmFor("shipped");
+  //     } else if (k === "d" && order.status === "shipped") {
+  //       openConfirmFor("delivered");
+  //     } else if (
+  //       k === "x" &&
+  //       ["pending", "confirmed", "shipped"].includes(order.status)
+  //     ) {
+  //       openCancelSheet();
+  //     }
+  //   };
+  //   window.addEventListener("keydown", onKey);
+  //   return () => window.removeEventListener("keydown", onKey);
+  // }, [order, locked, reachedEnd]);
   if (!orderId) return <main className="p-4">Invalid order id.</main>;
-  if (loading) return <main className="p-4">Loading…</main>;
+  if (loadingShown) return <OrderDetailsSkeleton />; // 👈 change here
+  if (loading) return null; // waiting inside delay window
   if (!order) return <main className="p-4">Order not found.</main>;
+
+  function OrderDetailsSkeleton() {
+    return (
+      <main className="p-4 mx-auto max-w-3xl h-[80vh] flex items-center justify-center">
+        <Spinner className="h-10 w-10 text-terracotta" />
+      </main>
+    );
+  }
+
+  function TimelineSkeleton() {
+    return (
+      <div className="flex items-center w-full">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center min-w-[64px] flex-1">
+            <div className="flex flex-col items-center">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <Skeleton className="mt-1 h-3 w-14 rounded" />
+            </div>
+            {i < 3 && (
+              <div className="h-px mx-3 flex-1 self-center bg-neutral-200" />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const p = order.products ?? null;
   const phoneDigits = order.phone?.replace(/\D/g, "");
@@ -500,7 +628,6 @@ export default function SellerOrderDetails() {
           ? { label: "Mark as delivered", to: "delivered" }
           : null;
 
-  // Get public URL for storage file
   function filePublicURL(name: string) {
     const { data } = supabase.storage
       .from("order_proofs")
@@ -550,18 +677,109 @@ export default function SellerOrderDetails() {
     }
   }
 
+  function generatePrintableInvoice() {
+    if (!order) return;
+    const doc = `
+      <html>
+        <head>
+          <meta charSet="utf-8" />
+          <title>Invoice #${order.id}</title>
+          <style>
+            body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; color: #111; }
+            h1 { font-size: 20px; margin: 0 0 8px; }
+            .row { margin-bottom: 6px; }
+            .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+            .muted { color: #666; }
+            .box { border: 1px solid #e5e5e5; padding: 12px; border-radius: 10px; }
+          </style>
+        </head>
+        <body>
+          <h1>Invoice</h1>
+          <div class="box">
+            <div class="row"><strong>Order ID:</strong> <span class="mono">#${order.id}</span></div>
+            <div class="row"><strong>Placed on:</strong> ${new Date(order.created_at).toLocaleString()}</div>
+            <div class="row"><strong>Status:</strong> ${order.status}</div>
+            <div class="row"><strong>Ship to:</strong> ${order.phone ?? "—"} · ${order.address ?? "—"} · ${order.city ?? "—"}</div>
+            <div class="row"><strong>Item:</strong> ${order.products?.title ?? "—"} (Qty ${order.qty})</div>
+            <div class="row"><strong>Total:</strong> MAD ${order.amount_mad}</div>
+          </div>
+          <p class="muted">Generated from dashboard — print or save as PDF.</p>
+          <script>window.print()</script>
+        </body>
+      </html>
+    `;
+    const w = window.open(
+      "",
+      "_blank",
+      "noopener,noreferrer,width=800,height=900"
+    );
+    if (w) {
+      w.document.open();
+      w.document.write(doc);
+      w.document.close();
+    }
+  }
+
+  // Upload invoice to `invoices` bucket and save public URL on the order
+  async function onUploadInvoice(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !order) return;
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+    if (!["pdf", "png", "jpg", "jpeg"].includes(ext)) {
+      toast.error("Only PDF/JPG/PNG are allowed");
+      e.currentTarget.value = "";
+      return;
+    }
+
+    try {
+      setInvUploading(true);
+
+      // path: invoices/<orderId>/<timestamp>-<filename>
+      const path = `${order.id}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase
+        .from("invoices")
+        .upload(path, file, { cacheControl: "3600", upsert: false });
+
+      if (upErr) throw upErr;
+
+      const { data: pub } = await supabase.from("invoices").getPublicUrl(path);
+      const publicUrl = pub.publicUrl;
+
+      const { error: updErr } = await supabase
+        .from("orders")
+        .update({ invoice_url: publicUrl })
+        .eq("id", order.id);
+
+      if (updErr) throw updErr;
+
+      setOrder((o) => (o ? { ...o, invoice_url: publicUrl } : o));
+      toast.success("Invoice uploaded");
+    } catch (err: any) {
+      toast.error("Failed to upload invoice", { description: err?.message });
+    } finally {
+      setInvUploading(false);
+      // allow selecting the same file again if needed
+      e.currentTarget.value = "";
+    }
+  }
+
   return (
     <main className="pb-28 md:pb-6 p-4 mx-auto max-w-3xl space-y-6 print:bg-white">
       {/* Nav row */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/seller/orders")}
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" /> Orders
-          </Button>
-          <div className="hidden sm:flex items-center gap-2">
+        <div className="flex items-center justify-between w-full">
+          <div>
+            {" "}
+            <Button
+              variant="outline"
+              onClick={() => router.push("/seller/orders")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" /> Orders
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-">
             <Button
               variant="outline"
               size="icon"
@@ -583,119 +801,113 @@ export default function SellerOrderDetails() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Select
-            value={order.status}
-            onValueChange={(v) => updateStatus(v as OrderStatus)}
-            disabled={saving}
-          >
-            <SelectTrigger className="w-[150px] capitalize">
-              <SelectValue placeholder="Change status" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={printMode}
-            onValueChange={(v) => setPrintMode(v as any)}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="invoice">Print invoice</SelectItem>
-              <SelectItem value="label">Print shipping label</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => window.print()}
-            title="Print (P)"
-          >
-            <Printer className="h-4 w-4" />
-          </Button>
-        </div>
+        {/* (Advance select removed for now) */}
       </div>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 not-print">
-        <div>
-          <h1 className="text-xl font-semibold">Order details</h1>
+      <div className="not-print">
+        <h1 className="text-[22px] sm:text-[24px] font-semibold leading-tight tracking-tight text-ink">
+          {p?.title ?? "Order"}
+        </h1>
 
-          <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
-            <span>Order ID:</span>
-            <code className="rounded bg-muted px-1.5 py-0.5">{order.id}</code>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => {
-                navigator.clipboard.writeText(order.id);
-                toast.success("Order ID copied");
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-            <span className="ml-2">
-              Placed {new Date(order.created_at).toLocaleString()}
-            </span>
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-[84px_1fr] items-center gap-x-4">
+            <div className="text-sm text-ink/60">Order ID</div>
+            <div className="flex items-center gap-2 min-w-0">
+              <code className="px-2 py-0.5 rounded-md bg-muted text-[13px] break-all">
+                #{order.id}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(order.id);
+                  toast.success("Order ID copied");
+                }}
+                className="text-ink/60 hover:text-ink transition"
+                aria-label="Copy order ID"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={order.status} />
+
+          <div className="grid grid-cols-[84px_1fr] items-center gap-x-4">
+            <div className="text-sm text-ink/60">Placed</div>
+            <div className="text-sm text-ink/80">
+              {new Date(order.created_at).toLocaleString("en-US", {
+                weekday: "long",
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[84px_1fr] items-center gap-x-4">
+            <div className="text-sm text-ink/60">Status</div>
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[13px] capitalize">
+                {statusIcon(order.status)}
+                {order.status}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Summary card */}
-      <Card>
+      {/* Timeline */}
+      <div className="mt-4">
+        <StatusTimeline status={order.status} />
+      </div>
+
+      {/* Item */}
+      <Card className="mt-5 shadow-none border rounded-xl">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Items</CardTitle>
+          <CardTitle className="text-base">Item</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center gap-4">
-          {p?.photos?.[0] ? (
-            <img
-              src={p.photos[0]}
-              alt={p.title}
-              className="w-20 h-20 object-cover rounded-xl"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-xl bg-muted grid place-items-center text-xs text-muted-foreground">
-              No image
+        <CardContent>
+          <div className="flex items-center gap-3">
+            {p?.photos?.[0] ? (
+              <img
+                src={p.photos[0]}
+                alt={p.title}
+                className="h-12 w-12 rounded-lg object-cover border"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-lg grid place-items-center border text-[11px] text-ink/60">
+                No img
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="font-medium truncate">
+                {p?.title ?? "Product"}
+              </div>
+              <div className="text-xs text-ink/60 mt-0.5">
+                Qty {order.qty} · MAD {order.amount_mad}
+              </div>
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{p?.title ?? "Product"}</div>
-            <div className="text-sm text-muted-foreground">
-              Qty {order.qty} · Total MAD {order.amount_mad}
-            </div>
-            <div className="mt-1 flex items-center gap-2">
+
+            <div className="shrink-0 flex items-center gap-2">
               <Link
                 href={`/product/${p?.id ?? ""}`}
-                className="text-xs underline"
+                className="text-xs underline text-ink/80 hover:text-ink"
               >
-                View product
+                View
               </Link>
               {typeof p?.stock === "number" && (
-                <span className="text-xs text-muted-foreground">
-                  · Stock: {p.stock}
-                </span>
+                <span className="text-xs text-ink/60">· Stock {p.stock}</span>
               )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Customization */}
       {(order.personalization || order.options) && (
-        <Card>
+        <Card className="shadow-none border rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Customization</CardTitle>
           </CardHeader>
@@ -705,7 +917,7 @@ export default function SellerOrderDetails() {
                 <Label className="text-xs text-muted-foreground">
                   Personalization
                 </Label>
-                <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+                <div className="whitespace-pre-wrap text-sm rounded-lg border bg-white px-3 py-2">
                   {order.personalization}
                 </div>
               </div>
@@ -721,165 +933,188 @@ export default function SellerOrderDetails() {
       )}
 
       {/* Buyer & payment */}
-      <Card>
+      <Card className="shadow-none border rounded-xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Buyer & Payment</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Phone</Label>
-              <div className="flex items-center gap-2">
-                <Input value={order.phone ?? "—"} readOnly />
+
+        <CardContent className="space-y-5">
+          {/* Phone */}
+          <div className="space-y-2">
+            <Label>Phone</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                className="h-10 rounded-lg"
+                value={order.phone ?? "—"}
+                readOnly
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => {
+                  navigator.clipboard.writeText(order.phone ?? "");
+                  toast.success("Phone copied");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {(phoneDigits || whatsappLink) && (
+              <div className="mt-2 flex items-center gap-2">
                 {phoneDigits && (
-                  <>
-                    <Button asChild variant="outline">
-                      <a href={`tel:${phoneDigits}`}>
-                        <Phone className="h-4 w-4 mr-1" /> Call
-                      </a>
-                    </Button>
-                    {whatsappLink && (
-                      <Button asChild>
-                        <a
-                          href={whatsappLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <MessageCircle className="h-4 w-4 mr-1" /> Chat
-                        </a>
-                      </Button>
-                    )}
-                  </>
+                  <Button asChild variant="outline" className="h-9 rounded-lg">
+                    <a href={`tel:${phoneDigits}`}>
+                      <Phone className="h-4 w-4 mr-1" />
+                      Call
+                    </a>
+                  </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    navigator.clipboard.writeText(order.phone ?? "");
-                    toast.success("Phone copied");
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+                {whatsappLink && (
+                  <Button asChild className="h-9 rounded-lg">
+                    <a
+                      href={whatsappLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1" />
+                      Chat
+                    </a>
+                  </Button>
+                )}
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="space-y-1">
-              <Label>City</Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
+          {/* City */}
+          <div className="space-y-2">
+            <Label>City</Label>
+            <Input
+              className="h-10 rounded-lg cursor-default select-text"
+              onChange={(e) => setCity(e.target.value)}
+              value={city ?? "—"}
+              readOnly
+            />
+          </div>
 
-            <div className="space-y-1 sm:col-span-2">
-              <Label>Address</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    navigator.clipboard.writeText(address);
-                    toast.success("Address copied");
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
+          {/* Address */}
+          <div className="space-y-2">
+            <Label>Address</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                onChange={(e) => setAddress(e.target.value)}
+                className="h-10 rounded-lg cursor-default select-text"
+                value={address ?? "—"}
+                readOnly
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => {
+                  navigator.clipboard.writeText(address);
+                  toast.success("Address copied");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
           <Separator />
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <Label>Payment method</Label>
-              <div className="text-sm text-muted-foreground">
-                Cash on Delivery
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm">Payment confirmed</Label>
-              <Switch
-                checked={paymentConfirmed}
-                disabled={paymentConfirmed || savingPayment}
-                onCheckedChange={(next) => {
-                  if (!paymentConfirmed && next) setShowPaymentSheet(true);
-                }}
-                aria-label="Toggle payment confirmed"
-              />
-              <span className="ml-2 text-xs text-muted-foreground">
-                One-way action — cannot be undone.
-              </span>
-            </div>
-
-            {/* Confirmation Sheet */}
-            <Sheet open={showPaymentSheet} onOpenChange={setShowPaymentSheet}>
-              <SheetContent side="bottom" className="sm:max-w-lg">
-                <SheetHeader>
-                  <SheetTitle>Confirm payment?</SheetTitle>
-                  <SheetDescription>
-                    This will mark the order as <strong>paid</strong>. This
-                    action is permanent.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="mt-3 text-sm space-y-1">
-                  <div>
-                    <span className="text-muted-foreground">Order ID:</span>{" "}
-                    <code className="px-1 py-0.5 bg-muted rounded">
-                      {order.id}
-                    </code>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Amount:</span> MAD{" "}
-                    {order.amount_mad}
-                  </div>
-                  {order.phone && (
-                    <div>
-                      <span className="text-muted-foreground">Buyer:</span>{" "}
-                      {order.phone}
-                    </div>
-                  )}
-                </div>
-                <SheetFooter className="mt-4">
-                  <SheetClose asChild>
-                    <Button variant="outline" disabled={savingPayment}>
-                      Cancel
-                    </Button>
-                  </SheetClose>
-                  <Button
-                    onClick={async () => {
-                      if (!order || paymentConfirmed) return;
-                      setSavingPayment(true);
-                      const { error } = await supabase
-                        .from("orders")
-                        .update({ payment_confirmed: true })
-                        .eq("id", order.id);
-                      setSavingPayment(false);
-                      if (error) {
-                        toast.error("Couldn’t mark as paid", {
-                          description: error.message,
-                        });
-                        return;
-                      }
-                      setPaymentConfirmed(true);
-                      setShowPaymentSheet(false);
-                      await insertEvent("payment_confirmed", { value: true });
-                      toast.success("Payment marked as confirmed ✅");
-                    }}
-                  >
-                    {savingPayment ? "Saving…" : "Yes, mark as paid"}
-                  </Button>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
+          {/* Payment method */}
+          <div className="space-y-1">
+            <Label>Payment method</Label>
+            <p className="text-sm text-muted-foreground">Cash on Delivery</p>
           </div>
+
+          {/* Payment confirmed block */}
+          <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2">
+            <div>
+              <div className="text-sm font-medium">Payment confirmed</div>
+              <p className="text-xs text-muted-foreground">
+                One-way action — cannot be undone.
+              </p>
+            </div>
+            <Switch
+              checked={paymentConfirmed}
+              disabled={paymentConfirmed || savingPayment}
+              onCheckedChange={(next) => {
+                if (!paymentConfirmed && next) setShowPaymentSheet(true);
+              }}
+              aria-label="Toggle payment confirmed"
+            />
+          </div>
+
+          {/* Confirmation Sheet (Payment) */}
+          <Sheet open={showPaymentSheet} onOpenChange={setShowPaymentSheet}>
+            <SheetContent side="bottom" className="sm:max-w-lg">
+              <SheetHeader>
+                <SheetTitle>Confirm payment?</SheetTitle>
+                <SheetDescription>
+                  This will mark the order as <strong>paid</strong>. This action
+                  is permanent.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-3 text-sm space-y-1">
+                <div>
+                  <span className="text-muted-foreground">Order ID:</span>{" "}
+                  <code className="px-1 py-0.5 bg-muted rounded">
+                    {order.id}
+                  </code>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Amount:</span> MAD{" "}
+                  {order.amount_mad}
+                </div>
+                {order.phone && (
+                  <div>
+                    <span className="text-muted-foreground">Buyer:</span>{" "}
+                    {order.phone}
+                  </div>
+                )}
+              </div>
+
+              <SheetFooter className="mt-4">
+                <SheetClose asChild>
+                  <Button variant="outline" disabled={savingPayment}>
+                    Cancel
+                  </Button>
+                </SheetClose>
+                <Button
+                  onClick={async () => {
+                    if (!order || paymentConfirmed) return;
+                    setSavingPayment(true);
+                    const { error } = await supabase
+                      .from("orders")
+                      .update({ payment_confirmed: true })
+                      .eq("id", order.id);
+                    setSavingPayment(false);
+                    if (error) {
+                      toast.error("Couldn’t mark as paid", {
+                        description: error.message,
+                      });
+                      return;
+                    }
+                    setPaymentConfirmed(true);
+                    setShowPaymentSheet(false);
+                    await insertEvent("payment_confirmed", { value: true });
+                    toast.success("Payment marked as confirmed ✅");
+                  }}
+                >
+                  {savingPayment ? "Saving…" : "Yes, mark as paid"}
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         </CardContent>
       </Card>
 
       {/* Fulfillment */}
-      <Card>
+      <Card className="shadow-none border rounded-xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Fulfillment</CardTitle>
         </CardHeader>
@@ -945,8 +1180,89 @@ export default function SellerOrderDetails() {
         </CardContent>
       </Card>
 
+      {/* Invoice */}
+      <Card className="shadow-none border rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Invoice</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {order.invoice_url ? (
+            <div className="flex items-center gap-2">
+              <a
+                href={order.invoice_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm underline underline-offset-2"
+              >
+                <FileText className="h-4 w-4" />
+                View invoice
+              </a>
+              <a
+                href={order.invoice_url}
+                download
+                className="inline-flex items-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </a>
+              <Button
+                variant="ghost"
+                className="h-8 px-2 rounded-full"
+                onClick={removeInvoice}
+                disabled={invRemoving}
+              >
+                {invRemoving ? (
+                  <Clock className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No invoice attached.
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor="invoice-file"
+              className="inline-flex items-center gap-2 text-sm px-3 h-9 rounded-full border bg-white cursor-pointer"
+            >
+              <Upload className="h-4 w-4" />
+              {invUploading
+                ? "Uploading…"
+                : order.invoice_url
+                  ? "Replace"
+                  : "Upload"}
+            </label>
+            <Input
+              id="invoice-file"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={onUploadInvoice}
+              disabled={invUploading}
+            />
+
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full text-sm"
+              onClick={generatePrintableInvoice}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Generate (print)
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Stored in <code>invoices</code> bucket (public).
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Notes */}
-      <Card>
+      <Card className="shadow-none border rounded-xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Internal notes</CardTitle>
         </CardHeader>
@@ -964,13 +1280,13 @@ export default function SellerOrderDetails() {
       </Card>
 
       {/* Attachments */}
-      <Card>
+      <Card className="shadow-none border rounded-xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Attachments</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-2">
-            <label className="inline-flex items-center gap-2 rounded-full border px-3 py-2 bg-white hover:bg-sand cursor-pointer">
+            <label className="inline-flex items-center gap-2 rounded-full border px-3 py-2 bg-white cursor-pointer">
               <Upload className="h-4 w-4" />
               <span className="text-sm">
                 {uploading ? "Uploading…" : "Upload files"}
@@ -1039,7 +1355,7 @@ export default function SellerOrderDetails() {
 
       {/* Analytics / History */}
       <div className="grid md:grid-cols-2 gap-4">
-        <Card>
+        <Card className="shadow-none border rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Customer history</CardTitle>
           </CardHeader>
@@ -1060,7 +1376,7 @@ export default function SellerOrderDetails() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-none border rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Activity timeline</CardTitle>
           </CardHeader>
@@ -1123,34 +1439,28 @@ export default function SellerOrderDetails() {
             </ul>
           </CardContent>
         </Card>
+
+        <Button
+          variant="outline"
+          className="h-9 rounded-full text-sm text-red-600 border border-red-500 py-5 mt-4"
+          onClick={openCancelSheet}
+          disabled={locked || reachedEnd || savingStatus}
+        >
+          <PackageX className="mr-2 h-4 w-4" />
+          Cancel this order
+        </Button>
       </div>
 
       {/* Sticky mobile actions */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3 not-print">
-        <div className="flex items-center gap-2">
-          {phoneDigits && (
-            <Button asChild variant="outline" className="flex-1">
-              <a href={`tel:${phoneDigits}`}>
-                <Phone className="h-4 w-4 mr-1" /> Call
-              </a>
-            </Button>
-          )}
-          {whatsappLink && (
-            <Button asChild className="flex-1">
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
-              </a>
-            </Button>
-          )}
-        </div>
-        {nextAction && (
+      <div className="fixed bottom-11 left-0 right-0 border-t border-b bg-background/95 backdrop-blur p-3 not-print">
+        {nextAction && !locked && !reachedEnd && (
           <Button
-            className="w-full mt-2"
-            onClick={() => updateStatus(nextAction.to)}
-            disabled={saving}
+            className="w-full py-5"
+            onClick={() => openConfirmFor(nextAction.to)}
+            disabled={savingStatus}
           >
             {statusIcon(nextAction.to)}{" "}
-            <span className="ml-2">{nextAction.label}</span>
+            <span className=" ">{nextAction.label}</span>
           </Button>
         )}
       </div>
@@ -1170,7 +1480,7 @@ export default function SellerOrderDetails() {
         }
       `}</style>
 
-      {/* Invoice */}
+      {/* Invoice Print */}
       <div
         className={printMode === "invoice" ? "print:block" : "print:hidden"}
         style={{ display: "none" }}
@@ -1235,6 +1545,240 @@ export default function SellerOrderDetails() {
           </div>
         </div>
       </div>
+
+      {/* Advance Status — rounded bottom sheet (mutually exclusive) */}
+      <Sheet
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (open) {
+            setConfirmCancelOpen(false);
+          } else {
+            setNextChoice("");
+          }
+        }}
+      >
+        <SheetTrigger asChild>
+          <button className="hidden" />
+        </SheetTrigger>
+
+        <SheetContent
+          side="bottom"
+          className={cn(
+            "max-w-screen-sm mx-auto",
+            "rounded-t-2xl bg-white shadow-2xl border-t border-ink/10",
+            "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
+            "[&>button[data-radix-sheet-close]]:hidden"
+          )}
+        >
+          <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+          <div className="px-4 pt-2 pb-3">
+            <div
+              className={cn(
+                "mt-3 rounded-xl border px-3 py-2 text-[13px] flex items-start gap-2",
+                nextChoice === "cancelled"
+                  ? "border-red-200 bg-red-50/70 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              )}
+            >
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="leading-snug">
+                {nextChoice === "cancelled"
+                  ? "Cancelling is permanent. You won’t be able to take further actions on this order."
+                  : "This move is permanent. You won’t be able to return to a previous step."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-3 mt-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={cn(
+                    "h-10 w-10 grid place-items-center rounded-full border",
+                    nextChoice === "cancelled"
+                      ? "text-red-600 border-red-400/60 bg-red-50"
+                      : "text-ink border-ink/30 bg-neutral-50"
+                  )}
+                >
+                  {
+                    {
+                      pending: <Clock className="h-5 w-5" />,
+                      confirmed: <CheckCircle2 className="h-5 w-5" />,
+                      shipped: <Truck className="h-5 w-5" />,
+                      delivered: <PackageCheck className="h-5 w-5" />,
+                      cancelled: <Ban className="h-5 w-5" />,
+                    }[nextChoice || "pending"]
+                  }
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="text-[15px] font-semibold capitalize">
+                      {nextChoice || "—"}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-[11px] px-2 py-0.5 rounded-full border",
+                        nextChoice === "cancelled"
+                          ? "border-red-400/60 text-red-700 bg-red-50"
+                          : "border-ink/20 text-ink/70 bg-neutral-50"
+                      )}
+                    >
+                      One-way
+                    </span>
+                  </div>
+                  <div className="text-[13px] text-ink/70">
+                    {nextChoice === "confirmed" &&
+                      "Buyer confirmed — prepare shipment."}
+                    {nextChoice === "shipped" && "Package handed to carrier."}
+                    {nextChoice === "delivered" && "Order delivered to buyer."}
+                    {nextChoice === "cancelled" &&
+                      "Order will be locked after cancelling."}
+                    {!nextChoice && "Select a next step to continue."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px bg-ink/10 mb-1" />
+
+          <div className="px-1 flex mt-4">
+            <button
+              onClick={() => setConfirmOpen(false)}
+              disabled={savingStatus}
+              className="w-full h-12 mx-3 mb-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-sand/50 active:bg-sand transition border"
+            >
+              <span className="text-[15px] font-medium">Cancel</span>
+            </button>
+            <button
+              onClick={() => nextChoice && persistStatus(nextChoice)}
+              disabled={!nextChoice || savingStatus}
+              className={cn(
+                "w-full h-12 mx-3 mb-2 px-4 rounded-xl flex items-center justify-center gap-3 transition",
+                nextChoice === "cancelled"
+                  ? "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-400"
+                  : "bg-ink text-white hover:bg-black",
+                savingStatus && "opacity-80"
+              )}
+            >
+              {savingStatus ? (
+                <Clock className="h-5 w-5 animate-spin" />
+              ) : (
+                statusIcon((nextChoice || "pending") as OrderStatus)
+              )}
+              <span className="text-[15px] font-medium">Confirm</span>
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Cancel Order — rounded bottom sheet (mutually exclusive) */}
+      <Sheet
+        open={confirmCancelOpen}
+        onOpenChange={(open) => {
+          setConfirmCancelOpen(open);
+          if (open) setConfirmOpen(false);
+        }}
+      >
+        <SheetTrigger asChild>
+          <button className="hidden" />
+        </SheetTrigger>
+
+        <SheetContent
+          side="bottom"
+          className={cn(
+            "max-w-screen-sm mx-auto",
+            "rounded-t-2xl bg-white shadow-2xl border-t border-ink/10",
+            "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
+            "[&>button[data-radix-sheet-close]]:hidden"
+          )}
+        >
+          <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+          <div className="px-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 flex-shrink-0">
+                {p?.photos?.[0] ? (
+                  <img
+                    src={p.photos[0]}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-sand" />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-[15px] text-ink truncate">
+                  {p?.title ?? "Order"}
+                </div>
+                <div className="mt-0.5 text-xs text-ink/70 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-700">
+                    #{order.id.slice(0, 8)}
+                  </span>
+                  <span>·</span>
+                  <span>MAD {order.amount_mad}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px bg-ink/10 mb-1" />
+
+          <div className="px-4 pt-2 pb-3">
+            <div className="rounded-2xl border bg-red-50 p-3 border-red-200">
+              <div className="flex items-center gap-3 text-red-700">
+                <Ban className="h-5 w-5" />
+                <div className="min-w-0">
+                  <div className="text-[15px] font-semibold">
+                    Cancel this order
+                  </div>
+                  <div className="text-[13px]">
+                    Cancelling is permanent. You won’t be able to take further
+                    actions.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* <div className="mt-3 rounded-xl border border-red-200 bg-red-50/70 px-3 py-2 text-[13px] text-red-800 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="leading-snug">
+                Are you sure you want to cancel?
+              </div>
+            </div> */}
+          </div>
+
+          <div className="h-px bg-ink/10 mb-1" />
+
+          <div className="px-1 flex">
+            <button
+              onClick={() => setConfirmCancelOpen(false)}
+              className="w-full h-12 mx-3 mb-3 px-4 rounded-xl flex items-center justify-center gap-3 border hover:bg-sand/50 active:bg-sand transition"
+            >
+              <span className="text-[15px] font-medium">Back</span>
+            </button>
+
+            <button
+              onClick={cancelOrder}
+              disabled={savingStatus}
+              className="w-full h-12 mx-3 mb-2 px-4 rounded-xl flex items-center justify-center gap-3 bg-red-600 hover:bg-red-700 text-white transition disabled:bg-red-400"
+            >
+              {savingStatus ? (
+                <Clock className="h-5 w-5 animate-spin" />
+              ) : (
+                <Ban className="h-5 w-5" />
+              )}
+              <span className="text-[15px] font-medium">
+                Confirm Cancellation
+              </span>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </main>
   );
 }
@@ -1246,7 +1790,7 @@ function OptionsList({ options }: { options: any }) {
   if (Array.isArray(options)) {
     if (!options.length) return null;
     return (
-      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+      <ul className="text-sm rounded-lg border bg-white px-3 py-2 space-y-1">
         {options.map((opt: any, i: number) => {
           const group =
             opt.group ?? opt.name ?? opt.key ?? opt.title ?? "Option";
@@ -1271,7 +1815,7 @@ function OptionsList({ options }: { options: any }) {
     const entries = Object.entries(options);
     if (!entries.length) return null;
     return (
-      <ul className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2 space-y-1">
+      <ul className="text-sm rounded-lg border bg-white px-3 py-2 space-y-1">
         {entries.map(([k, v]) => (
           <li key={k} className="flex items-start justify-between gap-4">
             <span className="text-muted-foreground">{k}</span>
@@ -1285,8 +1829,108 @@ function OptionsList({ options }: { options: any }) {
   }
 
   return (
-    <div className="text-sm rounded-lg border border-black/5 bg-white px-3 py-2">
+    <div className="text-sm rounded-lg border bg-white px-3 py-2">
       {String(options)}
+    </div>
+  );
+}
+
+/* ==========================================
+   StatusTimeline — cancelled replaces next step
+   ========================================== */
+function StatusTimeline({
+  status,
+  prev,
+}: {
+  status: OrderStatus;
+  prev?: Exclude<OrderStatus, "cancelled">;
+}) {
+  const flow: Exclude<OrderStatus, "cancelled">[] = [
+    "pending",
+    "confirmed",
+    "shipped",
+    "delivered",
+  ];
+
+  const ICONS: Record<OrderStatus, JSX.Element> = {
+    pending: <Clock className="h-4 w-4" />,
+    confirmed: <CheckCircle2 className="h-4 w-4" />,
+    shipped: <Truck className="h-4 w-4" />,
+    delivered: <PackageCheck className="h-4 w-4" />,
+    cancelled: <Ban className="h-4 w-4" />,
+  };
+
+  const currentIndex =
+    status === "cancelled"
+      ? -1
+      : flow.indexOf(status as Exclude<OrderStatus, "cancelled">);
+
+  const cancelIndex = (() => {
+    if (status !== "cancelled") return -1;
+    const prevIdx = flow.indexOf(prev ?? "pending");
+    return Math.min(prevIdx + 1, flow.length - 1);
+  })();
+
+  return (
+    <div className="mt-4 w-full select-none">
+      <div className="flex items-center w-full">
+        {flow.map((step, i) => {
+          const isLast = i === flow.length - 1;
+          const isCancelledPoint = status === "cancelled" && i === cancelIndex;
+          const isDone =
+            status !== "cancelled" ? i < currentIndex : i < cancelIndex;
+          const isCurrent = status !== "cancelled" && i === currentIndex;
+
+          let circle = "bg-white text-ink/30 border-ink/20";
+          let label = "text-ink/40";
+          let connector = "bg-ink/20";
+
+          if (isCancelledPoint) {
+            circle = "bg-white text-red-600 border-red-500";
+            label = "text-red-600";
+            connector = "bg-ink/20";
+          } else if (isDone || (isCurrent && step === "delivered")) {
+            // delivered filled + completed filled
+            circle = "bg-ink text-white border-ink";
+            label = "text-ink";
+            connector = "bg-ink";
+          } else if (isCurrent) {
+            circle = "bg-white text-ink border-ink";
+            label = "text-ink";
+            connector = "bg-ink/20";
+          }
+
+          return (
+            <div
+              key={step}
+              className={cn(
+                "flex items-center min-w-[64px]",
+                !isLast && "flex-1"
+              )}
+            >
+              <div className="flex flex-col items-center">
+                <div
+                  className={cn(
+                    "h-9 w-9 grid place-items-center rounded-full border",
+                    circle
+                  )}
+                >
+                  {isCancelledPoint ? ICONS.cancelled : ICONS[step]}
+                </div>
+                <div className={cn("mt-1 text-[13px]", label)}>
+                  {isCancelledPoint ? "Cancelled" : capitalize(step)}
+                </div>
+              </div>
+
+              {!isLast && (
+                <div
+                  className={cn("h-px mx-3 flex-1 self-center", connector)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

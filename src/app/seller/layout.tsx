@@ -24,7 +24,7 @@ export default function SellerLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
 
   return (
-    <div className="max-w-screen-sm mx-auto pb-24">
+    <div className="">
       {/* <div className="px-4 pt-4">
  
         <div className="w-full overflow-x-auto">
@@ -53,7 +53,7 @@ export default function SellerLayout({ children }: PropsWithChildren) {
         </div>
       </div> */}
 
-      <div className="p2-4 pt-4">{children}</div>
+      <div className="">{children}</div>
     </div>
   );
 }
