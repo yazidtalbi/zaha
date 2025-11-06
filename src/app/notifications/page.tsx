@@ -37,6 +37,13 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [filter, setFilter] = useState<string>("all");
+
+  const filteredItems = useMemo(() => {
+    if (filter === "all") return items;
+    return items.filter((n) => n.type.startsWith(filter));
+  }, [items, filter]);
+
   /* 1) Auth */
   useEffect(() => {
     (async () => {
@@ -130,7 +137,8 @@ export default function NotificationsPage() {
   };
 
   /* 5) Grouping */
-  const grouped = useMemo(() => groupByTime(items), [items]);
+  const grouped = useMemo(() => groupByTime(filteredItems), [filteredItems]);
+
   const unreadCount = items.filter((n) => !n.read_at).length;
 
   return (
@@ -157,6 +165,31 @@ export default function NotificationsPage() {
             Mark all read
           </Button>
         ) : null}
+      </div>
+
+      <Separator />
+
+      <div className="flex gap-2 py-2 overflow-x-auto">
+        {[
+          ["all", "All"],
+          ["order", "Orders"],
+          ["review", "Reviews"],
+          ["system", "System"],
+          ["promo", "Promos"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-sm border",
+              filter === key
+                ? "bg-ink text-white border-ink"
+                : "bg-white text-ink/70 border-ink/20"
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <Separator />

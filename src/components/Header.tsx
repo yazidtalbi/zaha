@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import {
   Bell,
   Menu,
@@ -39,6 +41,22 @@ type UserMeta = {
   avatar_url?: string;
   email?: string;
 };
+
+export function NotificationsIcon() {
+  const unread = useUnreadNotifications();
+
+  return (
+    <Link href="/notifications" aria-label="Notifications">
+      <button className="relative flex items-center justify-center h-8 w-8 rounded-full transition">
+        <Bell className="h-5 w-5 text-ink" strokeWidth={2.2} />
+
+        {unread > 0 && (
+          <span className="absolute top-[2px] right-[2px] h-[9px] w-[9px] rounded-full bg-red-500 ring-2 ring-white" />
+        )}
+      </button>
+    </Link>
+  );
+}
 
 function extractAvatarUrl(user: any, profile: Profile | null): string | null {
   // 1) direct metadata
@@ -392,15 +410,7 @@ export default function Header() {
 
           {/* Right: Alerts */}
           <div className="justify-self-end mr-2">
-            <Link href="/notifications" aria-label="Notifications">
-              <button className="flex items-center justify-center h-8 w-8 rounded-ful  transition  ">
-                <Bell
-                  className="h-5 w-5 text-ink"
-                  strokeWidth={2.2}
-                  color="gray"
-                />
-              </button>
-            </Link>
+            <NotificationsIcon />
           </div>
         </div>
       </div>

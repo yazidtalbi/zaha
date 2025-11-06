@@ -67,6 +67,10 @@ type NewProductInsert = {
 
   // details
   item_details?: ItemDetails | null;
+
+  // --- add (optional) ---
+  video_url?: string | null;
+  video_poster_url?: string | null;
 };
 
 type NewProductInsertWithOwner = NewProductInsert & { shop_owner: string };
@@ -128,6 +132,12 @@ export default function SellPage() {
   // photos
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  // video (MVP)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoPosterUrl, setVideoPosterUrl] = useState<string | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoErr, setVideoErr] = useState<string | null>(null);
 
   // promo
   const [promoPrice, setPromoPrice] = useState<string>("");
@@ -244,6 +254,133 @@ export default function SellPage() {
           : g
       )
     );
+  }
+
+  const MAX_VIDEO_BYTES = 20 * 1024 * 1024; // 20MB
+  const MAX_VIDEO_SECONDS = 15;
+
+  function validateVideoDuration(objectUrl: string, maxSec: number) {
+    return new Promise<boolean>((resolve, reject) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.src = objectUrl;
+      v.onloadedmetadata = () => {
+        const ok = (v.duration || 0) <= maxSec + 0.2;
+        resolve(ok);
+      };
+      v.onerror = reject;
+    });
+  }
+
+  async function capturePoster(objectUrl: string): Promise<Blob | null> {
+    try {
+      const v = document.createElement("video");
+      v.src = objectUrl;
+      v.crossOrigin = "anonymous";
+      v.muted = true;
+      v.preload = "auto";
+      await v.play().catch(() => {});
+      v.currentTime = 0.3;
+      await new Promise<void>((res) => {
+        v.onseeked = () => res();
+        v.onloadeddata = () => res();
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      return await new Promise<Blob | null>((res) =>
+        canvas.toBlob((b) => res(b), "image/jpeg", 0.82)
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  // MVP uploader: puts files in a temp path until the product exists.
+  // (You already do this pattern for photos via uploadCompressedToSupabase)
+  async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.currentTarget.value = ""; // allow reselecting same file
+    if (!file) return;
+
+    setVideoErr(null);
+
+    try {
+      if (!file.type.startsWith("video/"))
+        throw new Error("Please choose a video.");
+      if (file.size > MAX_VIDEO_BYTES)
+        throw new Error("Video too big. Max 20MB.");
+      setVideoBusy(true);
+
+      // Validate duration
+      const blobUrl = URL.createObjectURL(file);
+      const ok = await validateVideoDuration(blobUrl, MAX_VIDEO_SECONDS).catch(
+        () => false
+      );
+      if (!ok) {
+        URL.revokeObjectURL(blobUrl);
+        throw new Error("Max 15 seconds.");
+      }
+
+      // Auth (for path scoping)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      // Paths (temporary until product is inserted)
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const base = `temp/${user.id}/${uid()}`;
+      const videoPath = `${base}/video.${ext}`;
+      const posterPath = `${base}/poster.jpg`;
+      const bucket = "product_media";
+
+      // Upload the raw video (no compression in MVP)
+      const { error: vErr } = await supabase.storage
+        .from(bucket)
+        .upload(videoPath, file, { upsert: true, contentType: file.type });
+      if (vErr) throw vErr;
+
+      // Generate and upload a poster
+      const posterBlob = await capturePoster(blobUrl);
+      if (posterBlob) {
+        const { error: pErr } = await supabase.storage
+          .from(bucket)
+          .upload(posterPath, posterBlob, {
+            upsert: true,
+            contentType: "image/jpeg",
+          });
+        if (pErr) throw pErr;
+      }
+
+      URL.revokeObjectURL(blobUrl);
+
+      // Public URLs (MVP)
+      const { data: vPub } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(videoPath);
+      const { data: pPub } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(posterPath);
+
+      setVideoUrl(vPub.publicUrl);
+      setVideoPosterUrl(pPub.publicUrl);
+    } catch (err: any) {
+      setVideoErr(err?.message ?? "Video upload failed.");
+      setVideoUrl(null);
+      setVideoPosterUrl(null);
+    } finally {
+      setVideoBusy(false);
+    }
+  }
+
+  function clearVideo() {
+    setVideoUrl(null);
+    setVideoPosterUrl(null);
+    setVideoErr(null);
   }
 
   /* ------------- Photos ------------- */
@@ -494,6 +631,8 @@ export default function SellPage() {
         personalization_instructions,
         personalization_max_chars,
         item_details,
+        video_url: videoUrl ?? null,
+        video_poster_url: videoPosterUrl ?? null,
       };
 
       const { data: prod, error: insErr } = await supabase
@@ -610,6 +749,53 @@ export default function SellPage() {
             ))}
           </div>
         )}
+
+        {/* Video (optional) */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm">Video (optional)</div>
+            <div className="text-xs text-neutral-500">≤15s · ≤20MB</div>
+          </div>
+
+          {!videoUrl ? (
+            <label className="inline-flex items-center gap-2 text-sm rounded border px-3 py-2 bg-white cursor-pointer">
+              <input
+                type="file"
+                className="hidden"
+                accept="video/*"
+                capture="environment"
+                onChange={handleVideoSelect}
+                disabled={videoBusy}
+              />
+              <span>{videoBusy ? "Uploading…" : "Add video"}</span>
+            </label>
+          ) : (
+            <div className="relative rounded-lg overflow-hidden border bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={videoPosterUrl || "/placeholder.svg"}
+                alt="Video poster"
+                className="w-full h-32 object-cover"
+              />
+              <div className="p-2 flex items-center justify-between text-xs">
+                <span className="text-neutral-600 truncate">{videoUrl}</span>
+                <button
+                  type="button"
+                  onClick={clearVideo}
+                  className="rounded bg-black text-white px-2 py-1"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+
+          {videoErr && <p className="mt-1 text-xs text-red-600">{videoErr}</p>}
+
+          <p className="mt-1 text-[11px] text-neutral-500">
+            Tip: shoot in good lighting. Audio is ignored in MVP.
+          </p>
+        </div>
 
         {/* Title */}
         <label htmlFor="title" className="block text-sm mt-4">

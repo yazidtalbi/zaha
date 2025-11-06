@@ -293,16 +293,29 @@ function VisibleAreaSkeleton() {
 
 /** 1) ProductCarousel — framed, slightly taller, translucent dot rail */
 function ProductCarousel({
-  images,
+  media,
   title,
   onOpen,
 }: {
-  images: string[];
+  media: Array<
+    | { type: "image"; src: string }
+    | { type: "video"; src: string; poster?: string }
+  >;
   title: string;
   onOpen: (i: number) => void;
 }) {
   const [idx, setIdx] = useState(0);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
+
+  // Locate the video slide (we put it at index 1 when possible)
+  const videoIndex = useMemo(
+    () => media.findIndex((m) => m.type === "video"),
+    [media]
+  );
+
+  // Lazy load toggle — load only when we reach the video slide
+  const shouldLoadVideo = videoIndex >= 0 && idx === videoIndex;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -312,49 +325,114 @@ function ProductCarousel({
     return () => emblaApi.off("select", onSelect);
   }, [emblaApi]);
 
+  // Autoplay/pause video depending on active slide
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (shouldLoadVideo) {
+      // play once slide is active
+      v.play().catch(() => {});
+    } else {
+      // pause when not active
+      v.pause();
+      v.currentTime = 0;
+    }
+  }, [shouldLoadVideo]);
+
+  const items = media.length ? media : [{ type: "image", src: "" as string }];
+
   return (
     <div className="px-4 pt-4">
-      <div className="relative rounded-2xl bg-white   ">
+      <div className="relative rounded-2xl bg-white">
         <div ref={emblaRef} className="overflow-hidden rounded-xl">
           <div className="flex">
-            {(images.length ? images : [undefined]).map((src, i) => (
-              <button
+            {items.map((item, i) => (
+              <div
                 key={i}
                 className="min-w-0 flex-[0_0_100%] aspect-[7/8] sm:aspect-[4/3] bg-neutral-100"
-                onClick={() => (src ? onOpen(i) : undefined)}
-                aria-label={src ? `Open image ${i + 1} fullscreen` : "No image"}
               >
-                {src ? (
-                  <img
-                    src={src}
-                    alt={title}
-                    className="w-full h-full object-cover"
-                  />
+                {item.type === "image" ? (
+                  item.src ? (
+                    <button
+                      className="w-full h-full"
+                      onClick={() => onOpen(i)}
+                      aria-label={`Open image ${i + 1} fullscreen`}
+                    >
+                      <img
+                        src={item.src}
+                        alt={title}
+                        className="w-full h-full object-cover"
+                        loading={i === 0 ? "eager" : "lazy"}
+                      />
+                    </button>
+                  ) : (
+                    <div className="w-full h-full grid place-items-center text-neutral-500">
+                      No image
+                    </div>
+                  )
                 ) : (
-                  <div className="w-full h-full grid place-items-center text-neutral-500">
-                    No image
+                  // VIDEO slide
+                  <div className="relative w-full h-full">
+                    {/* We only set src when active to truly lazy-load */}
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-cover"
+                      poster={item.poster}
+                      {...(shouldLoadVideo ? { src: item.src } : {})}
+                      muted
+                      playsInline
+                      autoPlay // ← add this
+                      loop // ← optional but recommended for product video loops
+                      preload="none"
+                      controls={false} // ← remove controls
+                    />
                   </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Dots with semi-transparent black background */}
-        {images.length > 1 && (
+        {/* Dots with special icon for the video slide */}
+        {items.length > 1 && (
           <div className="absolute inset-x-0 bottom-3 flex items-center justify-center">
             <div className="rounded-full bg-black/30 px-2 py-1 backdrop-blur-sm">
               <div className="flex items-center gap-1">
-                {images.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => emblaApi?.scrollTo(i)}
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      i === idx ? "bg-white" : "bg-white/50"
-                    }`}
-                    aria-label={`Go to slide ${i + 1}`}
-                  />
-                ))}
+                {items.map((m, i) => {
+                  const isActive = i === idx;
+                  const isVideoDot = m.type === "video";
+
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => emblaApi?.scrollTo(i)}
+                      aria-label={`Go to slide ${i + 1}`}
+                      className="h-2 w-2 grid place-items-center"
+                    >
+                      {isVideoDot && !isActive ? (
+                        // Triangle "play" icon for video when INACTIVE
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-2.5 w-2.5"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M8 5v14l11-7-11-7z"
+                            fill="white"
+                            fillOpacity="0.7"
+                          />
+                        </svg>
+                      ) : (
+                        // Normal dot (active video OR any image slide)
+                        <span
+                          className={`block h-1.5 w-1.5 rounded-full ${
+                            isActive ? "bg-white" : "bg-white/50"
+                          }`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -812,9 +890,11 @@ export default function ProductPage() {
         .from("products")
         .select(
           `
-          *,
-          shops:shop_id ( id, title, avatar_url, owner, created_at, city )
-        `
+    *,
+    video_url,
+    video_poster_url,
+    shops:shop_id ( id, title, avatar_url, owner, created_at, city )
+  `
         )
         .eq("id", _id)
         .maybeSingle();
@@ -855,6 +935,46 @@ export default function ProductPage() {
       setInCart((count ?? 0) > 0);
     })();
   }, [p?.id, isOwner]);
+
+  type MediaItem =
+    | { type: "image"; src: string }
+    | { type: "video"; src: string; poster?: string };
+
+  const media: MediaItem[] = useMemo(() => {
+    const imgs = (p?.photos ?? []).map((src: string) => ({
+      type: "image",
+      src,
+    })) as MediaItem[];
+    const hasVideo = !!p?.video_url;
+
+    if (!hasVideo) return imgs;
+    const videoItem: MediaItem = {
+      type: "video",
+      src: p.video_url,
+      poster: p?.video_poster_url || undefined,
+    };
+
+    // Place video at index 1 (second position) if there is at least one image.
+    if (imgs.length >= 1) {
+      const arr = [...imgs];
+      arr.splice(1, 0, videoItem);
+      return arr;
+    }
+
+    // If there are no images, just show the video first.
+    return [videoItem];
+  }, [p]);
+
+  const imagesForCarousel = useMemo(() => {
+    // Keep your existing carousel API (images: string[]) for now.
+    // We’ll pass poster first (if any), then photos.
+    const imgs: string[] = [];
+    if (p?.video_poster_url) imgs.push(p.video_poster_url);
+    if (Array.isArray(p?.photos)) imgs.push(...p.photos);
+    return imgs;
+  }, [p]);
+
+  const hasVideoFirst = !!p?.video_url && !!p?.video_poster_url;
 
   // remember + related
   const [similar, setSimilar] = useState<any[]>([]);
@@ -1330,11 +1450,11 @@ export default function ProductPage() {
           </div>
           {/* ——— Carousel ——— */}
           <ProductCarousel
-            images={images}
-            title={p.title}
+            media={media}
+            title={p?.title ?? ""}
             onOpen={(i) => {
-              setStartIndex(i);
-              setFsOpen(true);
+              // Only open lightbox for image slides
+              if (media[i]?.type === "image") openLightbox(i);
             }}
           />
           {/* ——— Title + meta ——— */}

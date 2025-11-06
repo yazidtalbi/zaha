@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { Heart } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -28,6 +28,10 @@ type Product = {
 
   /** NEW: for fromshop tag pills (comma-separated: "wood, handmade, vintage") */
   keywords?: string | null;
+
+  // NEW
+  video_url?: string | null;
+  video_poster_url?: string | null;
 };
 
 type Props = {
@@ -124,6 +128,23 @@ export default function ProductCard({
     () => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []).slice(0, 5),
     [p.photos]
   );
+
+  const hasVideo = !!p.video_url;
+  const imagesForCard = useMemo(() => {
+    const base = imgs.slice(0, 5);
+    if (!hasVideo) return base;
+
+    const poster = p.video_poster_url || base[0] || "";
+    if (base.length >= 1) {
+      const arr = [...base];
+      arr.splice(1, 0, poster); // video preview always second
+      return arr;
+    }
+    return [poster]; // no images: poster first (index 0)
+  }, [imgs, hasVideo, p.video_poster_url]);
+
+  const videoIndex = hasVideo ? (imgs.length >= 1 ? 1 : 0) : -1;
+
   const { current, compareAt, promoOn } = getDisplayPrice(p);
 
   // Choose visual: fromshop always uses single image (no carousel)
@@ -139,12 +160,15 @@ export default function ProductCard({
       {/* IMAGE */}
       {useCarousel ? (
         <CardCarousel
-          images={imgs}
+          images={imagesForCard}
           title={p.title}
           productId={p.id}
           shopOwner={p.shop_owner}
           promoOn={promoOn}
           onUnfavorite={onUnfavorite}
+          // NEW
+          videoSrc={p.video_url ?? undefined}
+          videoIndex={videoIndex}
         />
       ) : (
         <div className="relative">
@@ -249,6 +273,10 @@ function CardCarousel({
   shopOwner,
   promoOn,
   onUnfavorite,
+
+  // NEW
+  videoSrc,
+  videoIndex = -1,
 }: {
   images: string[];
   title: string;
@@ -256,9 +284,21 @@ function CardCarousel({
   shopOwner?: string | null;
   promoOn: boolean;
   onUnfavorite?: (id: string) => void;
+
+  videoSrc?: string; // video URL (optional)
+  videoIndex?: number; // index where the video lives (e.g. 1)
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [index, setIndex] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [videoLoading, setVideoLoading] = useState(false);
+
+  // when we land on the video slide, start loading UI
+  useEffect(() => {
+    if (!videoSrc || videoIndex < 0) return;
+    setVideoLoading(index === videoIndex); // start spinner on arrival
+  }, [index, videoSrc, videoIndex]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -268,28 +308,76 @@ function CardCarousel({
     return () => emblaApi.off("select", onSel);
   }, [emblaApi]);
 
+  // Lazy-load video only when we reach its slide
+  const shouldLoadVideo = videoSrc && videoIndex >= 0 && index === videoIndex;
+
+  // Autoplay/pause control on slide change
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (shouldLoadVideo) {
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+      v.currentTime = 0;
+    }
+  }, [shouldLoadVideo]);
+
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-lg" ref={emblaRef}>
         <div className="flex">
-          {(images.length ? images : [undefined]).map((src, i) => (
-            <div className="min-w-0 flex-[0_0_100%]" key={i}>
-              <div className="relative h-60 bg-neutral-100">
-                {src ? (
-                  <img
-                    src={src}
-                    alt={title}
-                    className="w-full h-full object-cover"
-                    loading={i === 0 ? "eager" : "lazy"}
-                  />
-                ) : (
-                  <div className="w-full h-full grid place-items-center text-neutral-500 text-sm">
-                    No image
-                  </div>
-                )}
+          {(images.length ? images : [undefined]).map((src, i) => {
+            const isVideoSlide = !!videoSrc && i === videoIndex;
+
+            return (
+              <div className="min-w-0 flex-[0_0_100%]" key={i}>
+                <div className="relative h-60 bg-neutral-100">
+                  {isVideoSlide ? (
+                    <div className="relative w-full h-full">
+                      <video
+                        ref={videoRef}
+                        className="w-full h-full object-cover"
+                        poster={src}
+                        // real lazy-load: only set src when active
+                        {...(shouldLoadVideo ? { src: videoSrc } : {})}
+                        muted
+                        playsInline
+                        autoPlay
+                        loop
+                        preload="none"
+                        controls={false}
+                        // spinner control via media events
+                        onLoadStart={() => setVideoLoading(true)}
+                        onLoadedData={() => setVideoLoading(false)}
+                        onCanPlay={() => setVideoLoading(false)}
+                        onPlaying={() => setVideoLoading(false)}
+                        onWaiting={() => setVideoLoading(true)}
+                        onError={() => setVideoLoading(false)}
+                      />
+                      {/* Spinner overlay while loading/buffering */}
+                      {videoLoading && (
+                        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/10">
+                          <div className="h-6 w-6 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  ) : src ? (
+                    <img
+                      src={src}
+                      alt={title}
+                      className="w-full h-full object-cover"
+                      loading={i === 0 ? "eager" : "lazy"}
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center text-neutral-500 text-sm">
+                      No image
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -306,15 +394,39 @@ function CardCarousel({
       />
 
       {images.length > 1 && (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/40 px-1.5 py-1 backdrop-blur-sm">
-          {images.map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === index ? "w-4 bg-white" : "w-2 bg-white/40"
-              }`}
-            />
-          ))}
+        <div className="pointer-events-none absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-[0px] rounded-full bg-black/40 px-1 py-[2px] backdrop-blur-sm">
+          {images.map((_, i) => {
+            const isActive = i === index;
+            const isVideoDot = videoSrc && i === videoIndex;
+            return (
+              <span key={i} className="h-3 w-3 grid place-items-center">
+                {isVideoDot && !isActive ? (
+                  // Triangle play icon when video dot is INACTIVE
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M8 5v14l11-7-11-7z"
+                      fill="white"
+                      fillOpacity="0.8"
+                    />
+                  </svg>
+                ) : (
+                  // Normal dot (active video OR any image slide)
+                  <span
+                    className={`
+    block rounded-full
+    h-1
+    transition-all duration-300 ease-out
+    ${isActive ? "bg-white w-2" : "bg-white/50 w-1"}
+  `}
+                  />
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
