@@ -242,32 +242,28 @@ export default function CategorySheetPicker({
     []
   );
 
-  async function onRowPress(c: Cat) {
-    setLoadingLevel(true);
-    const { data, error } = await supabase
-      .from("categories")
-      .select("id")
-      .eq("parent_id", c.id)
-      .limit(1);
-    setLoadingLevel(false);
+  // Replace your async onRowPress with this version (no extra query on secondary)
+  function onRowPress(c: Cat) {
+    const atRootNow = crumbs[crumbs.length - 1]?.id === null;
 
-    if (error) {
-      setFirstError("Check children failed", error);
-      pick(c.id, c.path);
-      return;
-    }
-
-    if ((data?.length ?? 0) > 0) {
+    // If we're at the root, navigate deeper (may show loading skeleton briefly)
+    if (atRootNow) {
       const label =
         (lang === "ar" && (c.name_ar || c.name_en)) ||
         (lang === "fr" && (c.name_fr || c.name_en)) ||
         c.name_en ||
         c.slug ||
         c.path;
-      await loadLevel(c.id, label, c.path);
+
+      // Only here do we change the loadingLevel because we actually fetch a new level
+      setLoadingLevel(true);
+      Promise.resolve(loadLevel(c.id, label, c.path)).finally(() =>
+        setLoadingLevel(false)
+      );
       return;
     }
 
+    // Otherwise (secondary and deeper): just pick without toggling global loading
     pick(c.id, c.path);
   }
 
@@ -411,7 +407,7 @@ export default function CategorySheetPicker({
             type="button"
             onClick={(e) => e.stopPropagation()}
             className={clsx(
-              "w-full inline-flex items-center justify-between rounded-lg border px-3 py-2 text-left",
+              "w-full inline-flex items-center justify-between rounded-lg border px-3 py-2 text-left h-12",
               "bg-white hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-terracotta/60"
             )}
             aria-label="Open category picker"
@@ -423,14 +419,27 @@ export default function CategorySheetPicker({
           </button>
         </SheetTrigger>
 
-        <SheetContent side="bottom" className="h-[86vh] p-0">
-          <div className="h-full flex flex-col">
+        {/* ── Restyled Drawer like your example ── */}
+        <SheetContent
+          side="bottom"
+          className={clsx(
+            "max-w-screen-sm mx-auto",
+            "rounded-t-2xl bg-white shadow-2xl border-t border-ink/10",
+            "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
+            // hide the default close button
+            "[&>button[data-radix-sheet-close]]:hidden"
+          )}
+        >
+          {/* Grabber */}
+          <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+          <div className="h-[calc(86vh-0px)] flex flex-col">
             {/* Sticky header (title + debug) */}
             <div
               ref={headerRef}
               className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60"
             >
-              <SheetHeader className="px-4 pt-4 pb-3">
+              <SheetHeader className="px-4 pt-1 pb-3">
                 <SheetTitle className="text-[17px] font-semibold">
                   Select category
                 </SheetTitle>
@@ -522,19 +531,7 @@ export default function CategorySheetPicker({
                 </div>
               )}
 
-              {/* Back to categories link (only for secondary levels) */}
-              {crumbs.length > 1 && (
-                <div className="px-4 pt-3 pb-4">
-                  <button
-                    type="button"
-                    onClick={() => goToCrumb(0)}
-                    className="flex items-center gap-1 text-sm font-medium text-neutral-700 hover:underline bg-sand px-2 py-1 rounded-full pr-4"
-                  >
-                    <ChevronLeft className="h-4 w-4 opacity-70" />
-                    <span>Back to Categories </span>
-                  </button>
-                </div>
-              )}
+              {/* NOTE: Removed the “Back to Categories” strip entirely */}
 
               {/* Results OR Hierarchy List */}
               <div className="px-1">
@@ -555,7 +552,7 @@ export default function CategorySheetPicker({
                       <ul className="divide-y">
                         {searchResults.map((c) => {
                           const active = selected?.id === c.id;
-                          // Search results are child/sub categories → no image/chevron
+                          // Search results are subcategories
                           return (
                             <li key={c.id}>
                               <button
@@ -569,6 +566,7 @@ export default function CategorySheetPicker({
                                 )}
                                 aria-current={active ? "true" : "false"}
                               >
+                                {/* In search results we DON'T show images; also no per-row back chevron here */}
                                 <span className="truncate">
                                   {prettyPath(c.path)}
                                 </span>
@@ -609,48 +607,61 @@ export default function CategorySheetPicker({
 
                           return (
                             <li key={c.id}>
-                              <button
-                                type="button"
-                                onClick={() => onRowPress(c)}
+                              <div
                                 className={clsx(
                                   "w-full px-4 py-3 flex items-center gap-3 text-left transition-colors",
                                   active
                                     ? "bg-black text-white"
                                     : "hover:bg-neutral-50"
                                 )}
-                                aria-current={active ? "true" : "false"}
                               >
-                                {/* Only show image for ROOT (primary) level */}
-                                {atRoot ? (
-                                  c.image_url ? (
-                                    <img
-                                      src={c.image_url}
-                                      alt=""
+                                {/* When NOT at root (subcategory screens), show a small back chevron inside each row.
+                                    This navigates up one level (previous crumb). */}
+                                {!atRoot && (
+                                  <button
+                                    type="button"
+                                    aria-label="Go up one level"
+                                    className={clsx(
+                                      "h-7 w-7 grid place-items-center rounded-md",
+                                      active
+                                        ? "bg-white/10"
+                                        : "bg-white/10 hover:bg-neutral-200"
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (crumbs.length > 1) {
+                                        void goToCrumb(crumbs.length - 2);
+                                      }
+                                    }}
+                                  >
+                                    <ChevronLeft
                                       className={clsx(
-                                        "h-7 w-7 rounded object-cover border",
-                                        active
-                                          ? "border-white/30"
-                                          : "border-neutral-200"
+                                        "h-4 w-4",
+                                        active ? "opacity-90" : "opacity-70"
                                       )}
-                                      loading="lazy"
                                     />
-                                  ) : (
-                                    <span className="h-7 w-7 rounded border border-neutral-200 bg-neutral-100" />
-                                  )
-                                ) : null}
+                                  </button>
+                                )}
 
-                                <span className="truncate">{label}</span>
+                                {/* No images at root or anywhere */}
+                                <button
+                                  type="button"
+                                  onClick={() => onRowPress(c)}
+                                  className="flex-1 text-left flex items-center gap-3 min-w-0"
+                                >
+                                  <span className="truncate">{label}</span>
 
-                                <span className="ml-auto flex items-center gap-2">
-                                  {active && (
-                                    <Check className="h-4 w-4 opacity-90 shrink-0" />
-                                  )}
-                                  {/* Only show chevron for ROOT (primary) level */}
-                                  {atRoot && (
-                                    <ChevronRight className="h-4 w-4 opacity-60 shrink-0" />
-                                  )}
-                                </span>
-                              </button>
+                                  <span className="ml-auto flex items-center gap-2">
+                                    {active && (
+                                      <Check className="h-4 w-4 opacity-90 shrink-0" />
+                                    )}
+                                    {/* Only show forward chevron when at root (indicates deeper levels) */}
+                                    {atRoot && (
+                                      <ChevronRight className="h-4 w-4 opacity-60 shrink-0" />
+                                    )}
+                                  </span>
+                                </button>
+                              </div>
                             </li>
                           );
                         })}
@@ -668,22 +679,8 @@ export default function CategorySheetPicker({
             {/* Footer */}
             <div className="border-t bg-white sticky bottom-0">
               <SheetFooter className="p-3 grid grid-cols-1 gap-2">
-                {/* <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => {
-                    if (!q.trim() && crumbs.length > 1) {
-                      void goToCrumb(crumbs.length - 2);
-                    } else {
-                      setOpen(false);
-                    }
-                  }}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
-                  Back
-                </Button> */}
                 <Button
-                  className="w-full"
+                  className="w-full h-12 rounded-full"
                   disabled={!selected}
                   onClick={() => setOpen(false)}
                 >

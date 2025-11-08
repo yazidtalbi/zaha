@@ -23,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={instrumentSans.variable}>
-      <body className="font-sans text-ink min-h-screen overflow-x-hidden">
+      <body className="font-sans text-ink min-h-screen overflow-x-hidden ">
         <ClientChrome>{children}</ClientChrome>
       </body>
     </html>

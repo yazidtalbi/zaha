@@ -24,13 +24,7 @@ export default function ClientChrome({
 
   return (
     <>
-      <main
-        className={
-          hideLayout
-            ? "max-w-screen-sm mx-auto"
-            : "max-w-screen-sm mx-auto pb-10"
-        }
-      >
+      <main className={hideLayout ? "  mx-auto" : " mx-auto"}>
         {children}
         <ToastHost />
       </main>

@@ -1,23 +1,88 @@
 // app/home/page.tsx
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import ProductCard from "@/components/ProductCard";
 import Header from "@/components/Header";
 import CategoriesStrip from "@/components/home/CategoriesStrip";
 import HeroCarousel from "@/components/HeroCarousel";
+import ProductCard from "@/components/ProductCard";
 import { Search, Sparkles, Flame, Tag, ChevronRight } from "lucide-react";
-import { Router } from "next/router";
 
-import { useRouter } from "next/navigation";
-
-// ——— Config
+/* =========================
+   Config
+========================= */
 const PAGE_SIZE = 24;
 const PRICE_CAP_MAD = 200;
 
+/* =========================
+   Types (aligned to ProductCard)
+========================= */
+type ProductForCard = {
+  id: string;
+  title: string;
+  price_mad: number;
+  compare_at_mad?: number | null;
+  promo_price_mad?: number | null;
+  promo_starts_at?: string | null;
+  promo_ends_at?: string | null;
+  photos?: string[] | null;
+  rating_avg?: number | null;
+  reviews_count?: number | null;
+  orders_count?: number | null;
+  free_shipping?: boolean | null;
+  shop_owner?: string | null;
+  keywords?: string | null;
+  video_url?: string | null;
+  video_poster_url?: string | null;
+};
+
+type CategoryCard = {
+  id: string;
+  name: string;
+  href: string;
+  image?: string | null;
+};
+
+type PersonalizedRail = {
+  title: string;
+  items: ProductForCard[];
+};
+
+/* =========================
+   In-memory page store
+========================= */
+type HomeStore = {
+  items: ProductForCard[];
+  page: number;
+  hasMore: boolean;
+  trending: ProductForCard[] | null;
+  underCap: ProductForCard[] | null;
+  cats: CategoryCard[] | null;
+  recently: ProductForCard[] | null;
+  forYou: PersonalizedRail | null;
+  because: PersonalizedRail | null;
+  scrollY: number;
+};
+
+const __homeStore: HomeStore = {
+  items: [],
+  page: 0,
+  hasMore: true,
+  trending: null,
+  underCap: null,
+  cats: null,
+  recently: null,
+  forYou: null,
+  because: null,
+  scrollY: 0,
+};
+
+/* =========================
+   Slides
+========================= */
 const slides = [
   {
     img: "/banners/holiday.jpg",
@@ -39,74 +104,180 @@ const slides = [
   },
 ];
 
-// quick category chips (tag search)
-const QUICK_TAGS = [
-  "handmade",
-  "jewelry",
-  "home decor",
-  "ceramics",
-  "bags",
-  "art",
-  "vintage",
-  "personalized",
-];
+/* =========================
+   Normalizers
+========================= */
+type AnyRow = Record<string, any>;
 
+function normalizeProduct(row: AnyRow): ProductForCard {
+  const photosArr: string[] | null =
+    row.photos ??
+    row.images ??
+    (typeof row.photo === "string" ? [row.photo] : (row.photo ?? null)) ??
+    null;
+
+  const videoFromArray: string | null =
+    Array.isArray(row.videos) && row.videos.length ? row.videos[0] : null;
+  const videoFromUrls: string | null =
+    Array.isArray(row.video_urls) && row.video_urls.length
+      ? row.video_urls[0]
+      : null;
+
+  const video_url: string | null =
+    row.video_url ?? videoFromArray ?? videoFromUrls ?? null;
+
+  const video_poster_url: string | null =
+    row.video_poster_url ?? row.video_poster ?? row.poster ?? null;
+
+  return {
+    ...row,
+    photos: photosArr,
+    video_url,
+    video_poster_url,
+  } as ProductForCard;
+}
+
+function normalizeList(rows?: AnyRow[] | null): ProductForCard[] {
+  return (rows ?? []).map(normalizeProduct);
+}
+
+/* =========================
+   Personalization helpers
+========================= */
+function getRecentlyViewed(): Array<{ id: string; at: number }> {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("recently_viewed");
+    const arr = JSON.parse(raw || "[]");
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x) => ({ id: String(x.id), at: Number(x.at) || 0 }))
+      .filter((x) => x.id)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+// --- Pin "Because you viewed" to a stable category
+const BECAUSE_KEY = "zaha_because_path_v1";
+const BECAUSE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+
+function getPinnedBecausePath(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(BECAUSE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const path = typeof parsed?.path === "string" ? parsed.path : null;
+    const ts = typeof parsed?.ts === "number" ? parsed.ts : 0;
+    if (!path) return null;
+    if (Date.now() - ts > BECAUSE_TTL_MS) {
+      localStorage.removeItem(BECAUSE_KEY);
+      return null;
+    }
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+function setPinnedBecausePath(path: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(BECAUSE_KEY, JSON.stringify({ path, ts: Date.now() }));
+  } catch {}
+}
+
+// Optional: call if you ever want to reset the pin
+function clearPinnedBecausePath() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(BECAUSE_KEY);
+  } catch {}
+}
+
+// Capitalize last segment of a category path for display
+function labelFromPath(path: string): string {
+  const segs = path.split("/").filter(Boolean);
+  const last = segs[segs.length - 1] || path;
+  return last
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/* =========================
+   Page
+========================= */
 export default function HomePage() {
-  const [items, setItems] = useState<any[]>([]);
-  const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
+  const router = useRouter();
+
+  // main grid
+  const [items, setItems] = useState<ProductForCard[]>(
+    __homeStore.items.length ? __homeStore.items : []
+  );
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [favIds, setFavIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState<number>(__homeStore.page);
+  const [hasMore, setHasMore] = useState<boolean>(__homeStore.hasMore);
 
-  // rails data
-  const [trending, setTrending] = useState<any[] | null>(null);
-  const [underCap, setUnderCap] = useState<any[] | null>(null);
+  // rails
+  const [trending, setTrending] = useState<ProductForCard[] | null>(
+    __homeStore.trending
+  );
+  const [underCap, setUnderCap] = useState<ProductForCard[] | null>(
+    __homeStore.underCap
+  );
+  const [cats, setCats] = useState<CategoryCard[] | null>(__homeStore.cats);
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  // personalization rails
+  const [recently, setRecently] = useState<ProductForCard[] | null>(
+    __homeStore.recently
+  );
+  const [forYou, setForYou] = useState<PersonalizedRail | null>(
+    __homeStore.forYou
+  );
+  const [because, setBecause] = useState<PersonalizedRail | null>(
+    __homeStore.because
+  );
 
-  // ——— Fetch favorites once
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("favorites")
-        .select("product_id");
-      if (!error)
-        setFavIds(new Set((data ?? []).map((r: any) => r.product_id)));
-    })();
+  /* ---------------- base query builder ---------------- */
+  const baseQuery = useCallback(() => {
+    return supabase
+      .from("products")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
   }, []);
 
-  // ——— Base query builder
-  const baseQuery = useCallback(() => {
-    let query = supabase.from("products").select("*").eq("active", true);
-
-    if (category) query = query.ilike("tags", `%${category}%`);
-    if (q) query = query.ilike("title", `%${q}%`);
-
-    return query.order("created_at", { ascending: false });
-  }, [category, q]);
-
-  // ——— Load first page
+  /* ---------------- first page ---------------- */
   const loadFirstPage = useCallback(async () => {
     setLoading(true);
     setHasMore(true);
     setPage(0);
 
-    const from = 0;
-    const to = PAGE_SIZE - 1;
-
-    const { data, error, count } = await baseQuery().range(from, to);
-
-    if (!error) {
-      setItems(data ?? []);
-      setHasMore((data?.length ?? 0) === PAGE_SIZE);
+    try {
+      const { data, error } = await baseQuery().range(0, PAGE_SIZE - 1);
+      if (error) {
+        console.error("home:firstPage error", error);
+        setItems([]);
+        setHasMore(false);
+      } else {
+        const rows = normalizeList(data);
+        setItems(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+      }
+    } catch (e) {
+      console.error("home:firstPage exception", e);
+      setItems([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [baseQuery]);
 
-  // ——— Load more pages (infinite scroll)
+  /* ---------------- load more ---------------- */
   const loadMore = useCallback(async () => {
     if (!hasMore) return;
 
@@ -114,192 +285,397 @@ export default function HomePage() {
     const from = nextPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data, error } = await baseQuery().range(from, to);
-    if (!error) {
-      const batch = data ?? [];
-      setItems((prev) => [...prev, ...batch]);
+    try {
+      const { data, error } = await baseQuery().range(from, to);
+      if (error) {
+        console.error("home:loadMore error", error);
+        return;
+      }
+      const batch = normalizeList(data);
+      setItems((prev) => prev.concat(batch));
       setPage(nextPage);
       if (batch.length < PAGE_SIZE) setHasMore(false);
+    } catch (e) {
+      console.error("home:loadMore exception", e);
     }
   }, [baseQuery, page, hasMore]);
 
-  // ——— Re-run when filters/search change
-  useEffect(() => {
-    loadFirstPage();
-  }, [category, q, loadFirstPage]);
+  /* ---------------- personalization (runs on EVERY mount) ---------------- */
+  const refreshPersonalization = useCallback(async () => {
+    try {
+      // 0) Recently viewed list (IDs in recency order)
+      const viewed = getRecentlyViewed();
+      if (viewed.length) {
+        const idsOrdered = viewed.map((v) => v.id);
+        const { data: prods } = await supabase
+          .from("products")
+          .select("*")
+          .in("id", idsOrdered)
+          .eq("active", true)
+          .eq("unavailable", false)
+          .limit(12);
 
-  // ——— IntersectionObserver for sentinel
+        const byId = new Map<string, AnyRow>();
+        (prods ?? []).forEach((p: AnyRow) => byId.set(String(p.id), p));
+        const ordered = idsOrdered
+          .map((id) => byId.get(id))
+          .filter(Boolean) as AnyRow[];
+
+        setRecently(normalizeList(ordered));
+      } else {
+        setRecently(null);
+      }
+
+      // If no history, skip deeper personalization
+      if (!viewed.length) {
+        setForYou(null);
+        setBecause(null);
+        return;
+      }
+
+      const mostRecent = viewed[0].id;
+      const ids = Array.from(new Set(viewed.map((v) => v.id)));
+
+      // 1) Primary categories for each viewed product
+      const { data: pcRows } = await supabase
+        .from("product_categories")
+        .select(
+          `
+          product_id,
+          is_primary,
+          categories:categories!inner(id, path, name_en, slug)
+        `
+        )
+        .in("product_id", ids)
+        .eq("is_primary", true);
+
+      const primaries =
+        (pcRows ?? []).map((r: any) => ({
+          product_id: r.product_id as string,
+          path: r.categories?.path as string,
+          name: r.categories?.name_en ?? r.categories?.slug ?? "Category",
+          id: r.categories?.id as string,
+        })) ?? [];
+
+      // 2) Because you viewed X → subtree of most recent primary category
+      let becauseRail: PersonalizedRail | null = null;
+      const recentPrimary = primaries.find((p) => p.product_id === mostRecent);
+      if (recentPrimary?.path) {
+        const basePath = recentPrimary.path;
+        const { data: catIdsData } = await supabase
+          .from("categories")
+          .select("id")
+          .like("path", `${basePath}%`);
+        const catIds = (catIdsData ?? []).map((c: any) => c.id);
+
+        if (catIds.length) {
+          const { data: pc2 } = await supabase
+            .from("product_categories")
+            .select("product_id")
+            .in("category_id", catIds)
+            .neq("product_id", mostRecent)
+            .limit(220);
+
+          const productIds = Array.from(
+            new Set((pc2 ?? []).map((x: any) => x.product_id))
+          ).slice(0, 24);
+
+          if (productIds.length) {
+            const { data: prods2 } = await supabase
+              .from("products")
+              .select("*")
+              .in("id", productIds)
+              .eq("active", true)
+              .eq("unavailable", false)
+              .limit(24);
+
+            const items = normalizeList(prods2);
+            if (items.length) {
+              becauseRail = {
+                title: `${labelFromPath(basePath)} you'll love`,
+                items,
+              };
+            }
+          }
+        }
+      }
+
+      // 3) For You → most frequent primary category path across history
+      let forYouRail: PersonalizedRail | null = null;
+      if (primaries.length) {
+        const countByPath = new Map<string, number>();
+        for (const p of primaries) {
+          if (!p.path) continue;
+          countByPath.set(p.path, (countByPath.get(p.path) ?? 0) + 1);
+        }
+        const topPath =
+          [...countByPath.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          null;
+
+        if (topPath) {
+          const { data: catIdsData3 } = await supabase
+            .from("categories")
+            .select("id")
+            .like("path", `${topPath}%`);
+          const catIds3 = (catIdsData3 ?? []).map((c: any) => c.id);
+
+          if (catIds3.length) {
+            const exclude = new Set(ids);
+            const { data: pc3 } = await supabase
+              .from("product_categories")
+              .select("product_id")
+              .in("category_id", catIds3)
+              .limit(260);
+
+            const productIds3 = Array.from(
+              new Set(
+                (pc3 ?? [])
+                  .map((x: any) => x.product_id)
+                  .filter((pid: string) => !exclude.has(pid))
+              )
+            ).slice(0, 24);
+
+            if (productIds3.length) {
+              const { data: prods3 } = await supabase
+                .from("products")
+                .select("*")
+                .in("id", productIds3)
+                .eq("active", true)
+                .eq("unavailable", false)
+                .limit(24);
+
+              const items = normalizeList(prods3);
+              if (items.length) {
+                forYouRail = { title: "For You", items };
+              }
+            }
+          }
+        }
+      }
+
+      setBecause(becauseRail);
+      setForYou(forYouRail);
+    } catch (e) {
+      console.error("home:personalization refresh error", e);
+    }
+  }, []);
+
+  /* ---------------- hydrate or fetch ---------------- */
   useEffect(() => {
-    if (!sentinelRef.current) return;
-    observerRef.current?.disconnect();
+    if (__homeStore.items.length) {
+      setItems(__homeStore.items);
+      setPage(__homeStore.page);
+      setHasMore(__homeStore.hasMore);
+      setTrending(__homeStore.trending);
+      setUnderCap(__homeStore.underCap);
+      setCats(__homeStore.cats);
+      setRecently(__homeStore.recently);
+      setForYou(__homeStore.forYou);
+      setBecause(__homeStore.because);
+
+      requestAnimationFrame(() => {
+        window.scrollTo(0, __homeStore.scrollY || 0);
+      });
+
+      // IMPORTANT: always refresh personalization on mount
+      refreshPersonalization();
+    } else {
+      loadFirstPage();
+
+      // parallel rails
+      (async () => {
+        try {
+          const [
+            { data: trend, error: tErr },
+            { data: cheap, error: cErr },
+            { data: catRows, error: catErr },
+          ] = await Promise.all([
+            supabase
+              .from("products")
+              .select("*")
+              .eq("active", true)
+              .order("created_at", { ascending: false })
+              .limit(12),
+            supabase
+              .from("products")
+              .select("*")
+              .eq("active", true)
+              .lte("price_mad", PRICE_CAP_MAD)
+              .order("created_at", { ascending: false })
+              .limit(12),
+            supabase
+              .from("categories")
+              .select("id, slug, name_en, image_url")
+              .eq("depth", 1)
+              .order("name_en", { ascending: true })
+              .limit(24),
+          ]);
+
+          if (tErr) console.error("home:trending error", tErr);
+          if (cErr) console.error("home:underCap error", cErr);
+          if (catErr) console.error("home:categories error", catErr);
+
+          setTrending(normalizeList(trend));
+          setUnderCap(normalizeList(cheap));
+
+          const mappedCats: CategoryCard[] =
+            (catRows ?? []).map((c: any) => ({
+              id: c.id,
+              name: c.name_en ?? c.slug,
+              href: `/c/${c.slug}`,
+              image: c.image_url ?? null,
+            })) ?? [];
+          setCats(mappedCats);
+        } catch (e) {
+          console.error("home:parallel exception", e);
+        }
+      })();
+
+      // first-time personalization
+      refreshPersonalization();
+    }
+  }, [loadFirstPage, refreshPersonalization]);
+
+  /* ---------------- persist store on unmount ---------------- */
+  useEffect(() => {
+    return () => {
+      __homeStore.items = items;
+      __homeStore.page = page;
+      __homeStore.hasMore = hasMore;
+      __homeStore.trending = trending;
+      __homeStore.underCap = underCap;
+      __homeStore.cats = cats;
+      __homeStore.recently = recently;
+      __homeStore.forYou = forYou;
+      __homeStore.because = because;
+      __homeStore.scrollY = window.scrollY;
+    };
+  }, [
+    items,
+    page,
+    hasMore,
+    trending,
+    underCap,
+    cats,
+    recently,
+    forYou,
+    because,
+  ]);
+
+  /* ---------------- intersection observer (infinite) ---------------- */
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+
+    if (observerRef.current) observerRef.current.disconnect();
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
         if (first.isIntersecting) {
-          // small timeout to avoid too-rapid successive loads
-          setTimeout(() => {
-            loadMore();
-          }, 80);
+          setTimeout(() => loadMore(), 60);
         }
       },
-      { rootMargin: "800px 0px 800px 0px" } // prefetch early
+      { rootMargin: "800px 0px 800px 0px" }
     );
 
-    observerRef.current.observe(sentinelRef.current);
+    observerRef.current.observe(node);
     return () => observerRef.current?.disconnect();
-  }, [loadMore, items.length, hasMore]);
+  }, [loadMore]);
 
-  // ——— Rails (Trending, Under Cap)
-  useEffect(() => {
-    (async () => {
-      // Trending = latest 12 regardless of search (feel free to tailor)
-      const { data: trend } = await supabase
-        .from("products")
-        .select("*")
-        .eq("active", true)
-        .order("created_at", { ascending: false })
-        .limit(12);
-      setTrending(trend ?? []);
-
-      // Budget picks rail
-      const { data: cheap } = await supabase
-        .from("products")
-        .select("*")
-        .eq("active", true)
-        .lte("price_mad", PRICE_CAP_MAD)
-        .order("created_at", { ascending: false })
-        .limit(12);
-      setUnderCap(cheap ?? []);
-    })();
-  }, []);
-
-  // ——— Small helpers
-  const onChipToggle = (tag: string) => {
-    setCategory((prev) => (prev === tag ? "" : tag));
-  };
-
-  const isFiltering = Boolean(category || q);
-
-  // ...
-  const router = useRouter();
-  // ...
-
+  /* ---------------- render ---------------- */
   return (
     <main className="pb-14 bg-neutral-50 min-h-screen">
-      <Header />
-
-      {/* Sticky search bar */}
-      <div className="sticky top-0 z-30 bg-neutral-50/80 backdrop-blur  ">
-        <div className="px-4 py-2">
-          <div
-            className="flex items-center gap-2 rounded-full border bg-white px-3 h-12 mb-2 active:scale-[0.98] transition cursor-pointer"
-            onClick={() => router.push("/search")}
-          >
-            <Search className="h-4 w-4 opacity-60" />
-            <span className="text-sm text- select-none opacity-50">
-              Search handmade goods…
-            </span>
-          </div>
-
-          {/* Quick category chips */}
-          {/* <div className="mt-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-            {QUICK_TAGS.map((t) => {
-              const active = category === t;
-              return (
-                <button
-                  key={t}
-                  onClick={() => onChipToggle(t)}
-                  className={`shrink-0 rounded-full border px-3 h-8 text-xs transition ${
-                    active
-                      ? "bg-black text-white border-black"
-                      : "bg-white text-black/80 hover:bg-neutral-50"
-                  }`}
-                >
-                  {t}
-                </button>
-              );
-            })}
-          </div> */}
-        </div>
+      <div className="pt-4">
+        <Header />
       </div>
 
       {/* Hero */}
-      <HeroCarousel slides={slides} />
+      <div className="pt-4 px-3">
+        <HeroCarousel slides={slides} />
+      </div>
 
-      {/* Categories strip */}
-      <CategoriesStrip />
+      {/* ===== Rail: Trending now =====  
+       <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-1 pl-3">
+        {(trending ?? Array.from({ length: 8 })).map((p, i) =>
+          p ? (
+            <div key={p.id} className="w-[200px] shrink-0">
+              <ProductCard p={p} variant="carousel" />
+            </div>
+          ) : (
+            <div
+              key={`trend-skel-${i}`}
+              className="w-[200px] h-[240px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
+            />
+          )
+        )}
+      </div> */}
 
-      {/* =====================
-          Rail: Trending now
-      ====================== */}
-      <section className="px-4 mt-3">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base font-semibold flex items-center gap-1">
-            <Flame className="h-4 w-4" />
-            Trending now
+      {/* ===== Recently viewed (only if exists) ===== */}
+      {recently && recently.length > 0 && (
+        <>
+          <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3">
+            Recently viewed
           </h2>
-          <Link
-            href="/explore/trending"
-            className="text-xs text-ink/70 hover:underline flex items-center gap-1"
-          >
-            See all <ChevronRight className="h-3 w-3" />
-          </Link>
-        </div>
+          <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 px-3">
+            {recently.map((p) => (
+              <div key={p.id} className="w-[160px] shrink-0">
+                <ProductCard p={p} variant="mini" />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-          {(trending ?? Array.from({ length: 8 })).map((p, i) =>
-            p ? (
+      {/* ===== X you'll love ===== */}
+      {because && because.items.length > 0 && (
+        <>
+          <h2 className=" text-lg font-semibold flex items-center gap-1 px-3 pt-8">
+            {because.title}
+          </h2>
+          <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 pl-3">
+            {because.items.map((p) => (
+              <div key={p.id} className="w-[200px] shrink-0">
+                <ProductCard p={p} variant="mini" />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ===== For You ===== */}
+      {/* {forYou && forYou.items.length > 0 && (
+        <>
+          <h2 className="mt-2 text-lg font-semibold flex items-center gap-1 px-3">
+          
+            {forYou.title}
+          </h2>
+          <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pb-1 pl-3">
+            {forYou.items.map((p) => (
               <div key={p.id} className="w-[200px] shrink-0">
                 <ProductCard p={p} variant="carousel" />
               </div>
-            ) : (
-              <div
-                key={`s-${i}`}
-                className="w-[200px] h-[240px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
-              />
-            )
-          )}
-        </div>
-      </section>
+            ))}
+          </div>
+        </>
+      )} */}
 
-      <h2 className="text-lg font-semibold flex items-center gap-1">
-        <Sparkles className="h-4 w-4" />
-        Personalize for you
-      </h2>
-
-      <h2 className="text-lg font-semibold flex items-center gap-1">
-        <Sparkles className="h-4 w-4" />
-        Featured (ads) - for limited time
-      </h2>
-
-      <h2 className="text-lg font-semibold flex items-center gap-1">
-        <Sparkles className="h-4 w-4" />
-        Crafted near you
-      </h2>
-
-      {/* =====================
-          Main Grid (Infinite)
-      ====================== */}
-      <section className="p-4 space-y-2">
+      {/* ===== Main Grid (infinite) ===== */}
+      <section className="space-y-2 px-3 pt-8">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold flex items-center gap-1">
-            <Sparkles className="h-4 w-4" />
             Crafted in Morocco
           </h2>
-          {isFiltering ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-black text-white">
-              Filtered
-            </span>
-          ) : null}
         </div>
 
-        {/* Grid or skeleton */}
         {loading && items.length === 0 ? (
           <div className="grid grid-cols-2 gap-3 gap-y-8">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
-                key={i}
+                key={`grid-skel-${i}`}
                 className="h-[220px] rounded-2xl bg-neutral-200/60 animate-pulse"
               />
             ))}
@@ -312,7 +688,6 @@ export default function HomePage() {
               ))}
             </div>
 
-            {/* Infinite scroll sentinel & states */}
             <div ref={sentinelRef} className="h-10 w-full" />
             {hasMore ? (
               <div className="text-center text-sm text-neutral-500">
@@ -327,16 +702,14 @@ export default function HomePage() {
         ) : (
           <div className="rounded-xl border bg-white p-5 text-center">
             <p className="text-sm text-neutral-600">
-              No items found. Try a different search or category.
+              No items found. Try again later.
             </p>
           </div>
         )}
       </section>
 
-      {/* =====================
-          Rail: Under 200 MAD
-      ====================== */}
-      <section className="px-4 mt-2 mb-6">
+      {/* ===== Rail: Under 200 MAD ===== */}
+      {/* <section className="mt-2 mb-6 px-3">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold flex items-center gap-1">
             <Tag className="h-4 w-4" />
@@ -349,6 +722,7 @@ export default function HomePage() {
             See all <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
+
         <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
           {(underCap ?? Array.from({ length: 8 })).map((p, i) =>
             p ? (
@@ -357,13 +731,13 @@ export default function HomePage() {
               </div>
             ) : (
               <div
-                key={`u-${i}`}
+                key={`under-skel-${i}`}
                 className="w-[200px] h-[240px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
               />
             )
           )}
         </div>
-      </section>
+      </section> */}
     </main>
   );
 }

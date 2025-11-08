@@ -10,7 +10,6 @@ import {
   ShoppingCart,
   Search,
   Package,
-  ClipboardList,
   PlusCircle,
   MoreHorizontal,
   Store,
@@ -22,13 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
 function clsx(...xs: (string | boolean | undefined | null)[]) {
@@ -47,17 +40,13 @@ export default function BottomNav() {
   const [uid, setUid] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
 
-  // Seller: shop link (slug/id)
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopSlug, setShopSlug] = useState<string | null>(null);
 
-  // Sheet state (to auto-close on nav)
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Close drawer whenever the route changes
   useEffect(() => {
     if (menuOpen) setMenuOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   useEffect(() => {
@@ -82,11 +71,11 @@ export default function BottomNav() {
     async (nextUid = uid) => {
       if (!mounted) return;
       if (nextUid) {
-        const { count, error } = await supabase
+        const { count } = await supabase
           .from("cart_items")
           .select("id", { count: "exact", head: true })
           .eq("user_id", nextUid);
-        if (!error) setCartCount(count ?? 0);
+        setCartCount(count ?? 0);
       } else {
         try {
           const raw = localStorage.getItem("cart");
@@ -99,7 +88,6 @@ export default function BottomNav() {
     [mounted, uid]
   );
 
-  // Initial auth read
   useEffect(() => {
     if (!mounted) return;
     (async () => {
@@ -110,7 +98,6 @@ export default function BottomNav() {
     })();
   }, [mounted, refreshCartCount]);
 
-  // Auth events
   useEffect(() => {
     if (!mounted) return;
     const { data: sub } = supabase.auth.onAuthStateChange(
@@ -123,7 +110,6 @@ export default function BottomNav() {
     return () => sub.subscription.unsubscribe();
   }, [mounted, refreshCartCount]);
 
-  // Realtime cart (authed)
   useEffect(() => {
     if (!mounted || !uid) return;
     const ch = supabase
@@ -142,7 +128,6 @@ export default function BottomNav() {
     return () => supabase.removeChannel(ch);
   }, [mounted, uid, refreshCartCount]);
 
-  // Same-tab local updates
   useEffect(() => {
     if (!mounted) return;
     const onCartChanged = () => refreshCartCount();
@@ -150,7 +135,6 @@ export default function BottomNav() {
     return () => window.removeEventListener("cart:changed", onCartChanged);
   }, [mounted, refreshCartCount]);
 
-  // Cross-tab guest updates
   useEffect(() => {
     if (!mounted) return;
     const onStorage = (e: StorageEvent) => {
@@ -160,7 +144,6 @@ export default function BottomNav() {
     return () => window.removeEventListener("storage", onStorage);
   }, [mounted, refreshCartCount]);
 
-  // add this small helper near the top of the file
   const norm = (s: string) =>
     s.endsWith("/") && s !== "/" ? s.replace(/\/+$/, "") : s;
 
@@ -171,8 +154,7 @@ export default function BottomNav() {
     match,
     badge,
     highlightOnActiveBg = false,
-    onClick,
-    exact = false, // <— NEW
+    exact = false,
   }: {
     href: string;
     label: string;
@@ -180,25 +162,21 @@ export default function BottomNav() {
     match: string | string[];
     badge?: number;
     highlightOnActiveBg?: boolean;
-    onClick?: () => void;
-    exact?: boolean; // <— NEW
+    exact?: boolean;
   }) => {
     const isActive = useMemo(() => {
       if (!mounted) return false;
-
       const current = norm(path);
-
       const matches = (m: string) => {
         const mm = norm(m);
-        if (exact) return current === mm; // exact match only
-        return current === mm || current.startsWith(mm + "/"); // section match
+        if (exact) return current === mm;
+        return current === mm || current.startsWith(mm + "/");
       };
-
       return Array.isArray(match) ? match.some(matches) : matches(match);
     }, [mounted, match, path, exact]);
 
     return (
-      <Link href={href} className="block" onClick={onClick}>
+      <Link href={href} className="block">
         <div
           className={clsx(
             "flex flex-col items-center justify-center gap-1 py-2 text-xs transition-all duration-200",
@@ -215,13 +193,7 @@ export default function BottomNav() {
                 : "bg-transparent"
             )}
           >
-            <Icon
-              size={20}
-              className={clsx(
-                "transition-transform duration-200",
-                isActive && "scale-110"
-              )}
-            />
+            <Icon size={20} className={clsx(isActive && "scale-110")} />
             {!!badge && (
               <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-[16px] h-4 rounded-sm px-1 bg-terracotta text-white">
                 {badge > 99 ? "99+" : badge}
@@ -247,6 +219,11 @@ export default function BottomNav() {
 
   if (!mounted) return null;
 
+  // --------------------------------------------------
+  // **HIDE BOTTOM NAV ON SELL PAGE**
+  // --------------------------------------------------
+  if (path.startsWith("/seller/sell")) return null;
+
   // ---------- SELLER NAV ----------
   if (isSeller) {
     const shopPath = shopSlug
@@ -256,28 +233,20 @@ export default function BottomNav() {
         : null;
 
     return (
-      <nav
-        className={clsx(
-          "fixed bottom-0 inset-x-0 z-50  ",
-          // softer, glassy bar with rounded top
-          "bg-white",
-          "shadow-none"
-        )}
-      >
+      <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
         <div className="max-w-screen-sm mx-auto rounded-t-2xl">
-          <ul className="grid grid-cols-5 items-end px-2   pb-[env(safe-area-inset-bottom)]">
-            <li className="col-span-1">
+          <ul className="grid grid-cols-5 items-end px-2 pb-[env(safe-area-inset-bottom)]">
+            <li>
               <Item
                 href="/seller"
                 label="Dashboard"
                 match="/seller"
                 icon={Home}
+                exact
                 highlightOnActiveBg
-                exact // <— make Dashboard only active on /seller
               />
             </li>
-
-            <li className="col-span-1">
+            <li>
               <Item
                 href="/seller/orders"
                 label="Orders"
@@ -286,7 +255,7 @@ export default function BottomNav() {
                 highlightOnActiveBg
               />
             </li>
-            <li className="col-span-1">
+            <li>
               <Item
                 href="/seller/products"
                 label="Products"
@@ -295,13 +264,7 @@ export default function BottomNav() {
                 highlightOnActiveBg
               />
             </li>
-
-            {/* Center (+) */}
-            {/* <li className="col-span-1 grid place-items-center">
-              <CenterAdd />
-            </li> */}
-
-            <li className="col-span-1">
+            <li>
               <Item
                 href="/seller/analytics"
                 label="Analytics"
@@ -310,55 +273,41 @@ export default function BottomNav() {
                 highlightOnActiveBg
               />
             </li>
-
-            {/* More = Sheet trigger */}
-            <li className="col-span-1">
+            <li>
               <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                 <SheetTrigger asChild>
-                  <button className="block w-full" aria-label="More">
-                    <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink transition">
-                      <div className="relative grid place-items-center w-10 h-9 rounded-lg">
+                  <button className="block w-full">
+                    <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink">
+                      <div className="grid place-items-center w-10 h-9">
                         <MoreHorizontal size={20} />
                       </div>
-                      <span className="leading-none">More</span>
+                      <span>More</span>
                     </div>
                   </button>
                 </SheetTrigger>
 
-                {/* Hide default X, add rounded container */}
                 <SheetContent
                   side="bottom"
-                  className={clsx(
-                    "max-w-screen-sm mx-auto",
-                    "rounded-t-2xl bg-white shadow-2xl   border-ink/10",
-                    "px-0 pt-2 pb-[env(safe-area-inset-bottom)]",
-                    "[&_[data-radix-sheet-close]]:hidden"
-                  )}
+                  className="max-w-screen-sm mx-auto rounded-t-2xl bg-white shadow-2xl border-ink/10 px-0 pt-2 pb-[env(safe-area-inset-bottom)]"
                 >
-                  {/* grabber */}
                   <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
-
-                  {/* optional top button */}
-                  <div className="px-4 pb-2 flex items-center justify-end">
+                  <div className="px-4 pb-2 flex justify-end">
                     <Link href="/home" onClick={() => setMenuOpen(false)}>
                       <Button className="h-9 px-3 rounded-full bg-terracotta text-white hover:bg-terracotta/90">
                         Switch to buyer
                       </Button>
                     </Link>
                   </div>
-
-                  {/* LISTS */}
                   <div className="px-1">
-                    {/* SHOP */}
-                    <ul className="grid">
+                    <ul>
                       <li>
                         <Link
                           href={shopPath ?? "/seller"}
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                         >
-                          <Store size={20} className="text-ink" />
-                          <span className="text-[15px] font-medium text-ink">
+                          <Store size={20} />
+                          <span className="text-[15px] font-medium">
                             View my shop
                           </span>
                         </Link>
@@ -367,10 +316,10 @@ export default function BottomNav() {
                         <Link
                           href="/seller/reviews"
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                         >
-                          <MessageSquareText size={20} className="text-ink" />
-                          <span className="text-[15px] font-medium text-ink">
+                          <MessageSquareText size={20} />
+                          <span className="text-[15px] font-medium">
                             Reviews
                           </span>
                         </Link>
@@ -379,29 +328,25 @@ export default function BottomNav() {
                         <Link
                           href="/seller/analytics"
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                         >
-                          <BarChart3 size={20} className="text-ink" />
-                          <span className="text-[15px] font-medium text-ink">
+                          <BarChart3 size={20} />
+                          <span className="text-[15px] font-medium">
                             Analytics
                           </span>
                         </Link>
                       </li>
                     </ul>
-
-                    {/* separator */}
                     <div className="my-2 h-px bg-ink/10" />
-
-                    {/* SETTINGS */}
-                    <ul className="grid">
+                    <ul>
                       <li>
                         <Link
                           href="/seller/settings"
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand transition"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                         >
-                          <Settings size={20} className="text-ink" />
-                          <span className="text-[15px] font-medium text-ink">
+                          <Settings size={20} />
+                          <span className="text-[15px] font-medium">
                             Shop settings
                           </span>
                         </Link>
@@ -419,15 +364,9 @@ export default function BottomNav() {
 
   // ---------- BUYER NAV ----------
   return (
-    <nav
-      className={clsx(
-        "fixed bottom-0 inset-x-0 z-50  ",
-        "bg-white",
-        "shadow-none"
-      )}
-    >
+    <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
-        <ul className="grid grid-cols-5 px-2  pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-5 px-2 pb-[env(safe-area-inset-bottom)]">
           <li>
             <Item href="/home" label="Home" match="/home" icon={Home} />
           </li>

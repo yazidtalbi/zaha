@@ -3,6 +3,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+
+import { v4 as uuidv4 } from "uuid";
 import {
   Sheet,
   SheetContent,
@@ -81,7 +83,7 @@ export default function LeaveReviewButton({
 
     for (const f of files) {
       const ext = f.name.split(".").pop()?.toLowerCase() || "jpg";
-      const id = crypto.randomUUID();
+      const id = uuidv4();
       const path = `${authorId}/${productId}/${id}.${ext}`;
       const { error } = await supabase.storage.from("reviews").upload(path, f, {
         cacheControl: "3600",

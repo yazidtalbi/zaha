@@ -17,18 +17,26 @@ function clsx(...xs: (string | false | null | undefined)[]) {
   return xs.filter(Boolean).join(" ");
 }
 
+/* -------- simple cross-mount cache (persists while app lives) -------- */
+let TOP_LVL_CAT_CACHE: CategoryCard[] | null = null;
+
 export default function CategoriesStrip({
   initial,
   title = "Shop by category",
   limit = 24,
   rows = 3,
   lang = "en",
+  /** 'default' keeps card layout; 'minimal' shows pill tags */
+  variant = "default",
+  moreHref = "/categories",
 }: {
   initial?: CategoryCard[];
   title?: string;
   limit?: number;
   rows?: number;
   lang?: "en" | "fr" | "ar";
+  variant?: "default" | "minimal";
+  moreHref?: string;
 }) {
   const [emblaRef] = useEmblaCarousel({
     dragFree: true,
@@ -39,10 +47,44 @@ export default function CategoriesStrip({
   const [loading, setLoading] = useState(!(initial && initial.length > 0));
   const [debug, setDebug] = useState<string | null>(null);
 
+  // Try to hydrate from sessionStorage once on first mount (in case of hard reload)
   useEffect(() => {
-    // Only skip when initial has content; fetch if it's [] or undefined
-    if (initial && initial.length > 0) return;
+    if (!TOP_LVL_CAT_CACHE) {
+      const raw =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("zaha_toplvl_cats_v1")
+          : null;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as CategoryCard[];
+          TOP_LVL_CAT_CACHE = parsed;
+          if (!initial || initial.length === 0) {
+            setItems(parsed);
+            setLoading(false);
+          }
+        } catch {}
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  useEffect(() => {
+    // If server passed initial, use it and prime cache
+    if (initial && initial.length > 0) {
+      setItems(initial);
+      TOP_LVL_CAT_CACHE = initial;
+      setLoading(false);
+      return;
+    }
+
+    // Serve instantly from cache if available
+    if (TOP_LVL_CAT_CACHE) {
+      setItems(TOP_LVL_CAT_CACHE);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch once
     (async () => {
       setLoading(true);
       setDebug(null);
@@ -52,8 +94,8 @@ export default function CategoriesStrip({
         .select(
           "id, path, slug, name_en, name_fr, name_ar, parent_id, depth, sort, is_active, image_url"
         )
-        .is("parent_id", null) // ⬅️ TOP-LEVEL ONLY
-        .eq("is_active", true) // ⬅️ Only active
+        .is("parent_id", null)
+        .eq("is_active", true)
         .order("sort", { ascending: false })
         .order("name_en", { ascending: true })
         .limit(limit);
@@ -63,7 +105,12 @@ export default function CategoriesStrip({
         setDebug(error.message);
         setItems([]);
       } else {
-        setItems(mapCats(data ?? [], lang));
+        const mapped = mapCats(data ?? [], lang);
+        TOP_LVL_CAT_CACHE = mapped;
+        setItems(mapped);
+        try {
+          sessionStorage.setItem("zaha_toplvl_cats_v1", JSON.stringify(mapped));
+        } catch {}
       }
       setLoading(false);
     })();
@@ -72,8 +119,46 @@ export default function CategoriesStrip({
   const groups = useMemo(() => chunk(items, rows), [items, rows]);
   const empty = !loading && items.length === 0;
 
+  /* ---------- MINIMAL VARIANT (pill tags) ---------- */
+  if (variant === "minimal") {
+    const pills = useMemo(() => items.slice(0, 10), [items]); // stable cap 10
+
+    return (
+      <section className="py-3">
+        <nav className="  ">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            {pills.map((c) => (
+              <Link
+                key={c.id}
+                href={c.href}
+                prefetch
+                className="inline-flex items-center whitespace-nowrap rounded-full
+                           border border-black/10 bg-neutral-50 px-3 h-8 text-sm
+                           text-ink/80 hover:bg-neutral-100 active:scale-[0.98] transition font-medium"
+              >
+                {c.name}
+              </Link>
+            ))}
+
+            {/* + More chip */}
+            <Link
+              href={moreHref}
+              prefetch
+              className="inline-flex items-center whitespace-nowrap rounded-full
+                         border border-black/10 bg-sand px-3 h-8 text-sm
+                         text-ink hover:bg-sand/80 active:scale-[0.98] transition"
+            >
+              + More
+            </Link>
+          </div>
+        </nav>
+      </section>
+    );
+  }
+
+  /* ---------- DEFAULT VARIANT (your original cards) ---------- */
   return (
-    <section className="px-4 py-5">
+    <section className="py-5">
       <h2 className="text-lg font-semibold mb-3">{title}</h2>
 
       {empty && (

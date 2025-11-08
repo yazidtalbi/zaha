@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { ChevronLeft, Search } from "lucide-react";
+
+import { useRouter } from "next/navigation";
 
 type Category = {
   id: string;
@@ -37,6 +40,8 @@ function TabsSkeleton() {
 }
 
 export default function CLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
   const pathname = usePathname(); // e.g. /c/home-living/decor
   const pathAfterC = useMemo(() => pathname.replace(/^\/c\/?/, ""), [pathname]);
 
@@ -105,9 +110,33 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
   }, [topPath]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pt-4">
+    <div className="max-w-6xl mx-auto  pt-4">
+      <div className="flex items-center gap-2 rounded-full border bg-white h-11 px-3">
+        {/* Back icon */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // prevent triggering the main button
+            if (window.history.length > 1) router.back();
+            else router.push("/");
+          }}
+          className="shrink-0 p-1 -ml-1 rounded-full hover:bg-black/5 active:scale-95 transition"
+        >
+          <ChevronLeft className="h-5 w-5 opacity-70" />
+        </button>
+
+        {/* Main search trigger (rest of pill) */}
+        <button
+          onClick={() => router.push("/search")}
+          className="flex-1 flex items-center gap-2 h-full -ml-1 active:scale-[0.98] transition text-left"
+        >
+          <span className="text-sm text-neutral-400">
+            Search handmade goods…
+          </span>
+        </button>
+      </div>
+
       {/* Title for the top category, stable because it's derived from URL */}
-      <h1 className="text-2xl font-semibold mb-2">
+      <h1 className="text-2xl font-semibold mb-2 pt-4">
         {prettify(topPath || "Category")}
       </h1>
 
@@ -150,6 +179,7 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Page content (product grid, filters, etc.) */}
+
       <div className="pb-6">{children}</div>
     </div>
   );

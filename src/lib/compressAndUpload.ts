@@ -1,6 +1,8 @@
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabaseClient";
 
+import { v4 as uuidv4 } from "uuid";
+
 export const IMG_LIMITS = {
   MAX_MB: 1.5, // target size per image (tweak)
   MAX_DIM: 2000, // max width/height (longest side)
@@ -35,7 +37,7 @@ export async function uploadCompressedToSupabase(
   bucket = "products"
 ) {
   const webpBlob = await compressToWebp(file);
-  const key = `u_${userId}/${crypto.randomUUID()}.webp`;
+  const key = `u_${userId}/${uuidv4()}.webp`;
 
   const { error } = await supabase.storage.from(bucket).upload(key, webpBlob, {
     contentType: "image/webp",

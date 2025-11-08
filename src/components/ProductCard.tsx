@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import useEmblaCarousel from "embla-carousel-react";
 import { Heart } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useProductSeed, type SlimProduct } from "@/lib/productSeed";
 
 /* -------------------------------------------
-   Types
+   Types (matches your schema)
 ------------------------------------------- */
 type Product = {
   id: string;
@@ -25,21 +27,16 @@ type Product = {
   orders_count?: number | null;
   free_shipping?: boolean | null;
   shop_owner?: string | null;
-
-  /** NEW: for fromshop tag pills (comma-separated: "wood, handmade, vintage") */
   keywords?: string | null;
-
-  // NEW
   video_url?: string | null;
   video_poster_url?: string | null;
 };
 
 type Props = {
   p: Product;
-  variant?: "default" | "carousel";
+  variant?: "default" | "carousel" | "mini" | "love";
   className?: string;
   onUnfavorite?: (id: string) => void;
-  /** NEW: shop feed mode */
   fromshop?: boolean;
 };
 
@@ -61,25 +58,20 @@ function isPromoActive(p: Product, now = new Date()) {
   );
 }
 
-function getDisplayPrice(
-  p: Product,
-  now = new Date()
-): { current: number; compareAt: number | null; promoOn: boolean } {
-  const promoOn = isPromoActive(p, now);
-  if (promoOn) {
+function getDisplayPrice(p: Product) {
+  const promoOn = isPromoActive(p);
+  if (promoOn)
     return {
       current: p.promo_price_mad as number,
       compareAt: p.price_mad,
       promoOn: true,
     };
-  }
-  if (p.compare_at_mad && p.compare_at_mad > p.price_mad) {
+  if (p.compare_at_mad && p.compare_at_mad > p.price_mad)
     return {
       current: p.price_mad,
       compareAt: p.compare_at_mad,
       promoOn: false,
     };
-  }
   return { current: p.price_mad, compareAt: null, promoOn: false };
 }
 
@@ -90,32 +82,8 @@ function fmtOrders(n?: number | null) {
   return `${n.toLocaleString("en-US")}+`;
 }
 
-function keywordArray(s?: string | null) {
-  return (s || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .slice(0, 10);
-}
-
-function TagList({ items }: { items: string[] }) {
-  if (!items.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {items.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex items-center rounded-full bg-neutral-100 text-neutral-700 px-3 py-1 text-xs"
-        >
-          {tag}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 /* -------------------------------------------
-   ProductCard
+   Card
 ------------------------------------------- */
 export default function ProductCard({
   p,
@@ -124,6 +92,9 @@ export default function ProductCard({
   onUnfavorite,
   fromshop = false,
 }: Props) {
+  const router = useRouter();
+  const setSeed = useProductSeed((s) => s.setSeed);
+
   const imgs = useMemo(
     () => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []).slice(0, 5),
     [p.photos]
@@ -133,138 +104,297 @@ export default function ProductCard({
   const imagesForCard = useMemo(() => {
     const base = imgs.slice(0, 5);
     if (!hasVideo) return base;
-
     const poster = p.video_poster_url || base[0] || "";
-    if (base.length >= 1) {
-      const arr = [...base];
-      arr.splice(1, 0, poster); // video preview always second
-      return arr;
-    }
-    return [poster]; // no images: poster first (index 0)
+    if (base.length >= 1) return [base[0], poster, ...base.slice(1)];
+    return [poster];
   }, [imgs, hasVideo, p.video_poster_url]);
 
   const videoIndex = hasVideo ? (imgs.length >= 1 ? 1 : 0) : -1;
-
   const { current, compareAt, promoOn } = getDisplayPrice(p);
-
-  // Choose visual: fromshop always uses single image (no carousel)
   const useCarousel = !fromshop && variant === "carousel";
 
-  const firstImage = imgs[0];
+  // Slim seed snapshot for instant hydrate + cache
+  const slim: SlimProduct = {
+    id: p.id,
+    title: p.title,
+    price_mad: p.price_mad,
+    compare_at_mad: p.compare_at_mad ?? null,
+    promo_price_mad: p.promo_price_mad ?? null,
+    promo_starts_at: p.promo_starts_at ?? null,
+    promo_ends_at: p.promo_ends_at ?? null,
+    photos: imgs,
+    rating_avg: p.rating_avg ?? null,
+    reviews_count: p.reviews_count ?? null,
+    orders_count: p.orders_count ?? null,
+    free_shipping: p.free_shipping ?? null,
+    shop_owner: p.shop_owner ?? null,
+    keywords: p.keywords ?? null,
+    video_url: p.video_url ?? null,
+    video_poster_url: p.video_poster_url ?? null,
+  };
+
+  function writeCache() {
+    try {
+      sessionStorage.setItem(
+        `product_cache_${p.id}`,
+        JSON.stringify({ ...slim, __ts: Date.now() })
+      );
+    } catch {}
+  }
 
   return (
-    <Link
-      href={`/product/${p.id}`}
-      className={`block overflow-hidden ${className}`}
-    >
-      {/* IMAGE */}
-      {useCarousel ? (
-        <CardCarousel
-          images={imagesForCard}
-          title={p.title}
-          productId={p.id}
-          shopOwner={p.shop_owner}
-          promoOn={promoOn}
-          onUnfavorite={onUnfavorite}
-          // NEW
-          videoSrc={p.video_url ?? undefined}
-          videoIndex={videoIndex}
-        />
-      ) : (
+    // LOVE VARIANT ("You'll love" section)
+    // LOVE VARIANT — horizontal, clean, no overlay/infos inside the image
+    variant === "love" ? (
+      <Link
+        href={`/product/${p.id}`}
+        prefetch
+        onMouseEnter={() => {
+          setSeed(p.id, slim);
+          writeCache();
+          router.prefetch(`/product/${p.id}`);
+          if (imgs[0]) new Image().src = imgs[0];
+        }}
+        onClick={() => {
+          setSeed(p.id, slim);
+          writeCache();
+        }}
+        className={`block ${className}`}
+      >
+        <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99]">
+          <div className="flex items-stretch gap-3">
+            {/* Image (no overlay, no badges) */}
+            <div className="relative shrink-0 w-28 h-28 rounded-xl overflow-hidden bg-neutral-100 sm:w-32 sm:h-32">
+              {imgs[0] ? (
+                <img
+                  src={imgs[0]}
+                  alt={p.title}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
+                  No image
+                </div>
+              )}
+            </div>
+
+            {/* Right content */}
+            <div className="min-w-0 flex-1 py-1 pr-2">
+              {/* Title */}
+              <div className="line-clamp-2 text-[13px] sm:text-[14px] font-semibold leading-snug text-neutral-900">
+                {p.title}
+              </div>
+
+              {/* Rating (optional) */}
+              {p.rating_avg && (
+                <div className="mt-1 text-[11px] text-neutral-600">
+                  <span className="font-semibold text-neutral-900">
+                    {p.rating_avg.toFixed(1)}
+                  </span>
+                  <span className="ml-1 text-amber-600">★</span>
+                  {p.reviews_count ? (
+                    <span className="ml-1">
+                      ({p.reviews_count.toLocaleString("en-US")})
+                    </span>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Price row */}
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[13px] sm:text-[14px] font-semibold text-emerald-700">
+                  {formatMAD(current)}
+                </span>
+                {compareAt && (
+                  <span className="text-[12px] line-through text-neutral-400">
+                    {compareAt.toLocaleString("en-US")}
+                  </span>
+                )}
+                {promoOn && (
+                  <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px] text-[10px] font-medium">
+                    Promo
+                  </span>
+                )}
+              </div>
+
+              {/* Meta chips (optional) */}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {p.free_shipping && (
+                  <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                    Free shipping
+                  </span>
+                )}
+                {p.orders_count ? (
+                  <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                    {fmtOrders(p.orders_count)} orders
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Link>
+    ) : variant === "mini" ? (
+      // MINI VARIANT (Used for "Because you viewed" rail)
+      <Link
+        href={`/product/${p.id}`}
+        prefetch
+        onMouseEnter={() => {
+          setSeed(p.id, slim);
+          writeCache();
+          router.prefetch(`/product/${p.id}`);
+          if (imgs[0]) new Image().src = imgs[0];
+        }}
+        onClick={() => {
+          setSeed(p.id, slim);
+          writeCache();
+        }}
+        className={`block overflow-hidden ${className}`}
+      >
         <div className="relative">
-          <div
-            className={`relative h-36 bg-neutral-100 overflow-hidden  ${
-              fromshop ? "rounded-xl" : "rounded-lg"
-            }`}
-          >
-            {firstImage ? (
+          <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100">
+            {imgs[0] ? (
               <img
-                src={firstImage}
+                src={imgs[0]}
                 alt={p.title}
-                className="h-full   w-full object-cover object-center"
+                className="h-full w-full object-cover"
                 loading="lazy"
               />
             ) : (
-              <div className="h-full w-full grid place-items-center text-neutral-500 text-sm">
+              <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
                 No image
               </div>
             )}
-
             {promoOn && (
-              <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
+              <span className="absolute top-1 left-1 z-10 rounded-full px-2 py-[2px] text-[10px] font-medium bg-emerald-500 text-white">
                 Promo
               </span>
             )}
           </div>
+        </div>
 
-          <FavButton
+        <div className="pt-2">
+          <div className="line-clamp-2 text-sm font-normal leading-snug text-neutral-900 truncate">
+            {p.title}
+          </div>
+        </div>
+      </Link>
+    ) : (
+      // DEFAULT OR CAROUSEL
+      <Link
+        href={`/product/${p.id}`}
+        prefetch
+        onMouseEnter={() => {
+          setSeed(p.id, slim);
+          writeCache();
+          router.prefetch(`/product/${p.id}`);
+          if (imgs[0]) new Image().src = imgs[0];
+        }}
+        onClick={() => {
+          setSeed(p.id, slim);
+          writeCache();
+        }}
+        className={`block overflow-hidden ${className}`}
+      >
+        {useCarousel ? (
+          <CardCarousel
+            images={imagesForCard}
+            title={p.title}
             productId={p.id}
-            shopOwner={p.shop_owner ?? undefined}
+            shopOwner={p.shop_owner}
+            promoOn={promoOn}
             onUnfavorite={onUnfavorite}
+            videoSrc={p.video_url ?? undefined}
+            videoIndex={videoIndex}
           />
-        </div>
-      )}
-
-      {/* BODY */}
-      <div className="pt-3 -space-y-1">
-        {/* Title */}
-        <div className="line-clamp-2 text-md leading-snug text-neutral-900 font-semibold">
-          {p.title}
-        </div>
-
-        {/* Price row */}
-        <div className="mt-1 flex items-baseline gap-2">
-          <span className="text-md font-semibold text-emerald-700">
-            {formatMAD(current)}
-          </span>
-          {compareAt && (
-            <span className="text-[14px] line-through text-neutral-400">
-              {(compareAt as number).toLocaleString("en-US")}
-            </span>
-          )}
-        </div>
-
-        {/* Keywords (fromshop only) */}
-        {/* {fromshop && <TagList items={keywordArray(p.keywords)} />} */}
-
-        {/* Rating (hidden in fromshop) */}
-        {!fromshop && (p.rating_avg ?? 0) > 0 && (
-          <div className="mt-1 text-md text-neutral-900 flex items-center gap-1.5">
-            <span className="font-semibold">
-              {(p.rating_avg as number).toFixed(1)}
-            </span>
-            <span className="text-amber-600">★</span>
-            {typeof p.reviews_count === "number" && (
-              <span className="opacity-75">
-                ({p.reviews_count.toLocaleString("en-US")})
-              </span>
-            )}
+        ) : (
+          <div className="relative">
+            <div
+              className={`relative h-36 bg-neutral-100 overflow-hidden ${
+                fromshop ? "rounded-xl" : "rounded-lg"
+              }`}
+            >
+              {imgs[0] ? (
+                <img
+                  src={imgs[0]}
+                  alt={p.title}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-full w-full grid place-items-center text-neutral-500 text-sm">
+                  No image
+                </div>
+              )}
+              {promoOn && (
+                <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
+                  Promo
+                </span>
+              )}
+            </div>
+            <FavButton
+              productId={p.id}
+              shopOwner={p.shop_owner ?? undefined}
+              onUnfavorite={onUnfavorite}
+            />
           </div>
         )}
 
-        {/* Orders (hidden in fromshop) */}
-        {!fromshop && p.orders_count ? (
-          <div className="mt-1 text-[16px] font-semibold text-neutral-900">
-            {fmtOrders(p.orders_count)}{" "}
-            <span className="font-normal">Orders</span>
+        {/* BODY */}
+        <div className="pt-3 -space-y-1">
+          <div className="line-clamp-2 text-md font-semibold text-neutral-900 leading-snug">
+            {p.title}
           </div>
-        ) : null}
 
-        {/* Free shipping pill (optional) */}
-        {p.free_shipping ? (
-          <div className="mt-2">
-            <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 text-xs px-3 py-1 font-medium">
-              Free shipping
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-md font-semibold text-emerald-700">
+              {formatMAD(current)}
             </span>
+            {compareAt && (
+              <span className="text-[14px] line-through text-neutral-400">
+                {compareAt.toLocaleString("en-US")}
+              </span>
+            )}
           </div>
-        ) : null}
-      </div>
-    </Link>
+
+          {/* Rating + reviews */}
+          {!fromshop && p.rating_avg != null && p.rating_avg > 0 && (
+            <div className="mt-1 flex items-center gap-1.5 text-md text-neutral-900">
+              <span className="font-semibold">{p.rating_avg.toFixed(1)}</span>
+              <span className="text-amber-600">★</span>
+
+              {p.reviews_count != null && p.reviews_count > 0 && (
+                <span className="opacity-75">
+                  ({p.reviews_count.toLocaleString("en-US")})
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Orders count */}
+          {!fromshop && p.orders_count != null && p.orders_count > 0 && (
+            <div className="mt-1 text-[16px] font-semibold text-neutral-900">
+              {fmtOrders(p.orders_count)}{" "}
+              <span className="font-normal">Orders</span>
+            </div>
+          )}
+
+          {p.free_shipping && (
+            <div className="mt-2">
+              <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 text-xs px-3 py-1 font-medium">
+                Free shipping
+              </span>
+            </div>
+          )}
+        </div>
+      </Link>
+    )
   );
 }
 
 /* -------------------------------------------
-   CardCarousel (unchanged for default mode)
+   Carousel with lazy video + spinner + tight dots
 ------------------------------------------- */
 function CardCarousel({
   images,
@@ -273,32 +403,22 @@ function CardCarousel({
   shopOwner,
   promoOn,
   onUnfavorite,
-
-  // NEW
   videoSrc,
   videoIndex = -1,
 }: {
   images: string[];
   title: string;
   productId: string;
-  shopOwner?: string | null;
-  promoOn: boolean;
+  shopOwner?: string;
+  promoOn?: boolean;
   onUnfavorite?: (id: string) => void;
-
-  videoSrc?: string; // video URL (optional)
-  videoIndex?: number; // index where the video lives (e.g. 1)
+  videoSrc?: string;
+  videoIndex?: number;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [index, setIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
   const [videoLoading, setVideoLoading] = useState(false);
-
-  // when we land on the video slide, start loading UI
-  useEffect(() => {
-    if (!videoSrc || videoIndex < 0) return;
-    setVideoLoading(index === videoIndex); // start spinner on arrival
-  }, [index, videoSrc, videoIndex]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -308,16 +428,13 @@ function CardCarousel({
     return () => emblaApi.off("select", onSel);
   }, [emblaApi]);
 
-  // Lazy-load video only when we reach its slide
-  const shouldLoadVideo = videoSrc && videoIndex >= 0 && index === videoIndex;
+  const shouldLoadVideo = !!videoSrc && videoIndex >= 0 && index === videoIndex;
 
-  // Autoplay/pause control on slide change
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (shouldLoadVideo) {
-      v.play().catch(() => {});
-    } else {
+    if (shouldLoadVideo) v.play().catch(() => {});
+    else {
       v.pause();
       v.currentTime = 0;
     }
@@ -327,19 +444,17 @@ function CardCarousel({
     <div className="relative">
       <div className="overflow-hidden rounded-lg" ref={emblaRef}>
         <div className="flex">
-          {(images.length ? images : [undefined]).map((src, i) => {
-            const isVideoSlide = !!videoSrc && i === videoIndex;
-
+          {images.map((src, i) => {
+            const isVideo = videoSrc && i === videoIndex;
             return (
               <div className="min-w-0 flex-[0_0_100%]" key={i}>
                 <div className="relative h-60 bg-neutral-100">
-                  {isVideoSlide ? (
+                  {isVideo ? (
                     <div className="relative w-full h-full">
                       <video
                         ref={videoRef}
                         className="w-full h-full object-cover"
                         poster={src}
-                        // real lazy-load: only set src when active
                         {...(shouldLoadVideo ? { src: videoSrc } : {})}
                         muted
                         playsInline
@@ -347,7 +462,6 @@ function CardCarousel({
                         loop
                         preload="none"
                         controls={false}
-                        // spinner control via media events
                         onLoadStart={() => setVideoLoading(true)}
                         onLoadedData={() => setVideoLoading(false)}
                         onCanPlay={() => setVideoLoading(false)}
@@ -355,24 +469,19 @@ function CardCarousel({
                         onWaiting={() => setVideoLoading(true)}
                         onError={() => setVideoLoading(false)}
                       />
-                      {/* Spinner overlay while loading/buffering */}
                       {videoLoading && (
                         <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/10">
                           <div className="h-6 w-6 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
                         </div>
                       )}
                     </div>
-                  ) : src ? (
+                  ) : (
                     <img
                       src={src}
                       alt={title}
                       className="w-full h-full object-cover"
                       loading={i === 0 ? "eager" : "lazy"}
                     />
-                  ) : (
-                    <div className="w-full h-full grid place-items-center text-neutral-500 text-sm">
-                      No image
-                    </div>
                   )}
                 </div>
               </div>
@@ -389,44 +498,21 @@ function CardCarousel({
 
       <FavButton
         productId={productId}
-        shopOwner={shopOwner ?? undefined}
+        shopOwner={shopOwner}
         onUnfavorite={onUnfavorite}
       />
 
       {images.length > 1 && (
-        <div className="pointer-events-none absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-[0px] rounded-full bg-black/40 px-1 py-[2px] backdrop-blur-sm">
-          {images.map((_, i) => {
-            const isActive = i === index;
-            const isVideoDot = videoSrc && i === videoIndex;
-            return (
-              <span key={i} className="h-3 w-3 grid place-items-center">
-                {isVideoDot && !isActive ? (
-                  // Triangle play icon when video dot is INACTIVE
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-2.5 w-2.5"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M8 5v14l11-7-11-7z"
-                      fill="white"
-                      fillOpacity="0.8"
-                    />
-                  </svg>
-                ) : (
-                  // Normal dot (active video OR any image slide)
-                  <span
-                    className={`
-    block rounded-full
-    h-1
-    transition-all duration-300 ease-out
-    ${isActive ? "bg-white w-2" : "bg-white/50 w-1"}
-  `}
-                  />
-                )}
-              </span>
-            );
-          })}
+        <div className="pointer-events-none absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-[2px] rounded-full bg-black/40 px-1 py-[1.5px] backdrop-blur-sm">
+          {images.map((_, i) => (
+            <span key={i} className="h-3 w-3 grid place-items-center">
+              <span
+                className={`block rounded-full h-[3px] transition-all duration-300 ease-out ${
+                  i === index ? "bg-white w-2.5" : "bg-white/50 w-1.5"
+                }`}
+              />
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -434,7 +520,7 @@ function CardCarousel({
 }
 
 /* -------------------------------------------
-   FavButton
+   Favorite button
 ------------------------------------------- */
 function FavButton({
   productId,
@@ -453,35 +539,30 @@ function FavButton({
     if (busy) return;
     setBusy(true);
     try {
-      if (!uid) {
-        toast("Please sign in to save favorites.");
-        setBusy(false);
-        return;
-      }
-      if (shopOwner && shopOwner === uid) {
-        toast.error("You can’t favorite your own product.");
-        setBusy(false);
-        return;
-      }
+      if (!uid) return toast("Please sign in.");
+      if (shopOwner && shopOwner === uid)
+        return toast.error("You can’t favorite your own product.");
 
       if (on) {
-        await supabase
+        const { error } = await supabase
           .from("favorites")
           .delete()
           .eq("user_id", uid)
           .eq("product_id", productId);
-        toast("Removed from favorites");
+        if (error) throw error;
         toggleFavorite(productId);
         onUnfavorite?.(productId);
+        toast("Removed");
       } else {
-        await supabase
+        const { error } = await supabase
           .from("favorites")
           .insert({ user_id: uid, product_id: productId });
-        toast.success("Added to favorites ❤️");
+        if (error) throw error;
         toggleFavorite(productId);
+        toast.success("Added ❤️");
       }
-    } catch (err: any) {
-      toast.error("Failed to update favorites", { description: err.message });
+    } catch (e: any) {
+      toast.error("Failed to update favorites", { description: e.message });
     } finally {
       setBusy(false);
     }
@@ -490,13 +571,14 @@ function FavButton({
   return (
     <button
       type="button"
-      aria-label="Favorite"
       disabled={busy}
       onClick={(e) => {
         e.preventDefault();
         toggle();
       }}
-      className="absolute top-2 right-2 h-9 w-9 rounded-full bg-white shadow-sm grid place-items-center text-neutral-900"
+      className="absolute top-2 right-2 h-9 w-9 rounded-full bg-white shadow-sm grid place-items-center text-neutral-900 active:scale-[0.98] disabled:opacity-60"
+      aria-label="Favorite"
+      title="Favorite"
     >
       <Heart size={18} className={on ? "fill-neutral-900" : ""} />
     </button>

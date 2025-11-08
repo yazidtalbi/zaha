@@ -63,24 +63,23 @@ type CartRow = {
   products: Product | null;
 };
 
-export default function CheckoutAddressPage() {
+export default function CheckoutPage() {
   return (
     <RequireAuth>
-      <AddressInner />
+      <InnerCheckout />
     </RequireAuth>
   );
 }
 
-function AddressInner() {
+function InnerCheckout() {
   const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
 
-  // addresses
+  // state
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // cart
   const [cart, setCart] = useState<CartRow[]>([]);
   const removedCount = useMemo(
     () =>
@@ -112,15 +111,17 @@ function AddressInner() {
     is_default: false,
   });
   const [deleteTarget, setDeleteTarget] = useState<Address | null>(null);
+  const [placing, setPlacing] = useState(false);
 
+  // ————————————————————————————
+  // Lifecycle
+  // ————————————————————————————
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
       const _uid = data.user?.id ?? null;
       setUid(_uid);
-      if (_uid) {
-        await Promise.all([loadAddresses(_uid), loadCart(_uid)]);
-      }
+      if (_uid) await Promise.all([loadAddresses(_uid), loadCart(_uid)]);
       setLoading(false);
     })();
 
@@ -171,6 +172,9 @@ function AddressInner() {
     setCart((data ?? []) as CartRow[]);
   }
 
+  // ————————————————————————————
+  // Address Management
+  // ————————————————————————————
   async function setDefault(id: string) {
     if (!uid) return;
     await supabase
@@ -221,11 +225,11 @@ function AddressInner() {
       user_id: uid,
       full_name: (form.full_name || "").trim(),
       line1: (form.line1 || "").trim(),
-      line2: form.line2 || null || null,
+      line2: form.line2 || null,
       city: (form.city || "").trim(),
-      postal_code: form.postal_code || null || null,
+      postal_code: form.postal_code || null,
       country: (form.country || "").trim(),
-      phone: form.phone || null || null,
+      phone: form.phone || null,
       is_default: !!form.is_default,
     };
 
@@ -263,35 +267,23 @@ function AddressInner() {
     }
   }
 
-  // ——— PLACE ORDER ———
-  const [placing, setPlacing] = useState(false);
+  // ————————————————————————————
+  // Place Order
+  // ————————————————————————————
   async function placeOrder() {
     if (!uid) return;
-    if (!selectedId) {
-      toast.message("Please choose an address");
-      return;
-    }
-    if (cart.length === 0) {
-      toast.error("Your cart is empty");
-      return;
-    }
-    if (removedCount > 0) {
-      toast.error("Please remove unavailable items from your cart.");
-      return;
-    }
+    if (!selectedId) return toast.message("Please choose an address");
+    if (cart.length === 0) return toast.error("Your cart is empty");
+    if (removedCount > 0)
+      return toast.error("Please remove unavailable items from your cart.");
 
-    // get the selected address
     const { data: a, error: eAddr } = await supabase
       .from("addresses")
       .select("*")
       .eq("id", selectedId)
       .maybeSingle();
-    if (eAddr || !a) {
-      toast.error("Could not find address");
-      return;
-    }
+    if (eAddr || !a) return toast.error("Could not find address");
 
-    // ✅ include personalization + options from each cart row
     const payload = cart.map((r) => {
       const p = r.products!;
       return {
@@ -306,15 +298,12 @@ function AddressInner() {
         address: `${a.line1}${a.line2 ? ", " + a.line2 : ""}, ${a.city}${
           a.postal_code ? " " + a.postal_code : ""
         }, ${a.country}`,
-
-        // 👇 new fields copied from cart_items
         personalization: r.personalization ?? null,
         options: r.options ?? null,
       };
     });
 
     setPlacing(true);
-
     const { error } = await supabase.from("orders").insert(payload);
     if (error) {
       setPlacing(false);
@@ -323,136 +312,155 @@ function AddressInner() {
       });
     }
 
-    // clear cart for this user
     await supabase.from("cart_items").delete().eq("user_id", uid);
-
     setPlacing(false);
     router.replace("/thank-you");
   }
 
-  if (loading) return <main className="p-5">Loading…</main>;
+  if (loading)
+    return (
+      <main className="p-8 text-center text-ink/60 animate-pulse">
+        Loading checkout…
+      </main>
+    );
 
   return (
-    <main className="px-5 py-6 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
+    <main className="px-5 py-6 md:p-8 max-w-3xl mx-auto space-y-8">
+      <header className="flex items-center gap-3  pb-3">
         <button
           onClick={() => router.back()}
           aria-label="Back"
-          className="text-2xl"
+          className="text-2xl hover:text-ink/80"
         >
           ←
         </button>
-        <h1 className="text-3xl font-bold">Checkout</h1>
-      </div>
+        <h1 className="text-2xl font-semibold text-ink">Checkout</h1>
+      </header>
 
-      <h2 className="text-2xl font-semibold mt-2 mb-4">
-        Choose a shipping address
-      </h2>
+      <section>
+        <h2 className="text-lg font-medium mb-3 text-ink/90">
+          Shipping Address
+        </h2>
 
-      {addresses.length === 0 ? (
-        <div className="rounded-2xl border p-5">
-          <p className="mb-3">You don’t have any saved addresses yet.</p>
-          <Button onClick={openCreate}>+ Add a new address</Button>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {addresses.map((a) => {
-            const isSelected = selectedId === a.id;
-            return (
-              <div key={a.id} className="rounded-2xl border p-5">
-                <div className="flex items-start gap-4">
-                  <button
-                    onClick={() => setSelectedId(a.id)}
-                    className="mt-1 h-6 w-6 rounded-full border-2 flex items-center justify-center"
-                    aria-label={`Select ${a.full_name} address`}
-                  >
-                    <div
-                      className={`h-3 w-3 rounded-full ${
-                        isSelected ? "bg-foreground" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
+        {addresses.length === 0 ? (
+          <div className="rounded-2xl border bg-white     p-6 text-center space-y-3">
+            <p className="text-ink/70 text-sm">
+              You don’t have any saved addresses yet.
+            </p>
+            <Button onClick={openCreate}>+ Add new address</Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {addresses.map((a) => {
+              const isSelected = selectedId === a.id;
+              return (
+                <div
+                  key={a.id}
+                  className={`rounded-2xl border p-5 transition-all cursor-pointer hover:bg-sand ${
+                    isSelected
+                      ? "border-terracotta bg-sand/50"
+                      : "border-neutral-200"
+                  }`}
+                  onClick={() => setSelectedId(a.id)}
+                >
+                  <div className="flex justify-between">
+                    <div className="flex-1">
+                      <div className="text-lg font-semibold">{a.full_name}</div>
+                      <div className="text-sm text-ink/80">
+                        {a.line1}
+                        {a.line2 ? `, ${a.line2}` : ""}
+                      </div>
+                      <div className="text-sm text-ink/70">
+                        {a.city}, {a.country}
+                      </div>
+                      {a.phone && (
+                        <div className="text-sm mt-1 text-ink/70">
+                          📞 {a.phone}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="flex-1">
                     {a.is_default ? (
-                      <span className="text-[11px] rounded px-2 py-0.5 bg-neutral-200">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 border text-ink/60 h-fit">
                         Default
                       </span>
                     ) : (
                       <button
-                        onClick={() => setDefault(a.id)}
-                        className="ml-0 text-xs underline text-muted-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDefault(a.id);
+                        }}
+                        className="text-xs underline text-ink/50 hover:text-ink/70"
                       >
-                        Set as default
+                        Set default
                       </button>
                     )}
+                  </div>
 
-                    <div className="mt-1 text-lg font-semibold">
-                      {a.full_name}
-                    </div>
-                    <div>{a.line1}</div>
-                    {a.line2 ? <div>{a.line2}</div> : null}
-                    <div className="uppercase tracking-wide">
-                      {a.postal_code ? `${a.postal_code} ` : ""}
-                      {a.city}
-                    </div>
-                    <div>{a.country}</div>
-                    {a.phone ? <div className="mt-1">{a.phone}</div> : null}
-
-                    <div className="mt-4 flex items-center justify-between text-lg">
-                      <button className="underline" onClick={() => openEdit(a)}>
-                        Edit
-                      </button>
-                      <button
-                        className="underline text-destructive"
-                        onClick={() => setDeleteTarget(a)}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                  <div className="mt-3 flex gap-3 text-sm text-ink/70">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(a);
+                      }}
+                      className="underline hover:text-ink"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(a);
+                      }}
+                      className="underline text-rose-600 hover:text-rose-700"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          <button onClick={openCreate} className="text-left text-lg underline">
-            + Add a new address
-          </button>
-
-          {/* Summary + bottom CTA */}
-          <div className="mt-6 rounded-2xl border p-4 space-y-3">
-            {removedCount > 0 && (
-              <div className="rounded-xl bg-amber-50 text-amber-900 px-3 py-2 text-sm">
-                {removedCount} item{removedCount > 1 ? "s are" : " is"}{" "}
-                unavailable. Remove them from your cart before placing the
-                order.
-              </div>
-            )}
-            <div className="flex items-center justify-between text-sm">
-              <span>Subtotal</span>
-              <span className="font-medium">MAD {subtotal.toFixed(2)}</span>
-            </div>
-            <Button
-              className="w-full"
-              onClick={placeOrder}
-              disabled={
-                !selectedId || placing || removedCount > 0 || cart.length === 0
-              }
+            <button
+              onClick={openCreate}
+              className="text-sm underline text-ink/70 hover:text-ink"
             >
-              {placing ? "Placing…" : "Ship here"}
-            </Button>
-            <div className="text-center">
-              <Link href="/cart" className="text-sm underline">
-                Edit cart
-              </Link>
-            </div>
+              + Add new address
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
-      {/* Create/Edit Sheet */}
+      {/* Summary */}
+      <aside className="rounded-2xl border bg-white     p-5 space-y-3">
+        {removedCount > 0 && (
+          <div className="rounded-lg bg-amber-50 text-amber-900 px-3 py-2 text-sm border border-amber-200">
+            {removedCount} item
+            {removedCount > 1 ? "s are" : " is"} unavailable. Please remove them
+            from your cart before continuing.
+          </div>
+        )}
+        <div className="flex items-center justify-between text-sm">
+          <span>Subtotal</span>
+          <span className="font-semibold">MAD {subtotal.toFixed(2)}</span>
+        </div>
+        <Button
+          className="w-full"
+          onClick={placeOrder}
+          disabled={
+            !selectedId || placing || removedCount > 0 || cart.length === 0
+          }
+        >
+          {placing ? "Placing…" : "Place Order"}
+        </Button>
+        <div className="text-center">
+          <Link href="/cart" className="text-sm underline text-ink/70">
+            Edit cart
+          </Link>
+        </div>
+      </aside>
+
+      {/* Address Form Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="bottom" className="max-h-[90vh] overflow-auto">
           <SheetHeader>
@@ -463,59 +471,28 @@ function AddressInner() {
           </SheetHeader>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Full name</Label>
-              <Input
-                value={form.full_name || ""}
-                onChange={(e) =>
-                  setForm({ ...form, full_name: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input
-                value={form.phone || ""}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Address line 1</Label>
-              <Input
-                value={form.line1 || ""}
-                onChange={(e) => setForm({ ...form, line1: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Address line 2 (optional)</Label>
-              <Input
-                value={form.line2 || ""}
-                onChange={(e) => setForm({ ...form, line2: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>City</Label>
-              <Input
-                value={form.city || ""}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Postal code</Label>
-              <Input
-                value={form.postal_code || ""}
-                onChange={(e) =>
-                  setForm({ ...form, postal_code: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Country</Label>
-              <Input
-                value={form.country || ""}
-                onChange={(e) => setForm({ ...form, country: e.target.value })}
-              />
-            </div>
+            {[
+              ["Full name", "full_name"],
+              ["Phone", "phone"],
+              ["Address line 1", "line1"],
+              ["Address line 2 (optional)", "line2"],
+              ["City", "city"],
+              ["Postal code", "postal_code"],
+              ["Country", "country"],
+            ].map(([label, key], i) => (
+              <div
+                key={key}
+                className={`space-y-2 ${
+                  i === 2 || i === 3 || i === 6 ? "md:col-span-2" : ""
+                }`}
+              >
+                <Label>{label}</Label>
+                <Input
+                  value={(form as any)[key] || ""}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                />
+              </div>
+            ))}
             <div className="md:col-span-2">
               <label className="inline-flex items-center gap-2 text-sm">
                 <input
@@ -541,7 +518,7 @@ function AddressInner() {
         </SheetContent>
       </Sheet>
 
-      {/* Delete confirm */}
+      {/* Delete Confirm */}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={() => setDeleteTarget(null)}
@@ -558,7 +535,7 @@ function AddressInner() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-rose-600 hover:bg-rose-700"
               onClick={() => {
                 if (deleteTarget) deleteAddress(deleteTarget.id);
                 setDeleteTarget(null);

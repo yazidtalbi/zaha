@@ -45,7 +45,7 @@ export default function HeroCarousel({ slides }: { slides: Slide[] }) {
   }, [emblaApi]);
 
   return (
-    <div className="embla px-4">
+    <div className="embla">
       <div ref={emblaRef} className="overflow-hidden rounded-2xl">
         <div className="flex">
           {slides.map((s, i) => (

@@ -1,12 +1,13 @@
-// app/settings.tsx
+// app/settings/page.tsx
 "use client";
 
-import RequireAuth from "@/components/RequireAuth";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Image from "next/image";
-import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabaseClient";
+import RequireAuth from "@/components/RequireAuth";
+
 import {
   Loader2,
   Upload,
@@ -16,10 +17,10 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// ——— shadcn/ui ———
+// shadcn/ui
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
@@ -31,7 +32,9 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-// ——— Types ———
+/* =========================
+   Types
+========================= */
 type Profile = {
   id: string;
   full_name: string | null;
@@ -49,7 +52,9 @@ type Profile = {
   email?: string | null; // derived from auth
 };
 
-// ——— Helpers ———
+/* =========================
+   Utils
+========================= */
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -57,18 +62,19 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
-function isEqual(a: any, b: any) {
+const isEqual = (a: unknown, b: unknown) => {
   try {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch {
     return false;
   }
-}
+};
 
 // Client-side image resize to keep uploads light
 async function resizeImage(file: File, maxSize = 1024): Promise<Blob> {
   const img = document.createElement("img");
   const reader = new FileReader();
+
   const dataUrl: string = await new Promise((res, rej) => {
     reader.onerror = () => rej("read error");
     reader.onload = () => res(String(reader.result));
@@ -89,26 +95,34 @@ async function resizeImage(file: File, maxSize = 1024): Promise<Blob> {
   canvas.width = w;
   canvas.height = h;
   ctx.drawImage(img, 0, 0, w, h);
+
   const type = file.type || "image/jpeg";
-  const quality = type === "image/png" ? 0.92 : 0.85;
+  const quality = type.includes("png") ? 0.92 : 0.85;
+
   const blob: Blob = await new Promise((res) =>
     canvas.toBlob((b) => res(b as Blob), type, quality)
   );
   return blob;
 }
 
-// Debounce hook
+// Simple debounce
 function useDebouncedCallback<T extends (...args: any[]) => void>(
   fn: T,
-  delay = 800
+  ms = 800
 ) {
   const t = useRef<ReturnType<typeof setTimeout> | null>(null);
-  return (...args: Parameters<T>) => {
-    if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(() => fn(...args), delay);
-  };
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (t.current) clearTimeout(t.current);
+      t.current = setTimeout(() => fn(...args), ms);
+    },
+    [fn, ms]
+  );
 }
 
+/* =========================
+   Page
+========================= */
 export default function SettingsPage() {
   return (
     <RequireAuth>
@@ -146,12 +160,12 @@ function SettingsInner() {
 
   const dirty = useMemo(() => {
     if (!profile || !initial) return false;
-    const comparableCurrent = { ...profile, email }; // email is read-only unless changed below
+    const comparableCurrent = { ...profile, email };
     const comparableInitial = { ...initial };
     return !isEqual(comparableCurrent, comparableInitial);
   }, [profile, initial, email]);
 
-  // ——— Load auth + profile ———
+  /* ------------ Load auth + profile ------------ */
   useEffect(() => {
     (async () => {
       setAuthLoading(true);
@@ -213,17 +227,15 @@ function SettingsInner() {
     })();
   }, []);
 
-  // ——— Autosave (debounced) ———
+  /* ------------ Autosave (debounced) ------------ */
   const debouncedSave = useDebouncedCallback(async () => {
     if (!uid || !profile) return;
     if (!dirty) return;
     await handleSave();
-  }, 1500);
+  }, 1200);
 
-  // Trigger autosave for lightweight fields
   useEffect(() => {
     if (!profile || !initial) return;
-    // Only autosave for non-sensitive changes
     debouncedSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -239,86 +251,88 @@ function SettingsInner() {
     profile?.username,
   ]);
 
-  // ——— Actions ———
-  async function handleSave() {
+  /* ------------ Actions ------------ */
+  const handleSave = useCallback(async () => {
     if (!uid || !profile) return;
     setSaving(true);
-
-    const payload = {
-      id: uid,
-      full_name: (profile.full_name ?? "").trim(),
-      username: (profile.username ?? "").trim() || null,
-      bio: (profile.bio ?? "").trim() || null,
-      phone: (profile.phone ?? "").trim() || null,
-      city: (profile.city ?? "").trim() || null,
-      address: (profile.address ?? "").trim() || null,
-      avatar_url: profile.avatar_url ?? null,
-      language: profile.language ?? "en",
-      notif_orders: !!profile.notif_orders,
-      notif_marketing: !!profile.notif_marketing,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error, data } = await supabase
-      .from("profiles")
-      .upsert(payload, { onConflict: "id" })
-      .select()
-      .maybeSingle();
-
-    setSaving(false);
-
-    if (error) {
-      toast.error("Couldn’t save settings");
-      return;
-    }
-
-    const merged = { ...(profile as Profile), ...(data ?? {}) };
-    setInitial(merged);
-    toast.success("Settings saved ✅");
-  }
-
-  async function handleAvatarSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.files?.[0];
-    if (!raw || !uid) return;
-
-    if (raw.size > 8 * 1024 * 1024) {
-      toast.error("Image too large (max 8MB)");
-      return;
-    }
-
     try {
-      const blob = await resizeImage(raw, 1024);
-      const extGuess =
-        raw.name.split(".").pop()?.toLowerCase() ||
-        (raw.type.includes("png") ? "png" : "jpg");
-      const key = `avatars/${uid}-${Date.now()}.${extGuess}`;
+      const payload = {
+        id: uid,
+        full_name: (profile.full_name ?? "").trim(),
+        username: (profile.username ?? "").trim() || null,
+        bio: (profile.bio ?? "").trim() || null,
+        phone: (profile.phone ?? "").trim() || null,
+        city: (profile.city ?? "").trim() || null,
+        address: (profile.address ?? "").trim() || null,
+        avatar_url: profile.avatar_url ?? null,
+        language: profile.language ?? "en",
+        notif_orders: !!profile.notif_orders,
+        notif_marketing: !!profile.notif_marketing,
+        updated_at: new Date().toISOString(),
+      };
 
-      const { error: upErr } = await supabase.storage
-        .from("avatars")
-        .upload(key, blob, {
-          upsert: false,
-          contentType: raw.type || "image/jpeg",
-        });
+      const { error, data } = await supabase
+        .from("profiles")
+        .upsert(payload, { onConflict: "id" })
+        .select()
+        .maybeSingle();
 
-      if (upErr) throw upErr;
+      if (error) throw error;
 
-      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(key);
-      const url = pub?.publicUrl;
-      if (!url) throw new Error("No public URL");
-
-      // Cache-bust to avoid stale CDN
-      const finalUrl = `${url}?v=${Date.now()}`;
-
-      setProfile((p) => (p ? { ...p, avatar_url: finalUrl } : p));
-      toast.success("Avatar updated");
-    } catch (err: any) {
-      toast.error("Avatar upload failed");
+      const merged = { ...(profile as Profile), ...(data ?? {}) };
+      setInitial(merged);
+      toast.success("Settings saved ✅");
+    } catch (e: any) {
+      toast.error("Couldn’t save settings");
     } finally {
-      if (fileRef.current) fileRef.current.value = "";
+      setSaving(false);
     }
-  }
+  }, [uid, profile]);
 
-  async function handlePasswordChange() {
+  const handleAvatarSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.files?.[0];
+      if (!raw || !uid) return;
+
+      if (raw.size > 8 * 1024 * 1024) {
+        toast.error("Image too large (max 8MB)");
+        return;
+      }
+      try {
+        const blob = await resizeImage(raw, 1024);
+        const extGuess =
+          raw.name.split(".").pop()?.toLowerCase() ||
+          (raw.type.includes("png") ? "png" : "jpg");
+        const key = `avatars/${uid}-${Date.now()}.${extGuess}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("avatars")
+          .upload(key, blob, {
+            upsert: false,
+            contentType: raw.type || "image/jpeg",
+          });
+        if (upErr) throw upErr;
+
+        const { data: pub } = supabase.storage
+          .from("avatars")
+          .getPublicUrl(key);
+        const url = pub?.publicUrl;
+        if (!url) throw new Error("No public URL");
+
+        // cache-bust
+        const finalUrl = `${url}?v=${Date.now()}`;
+        setProfile((p) => (p ? { ...p, avatar_url: finalUrl } : p));
+        toast.success("Avatar updated");
+      } catch {
+        toast.error("Avatar upload failed");
+      } finally {
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    },
+    [uid]
+  );
+
+  const handlePasswordChange = useCallback(async () => {
     if (!newPassword || newPassword.length < 6) {
       toast.error("Password must be at least 6 characters");
       return;
@@ -330,7 +344,6 @@ function SettingsInner() {
     setPwSaving(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setPwSaving(false);
-
     if (error) {
       toast.error(error.message || "Couldn’t change password");
       return;
@@ -338,12 +351,12 @@ function SettingsInner() {
     setNewPassword("");
     setConfirm("");
     toast.success("Password updated ✅");
-  }
+  }, [newPassword, confirm]);
 
-  async function signOut() {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    router.push("/login");
-  }
+    router.replace("/login");
+  }, [router]);
 
   async function checkUsernameAvailability(name: string) {
     if (!name) {
@@ -352,29 +365,30 @@ function SettingsInner() {
     }
     setUsernameBusy(true);
     setUsernameError(null);
+
     const { data, error } = await supabase
       .from("profiles")
       .select("id")
       .eq("username", name)
       .limit(1);
+
     setUsernameBusy(false);
     if (error) return; // silent
     const taken = !!(data && data.length && data[0]?.id !== uid);
     setUsernameError(taken ? "Username is already taken" : null);
   }
-
   const debouncedUsernameCheck = useDebouncedCallback(
     checkUsernameAvailability,
     600
   );
 
-  async function handleEmailChange() {
+  const handleEmailChange = useCallback(async () => {
     if (!newEmail || newEmail === email) {
       toast.message("Nothing to change");
       return;
     }
     setEmailSaving(true);
-    const { data, error } = await supabase.auth.updateUser({ email: newEmail });
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
     setEmailSaving(false);
     if (error) {
       toast.error(error.message || "Couldn’t update email");
@@ -383,9 +397,9 @@ function SettingsInner() {
     toast.success("Verification email sent. Please confirm to finish.");
     setEmail(newEmail);
     setNewEmail("");
-  }
+  }, [newEmail, email]);
 
-  // ——— UI ———
+  /* ------------ Render ------------ */
   if (authLoading || loading) {
     return (
       <main className="p-4">
@@ -415,12 +429,16 @@ function SettingsInner() {
             Manage your info, preferences, and security.
           </p>
         </div>
-        <div className="hidden md:flex gap-2">
-          <Button variant="outline" onClick={signOut}>
+        <div className="hidden gap-2 md:flex">
+          <Button variant="outline" onClick={signOut} aria-label="Sign out">
             <LogOut className="mr-2 size-4" />
             Sign out
           </Button>
-          <Button onClick={handleSave} disabled={saving || !!usernameError}>
+          <Button
+            onClick={handleSave}
+            disabled={saving || !!usernameError}
+            aria-label="Save settings"
+          >
             {saving ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
@@ -441,7 +459,7 @@ function SettingsInner() {
         <div className="grid gap-6 md:grid-cols-[160px_1fr]">
           {/* Avatar */}
           <div className="flex flex-col items-start gap-3">
-            <div className="relative size-28 overflow-hidden rounded-full border bg-muted">
+            <div className="relative size-28 overflow-hidden rounded-lg border bg-muted">
               {profile.avatar_url ? (
                 <Image
                   src={profile.avatar_url}
@@ -468,6 +486,7 @@ function SettingsInner() {
                 variant="secondary"
                 size="sm"
                 onClick={() => fileRef.current?.click()}
+                aria-label="Upload avatar"
               >
                 <Upload className="mr-2 size-4" />
                 Upload
@@ -522,7 +541,7 @@ function SettingsInner() {
                 <p className="text-xs text-red-600">{usernameError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Letters & numbers only. Will be slugged.
+                  Letters & numbers only. We’ll slug it automatically.
                 </p>
               )}
             </div>
@@ -566,6 +585,7 @@ function SettingsInner() {
                 variant="secondary"
                 onClick={handleEmailChange}
                 disabled={emailSaving || !newEmail}
+                aria-label="Update email"
               >
                 {emailSaving ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -602,7 +622,7 @@ function SettingsInner() {
             />
           </div>
 
-          <div className="md:col-span-2 grid gap-2">
+          <div className="grid gap-2 md:col-span-2">
             <Label htmlFor="address">Address</Label>
             <Input
               id="address"
@@ -743,7 +763,7 @@ function SettingsInner() {
         <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 p-3">
             <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex size-2 rounded-full bg-amber-500" />
+              <span className="inline-flex size-2 rounded-lg bg-amber-500" />
               You have unsaved changes
             </div>
             <div className="flex gap-2">

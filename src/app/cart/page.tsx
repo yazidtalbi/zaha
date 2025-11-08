@@ -1,4 +1,3 @@
-// app/cart/page.tsx
 "use client";
 
 import RequireAuth from "@/components/RequireAuth";
@@ -32,8 +31,8 @@ type CartRow = {
   id: string;
   qty: number;
   product_id: string;
-  options: any | null; // jsonb
-  personalization: string | null; // text
+  options: any | null;
+  personalization: string | null;
   products: Product | null;
 };
 
@@ -44,16 +43,11 @@ type UiCartRow = {
   title?: string;
   price_mad?: number;
   photos?: string[] | null;
-
-  // store (for grouping)
   store_id: string;
   store_title?: string | null;
   store_avatar?: string | null;
-
-  // buyer selections
   options_badges: string[];
   personalization_text: string | null;
-
   removed: boolean;
 };
 
@@ -78,25 +72,23 @@ export default function CartPage() {
 function Inner() {
   const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
-
   const [rows, setRows] = useState<UiCartRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // 🔔 Same-tab notifier for BottomNav
   function emitCartChanged() {
     try {
       window.dispatchEvent(new Event("cart:changed"));
     } catch {}
   }
 
-  // Map DB rows -> UI rows
+  // Map DB rows → UI rows
   function mapRows(data: CartRow[]): UiCartRow[] {
     return (data ?? []).map((row) => {
       const p = row.products;
       const removed = !p?.active || !!p?.deleted_at;
 
-      // options -> badges
+      // options → badges
       const badges: string[] = [];
       const opts = row.options;
       if (opts) {
@@ -120,11 +112,9 @@ function Inner() {
         title: p?.title,
         price_mad: p?.price_mad,
         photos: p?.photos,
-
         store_id,
         store_title: p?.shops?.title ?? "Store",
         store_avatar: p?.shops?.avatar_url ?? null,
-
         options_badges: badges,
         personalization_text: row.personalization ?? null,
         removed,
@@ -132,31 +122,17 @@ function Inner() {
     });
   }
 
-  // Fetch cart
+  // Load cart
   async function loadCart(userId: string) {
     setLoading(true);
     const { data, error } = await supabase
       .from("cart_items")
       .select(
         `
-        id,
-        qty,
-        product_id,
-        options,
-        personalization,
+        id, qty, product_id, options, personalization,
         products (
-          id,
-          title,
-          price_mad,
-          photos,
-          active,
-          deleted_at,
-          shop_id,
-          shops (
-            id,
-            title,
-            avatar_url
-          )
+          id, title, price_mad, photos, active, deleted_at, shop_id,
+          shops (id, title, avatar_url)
         )
       `
       )
@@ -183,7 +159,6 @@ function Inner() {
       else setLoading(false);
     })();
 
-    // auth change
     const { data: authSub } = supabase.auth.onAuthStateChange((_evt, sess) => {
       const _uid = sess?.user?.id ?? null;
       setUid(_uid);
@@ -191,12 +166,10 @@ function Inner() {
       else setRows([]);
     });
 
-    return () => {
-      authSub?.subscription.unsubscribe();
-    };
+    return () => authSub?.subscription.unsubscribe();
   }, []);
 
-  // Realtime: keep cart synced if it changes elsewhere
+  // Realtime updates
   useEffect(() => {
     if (!uid) return;
 
@@ -210,9 +183,7 @@ function Inner() {
           table: "cart_items",
           filter: `user_id=eq.${uid}`,
         },
-        async () => {
-          await loadCart(uid);
-        }
+        async () => await loadCart(uid)
       )
       .subscribe();
 
@@ -223,28 +194,27 @@ function Inner() {
 
   // Group by store
   const groups: StoreGroup[] = useMemo(() => {
-    const byStore = new Map<string, StoreGroup>();
+    const map = new Map<string, StoreGroup>();
     for (const r of rows) {
       const key = r.store_id || "unknown";
-      if (!byStore.has(key)) {
-        byStore.set(key, {
+      if (!map.has(key)) {
+        map.set(key, {
           store_id: key,
           store_title: r.store_title ?? "Store",
           store_avatar: r.store_avatar ?? null,
           items: [],
         });
       }
-      byStore.get(key)!.items.push(r);
+      map.get(key)!.items.push(r);
     }
-    return Array.from(byStore.values());
+    return Array.from(map.values());
   }, [rows]);
 
-  // Totals
   const totals = useMemo(() => {
-    const subtotal = rows.reduce((acc, r) => {
-      if (r.removed || !r.price_mad) return acc;
-      return acc + r.price_mad * r.qty;
-    }, 0);
+    const subtotal = rows.reduce(
+      (acc, r) => (r.removed || !r.price_mad ? acc : acc + r.price_mad * r.qty),
+      0
+    );
     const removedCount = rows.filter((r) => r.removed).length;
     return { subtotal, removedCount };
   }, [rows]);
@@ -254,26 +224,21 @@ function Inner() {
     setBusyId(id);
     const prev = rows;
     setRows((p) => p.map((r) => (r.id === id ? { ...r, qty: newQty } : r)));
-
     const { error } = await supabase
       .from("cart_items")
       .update({ qty: newQty })
       .eq("id", id);
-
     setBusyId(null);
     if (error) {
       toast.error("Failed to update quantity", { description: error.message });
-      setRows(prev); // revert
-    } else {
-      emitCartChanged(); // notify BottomNav
-    }
+      setRows(prev);
+    } else emitCartChanged();
   }
 
   async function removeLine(id: string) {
     setBusyId(id);
     const prev = rows;
     setRows((p) => p.filter((r) => r.id !== id));
-
     const { error } = await supabase.from("cart_items").delete().eq("id", id);
     setBusyId(null);
     if (error) {
@@ -281,7 +246,7 @@ function Inner() {
       setRows(prev);
     } else {
       toast("Removed from cart");
-      emitCartChanged(); // notify BottomNav
+      emitCartChanged();
     }
   }
 
@@ -300,7 +265,7 @@ function Inner() {
       setRows(prev);
     } else {
       toast("Cleared removed items");
-      emitCartChanged(); // notify BottomNav
+      emitCartChanged();
     }
   }
 
@@ -316,14 +281,20 @@ function Inner() {
     router.push("/checkout");
   }
 
-  if (loading) return <main className="p-4">Loading…</main>;
+  if (loading)
+    return (
+      <main className="p-6 text-center text-ink/70 animate-pulse">
+        Loading your cart…
+      </main>
+    );
 
   return (
-    <main className="p-4 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Your Cart</h1>
-        <Link href="/home" className="underline text-sm">
-          Continue shopping
+    <main className="p-4 md:p-8 space-y-8 max-w-3xl mx-auto">
+      {/* Header */}
+      <header className="flex items-center justify-between   pb-3">
+        <h1 className="text-2xl font-semibold text-ink">Your Cart</h1>
+        <Link href="/home" className="text-sm text-ink/70 hover:text-ink">
+          Continue shopping →
         </Link>
       </header>
 
@@ -331,45 +302,42 @@ function Inner() {
         <EmptyState />
       ) : (
         <>
-          {/* grouped by store */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             {groups.map((g) => (
-              <section key={g.store_id} className="space-y-2">
-                {/* Store header (once) */}
-                <div className="flex items-center gap-2 px-1">
-                  <div className="w-7 h-7 rounded-full overflow-hidden bg-white">
-                    {g.store_avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={g.store_avatar}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
-                        —
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-sm font-medium">{g.store_title}</div>
+              <section key={g.store_id} className="space-y-3">
+                {/* Store header */}
+                <div className="flex items-center gap-2">
+                  {g.store_avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.store_avatar}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover border"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-neutral-200 grid place-items-center text-xs text-neutral-500">
+                      🏪
+                    </div>
+                  )}
+                  <span className="text-sm font-medium">{g.store_title}</span>
                 </div>
 
-                {/* Items of this store */}
-                <ul className="space-y-2">
+                {/* Items */}
+                <ul className="space-y-3">
                   {g.items.map((r) => {
                     const img = Array.isArray(r.photos)
                       ? r.photos[0]
                       : undefined;
-                    const badges = Array.isArray(r.options_badges)
-                      ? r.options_badges
-                      : [];
+                    const badges = r.options_badges || [];
 
                     return (
                       <li
                         key={r.id}
-                        className="flex items-center gap-3 border rounded-xl p-3 bg-sand"
+                        className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 border rounded-2xl p-4 bg-white   ${
+                          r.removed ? "opacity-70 bg-neutral-100" : ""
+                        }`}
                       >
-                        <div className="w-14 h-14 rounded-lg bg-white overflow-hidden shrink-0">
+                        <div className="w-20 h-20 rounded-lg bg-neutral-50 overflow-hidden shrink-0 border">
                           {img ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -378,34 +346,33 @@ function Inner() {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
+                            <div className="w-full h-full grid place-items-center text-xs text-neutral-400">
                               No image
                             </div>
                           )}
                         </div>
 
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
                             <Link
                               href={`/product/${r.product_id}`}
-                              className="font-medium truncate hover:underline"
+                              className="font-medium text-ink hover:underline truncate"
                             >
                               {r.title ?? "Product"}
                             </Link>
                             {r.removed && (
-                              <span className="text-[11px] rounded-full px-2 py-0.5 bg-neutral-200 text-neutral-700">
-                                removed from seller’s store
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                                Unavailable
                               </span>
                             )}
                           </div>
 
-                          {/* Options badges */}
                           {!!badges.length && (
-                            <div className="mt-1 flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-1">
                               {badges.map((b, i) => (
                                 <span
-                                  key={`${r.id}-opt-${i}`}
-                                  className="text-[11px] rounded-full px-2 py-0.5 bg-white border"
+                                  key={i}
+                                  className="text-[11px] bg-neutral-100 border px-2 py-0.5 rounded-full"
                                 >
                                   {b}
                                 </span>
@@ -413,55 +380,52 @@ function Inner() {
                             </div>
                           )}
 
-                          {/* Personalization preview */}
                           {r.personalization_text && (
-                            <div className="mt-1 text-[11px] px-2 py-1 rounded bg-white border text-ink/80 line-clamp-2">
+                            <div className="text-[11px] px-2 py-1 bg-neutral-50 border rounded-lg text-ink/80 line-clamp-2">
                               <span className="font-medium">
-                                Personalization:{" "}
-                              </span>
+                                Personalization:
+                              </span>{" "}
                               {r.personalization_text}
                             </div>
                           )}
 
-                          <div className="mt-1 text-xs text-ink/70">
-                            {typeof r.price_mad === "number" ? (
-                              <>MAD {r.price_mad.toFixed(2)}</>
-                            ) : (
-                              <>MAD —</>
-                            )}
+                          <div className="text-sm font-medium text-ink/80">
+                            {r.price_mad
+                              ? `MAD ${r.price_mad.toFixed(2)}`
+                              : "—"}
                           </div>
                         </div>
 
-                        {/* Qty + remove */}
-                        <div className="flex items-center gap-2">
+                        {/* Actions */}
+                        <div className="flex items-center gap-3 self-end sm:self-center">
+                          <div className="flex items-center border rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => updateQty(r.id, r.qty - 1)}
+                              disabled={busyId === r.id || r.removed}
+                              className="px-2 py-1 text-sm hover:bg-neutral-100"
+                            >
+                              −
+                            </button>
+                            <span className="w-8 text-center text-sm">
+                              {r.qty}
+                            </span>
+                            <button
+                              onClick={() => updateQty(r.id, r.qty + 1)}
+                              disabled={busyId === r.id || r.removed}
+                              className="px-2 py-1 text-sm hover:bg-neutral-100"
+                            >
+                              +
+                            </button>
+                          </div>
+
                           <button
-                            className="rounded-lg border px-2 py-1 text-sm"
-                            onClick={() => updateQty(r.id, r.qty - 1)}
-                            disabled={busyId === r.id || r.removed}
-                            aria-label="Decrease quantity"
+                            onClick={() => removeLine(r.id)}
+                            disabled={busyId === r.id}
+                            className="text-xs text-rose-600 hover:text-rose-700 underline"
                           >
-                            −
-                          </button>
-                          <span className="w-6 text-center text-sm">
-                            {r.qty}
-                          </span>
-                          <button
-                            className="rounded-lg border px-2 py-1 text-sm"
-                            onClick={() => updateQty(r.id, r.qty + 1)}
-                            disabled={busyId === r.id || r.removed}
-                            aria-label="Increase quantity"
-                          >
-                            +
+                            Remove
                           </button>
                         </div>
-
-                        <button
-                          onClick={() => removeLine(r.id)}
-                          disabled={busyId === r.id}
-                          className="text-xs underline text-rose-600"
-                        >
-                          Remove
-                        </button>
                       </li>
                     );
                   })}
@@ -471,23 +435,25 @@ function Inner() {
           </div>
 
           {/* Totals */}
-          <aside className="rounded-2xl border bg-paper p-4 space-y-3">
+          <aside className="rounded-2xl border bg-white   p-5 space-y-4">
             {totals.removedCount > 0 && (
-              <div className="rounded-xl bg-amber-50 text-amber-900 px-3 py-2 text-sm flex items-center justify-between">
-                <div>
+              <div className="rounded-lg bg-amber-50 text-amber-800 px-3 py-2 text-sm flex items-center justify-between border border-amber-200">
+                <span>
                   {totals.removedCount} item
                   {totals.removedCount > 1 ? "s are" : " is"} unavailable.
-                  Please remove them to continue.
-                </div>
-                <button onClick={clearRemoved} className="underline">
-                  Clear removed
+                </span>
+                <button
+                  onClick={clearRemoved}
+                  className="underline hover:text-amber-900"
+                >
+                  Clear
                 </button>
               </div>
             )}
 
             <div className="flex items-center justify-between text-sm">
               <span>Subtotal</span>
-              <span className="font-medium">
+              <span className="font-semibold text-ink">
                 MAD {totals.subtotal.toFixed(2)}
               </span>
             </div>
@@ -495,9 +461,9 @@ function Inner() {
             <button
               onClick={checkout}
               disabled={totals.removedCount > 0 || rows.length === 0}
-              className="w-full rounded-xl border px-4 py-2 text-sm bg-sand hover:bg-white disabled:opacity-60"
+              className="w-full rounded-xl px-4 py-2 text-sm font-medium bg-ink text-white hover:bg-ink/90 disabled:opacity-50"
             >
-              Checkout
+              Proceed to Checkout
             </button>
           </aside>
         </>
@@ -508,11 +474,11 @@ function Inner() {
 
 function EmptyState() {
   return (
-    <div className="rounded-2xl border bg-sand p-6 text-center">
+    <div className="rounded-2xl border bg-neutral-50 p-10 text-center space-y-3">
       <div className="text-sm text-ink/70">Your cart is empty.</div>
       <Link
         href="/home"
-        className="inline-block mt-3 rounded-xl border px-4 py-2 text-sm bg-paper hover:bg-white"
+        className="inline-block mt-3 rounded-xl border border-ink/20 px-5 py-2 text-sm bg-white hover:bg-ink/5"
       >
         Browse products
       </Link>

@@ -283,7 +283,7 @@ export default function SearchPage() {
         className="p-4 sticky top-0 bg-neutral-50 z-10"
       >
         <div className="relative">
-          <div className="flex items-center gap-2 rounded-full border bg-white pl-10 pr-24 h-12 ">
+          <div className="flex items-center gap-2 rounded-full border bg-white pl-10 pr-24 h-11 ">
             <Search className="absolute left-3 h-4 w-4 opacity-60" />
             <input
               ref={inputRef}
@@ -300,18 +300,18 @@ export default function SearchPage() {
                 type="button"
                 onClick={clearAll}
                 aria-label="Clear search"
-                className="absolute right-24 top-1.5 h-9 w-9 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
+                className="absolute right-2 top-1.5 h-9 w-9 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
               >
                 <X size={16} />
               </button>
             )}
 
-            <button
+            {/* <button
               type="submit"
               className="absolute right-1 top-1 rounded-full px-4 h-10 text-sm bg-black text-white"
             >
               Search
-            </button>
+            </button> */}
           </div>
         </div>
 

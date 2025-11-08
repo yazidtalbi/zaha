@@ -1,33 +1,102 @@
+// app/onboarding/role/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type Role = "buyer" | "seller";
 
 export default function RolePicker() {
   const router = useRouter();
   const [role, setRole] = useState<Role | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Must be signed in (they just signed up)
+  // Must be signed in, and fetch existing role if present
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) router.replace("/auth");
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error(error);
+        router.replace("/auth");
+        return;
+      }
+      const user = data.user;
+      if (!user) {
+        router.replace("/auth");
+        return;
+      }
+
+      // Prefill role from profile if it exists
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profErr) console.warn(profErr.message);
+      if (prof?.role === "buyer" || prof?.role === "seller") {
+        setRole(prof.role);
+      }
+      setLoading(false);
     })();
   }, [router]);
 
-  async function finish() {
-    const { data } = await supabase.auth.getUser();
-    const uid = data.user?.id;
-    if (!uid || !role) return;
+  // const finish = useCallback(async () => {
+  //   if (!role || saving) return;
+  //   setSaving(true);
 
-    await supabase
-      .from("profiles")
-      .upsert({ id: uid, role }, { onConflict: "id" });
-    router.push("/home");
+  //   const { data, error } = await supabase.auth.getUser();
+  //   if (error || !data.user) {
+  //     toast.error("Please sign in again.");
+  //     router.replace("/auth");
+  //     return;
+  //   }
+  //   const uid = data.user.id;
+
+  //   const { error: upsertErr } = await supabase
+  //     .from("profiles")
+  //     .upsert(
+  //       { id: uid, role, updated_at: new Date().toISOString() },
+  //       { onConflict: "id" }
+  //     )
+  //     .select("id")
+  //     .maybeSingle();
+
+  //   if (upsertErr) {
+  //     console.error(upsertErr);
+  //     toast.error("Couldn’t save your choice. Try again.");
+  //     setSaving(false);
+  //     return;
+  //   }
+
+  //   // Optional: also mirror to auth metadata (handy for Edge Functions / RLS filters)
+  //   await supabase.auth.updateUser({ data: { role } }).catch(() => {});
+
+  //   // Route next
+  //   router.push(role === "seller" ? "/onboarding/seller" : "/home");
+  // }, [role, saving, router]);
+
+  async function finish() {
+    if (!role) return;
+
+    // Just navigate — no DB yet
+    if (role === "seller") {
+      router.push("/onboarding/seller");
+    } else {
+      router.push("/onboarding/buyer");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh grid place-items-center p-6">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-black/10 border-t-black" />
+      </div>
+    );
   }
 
   return (
@@ -37,7 +106,11 @@ export default function RolePicker() {
         Pick a starting mode. You can switch anytime.
       </p>
 
-      <div className="w-full max-w-md space-y-4">
+      <div
+        className="w-full max-w-md space-y-4"
+        role="radiogroup"
+        aria-label="Choose your role"
+      >
         <RoleCard
           label="I’m a Buyer"
           hint="Discover unique items"
@@ -52,12 +125,13 @@ export default function RolePicker() {
           active={role === "seller"}
           onClick={() => setRole("seller")}
         />
+
         <Button
           className="w-full h-12 rounded-xl mt-2"
-          disabled={!role}
+          disabled={!role || saving}
           onClick={finish}
         >
-          Continue
+          {saving ? "Saving…" : "Continue"}
         </Button>
       </div>
     </div>
@@ -79,14 +153,22 @@ function RoleCard({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      role="radio"
+      aria-checked={active}
       className={[
-        "w-full text-left rounded-2xl border p-4 transition-all flex items-center gap-4",
+        "w-full text-left rounded-2xl border p-4 transition-all flex items-center gap-4 outline-none",
         active
           ? "border-black bg-black text-white shadow-md"
-          : "border-neutral-200 hover:border-neutral-300",
+          : "border-neutral-200 hover:border-neutral-300 focus:ring-2 focus:ring-black/10",
       ].join(" ")}
-      aria-pressed={active}
     >
       <div
         className={[
@@ -107,8 +189,9 @@ function RoleCard({
         </div>
       </div>
       <div
+        aria-hidden
         className={[
-          "h-5 w-5 rounded-full border flex items-center justify-center",
+          "h-5 w-5 rounded-full border flex items-center justify-center shrink-0",
           active ? "bg-white text-black border-white" : "border-neutral-300",
         ].join(" ")}
       >
