@@ -2,10 +2,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Header from "@/components/Header";
+import CategoriesStrip from "@/components/home/CategoriesStrip";
 import HeroCarousel from "@/components/HeroCarousel";
 import ProductCard from "@/components/ProductCard";
+import { Search, Sparkles, Flame, Tag, ChevronRight } from "lucide-react";
 import HeroCategoriesStrip from "@/components/home/HeroCategoriesStrip";
 
 /* =========================
@@ -36,7 +40,7 @@ const REGIONS = [
 ];
 
 /* =========================
-   Types
+   Types (aligned to ProductCard)
 ========================= */
 type ProductForCard = {
   id: string;
@@ -57,35 +61,45 @@ type ProductForCard = {
   video_poster_url?: string | null;
 };
 
+type CategoryCard = {
+  id: string;
+  name: string;
+  href: string;
+  image?: string | null;
+};
+
 type PersonalizedRail = {
   title: string;
   items: ProductForCard[];
 };
 
-type AnyRow = Record<string, any>;
-type TabId = "new" | "popular" | "sale" | "under_cap" | "city";
-
 /* =========================
-   In-memory store
+   In-memory page store
 ========================= */
 type HomeStore = {
   items: ProductForCard[];
   page: number;
   hasMore: boolean;
+  trending: ProductForCard[] | null;
+  underCap: ProductForCard[] | null;
+  cats: CategoryCard[] | null;
   recently: ProductForCard[] | null;
+  forYou: PersonalizedRail | null;
   because: PersonalizedRail | null;
   scrollY: number;
-  activeTab: TabId;
 };
 
 const __homeStore: HomeStore = {
   items: [],
   page: 0,
   hasMore: true,
+  trending: null,
+  underCap: null,
+  cats: null,
   recently: null,
+  forYou: null,
   because: null,
   scrollY: 0,
-  activeTab: "new",
 };
 
 /* =========================
@@ -113,8 +127,10 @@ const slides = [
 ];
 
 /* =========================
-   Helpers
+   Normalizers
 ========================= */
+type AnyRow = Record<string, any>;
+
 function normalizeProduct(row: AnyRow): ProductForCard {
   const photosArr: string[] | null =
     row.photos ??
@@ -147,6 +163,9 @@ function normalizeList(rows?: AnyRow[] | null): ProductForCard[] {
   return (rows ?? []).map(normalizeProduct);
 }
 
+/* =========================
+   Personalization helpers
+========================= */
 function getRecentlyViewed(): Array<{ id: string; at: number }> {
   if (typeof window === "undefined") return [];
   try {
@@ -163,6 +182,45 @@ function getRecentlyViewed(): Array<{ id: string; at: number }> {
   }
 }
 
+// --- Pin "Because you viewed" to a stable category
+const BECAUSE_KEY = "zaha_because_path_v1";
+const BECAUSE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+
+function getPinnedBecausePath(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(BECAUSE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const path = typeof parsed?.path === "string" ? parsed.path : null;
+    const ts = typeof parsed?.ts === "number" ? parsed.ts : 0;
+    if (!path) return null;
+    if (Date.now() - ts > BECAUSE_TTL_MS) {
+      localStorage.removeItem(BECAUSE_KEY);
+      return null;
+    }
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+function setPinnedBecausePath(path: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(BECAUSE_KEY, JSON.stringify({ path, ts: Date.now() }));
+  } catch {}
+}
+
+// Optional: call if you ever want to reset the pin
+function clearPinnedBecausePath() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(BECAUSE_KEY);
+  } catch {}
+}
+
+// Capitalize last segment of a category path for display
 function labelFromPath(path: string): string {
   const segs = path.split("/").filter(Boolean);
   const last = segs[segs.length - 1] || path;
@@ -173,9 +231,11 @@ function labelFromPath(path: string): string {
 }
 
 /* =========================
-   Component
+   Page
 ========================= */
-export default function HomePage(): JSX.Element {
+export default function HomePage() {
+  const router = useRouter();
+
   // main grid
   const [items, setItems] = useState<ProductForCard[]>(
     __homeStore.items.length ? __homeStore.items : []
@@ -183,11 +243,22 @@ export default function HomePage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<number>(__homeStore.page);
   const [hasMore, setHasMore] = useState<boolean>(__homeStore.hasMore);
-  const [activeTab, setActiveTab] = useState<TabId>(__homeStore.activeTab);
 
-  // personalization
+  // rails
+  const [trending, setTrending] = useState<ProductForCard[] | null>(
+    __homeStore.trending
+  );
+  const [underCap, setUnderCap] = useState<ProductForCard[] | null>(
+    __homeStore.underCap
+  );
+  const [cats, setCats] = useState<CategoryCard[] | null>(__homeStore.cats);
+
+  // personalization rails
   const [recently, setRecently] = useState<ProductForCard[] | null>(
     __homeStore.recently
+  );
+  const [forYou, setForYou] = useState<PersonalizedRail | null>(
+    __homeStore.forYou
   );
   const [because, setBecause] = useState<PersonalizedRail | null>(
     __homeStore.because
@@ -201,69 +272,65 @@ export default function HomePage(): JSX.Element {
   );
   const [loadingCityRail, setLoadingCityRail] = useState(false);
 
-  /* ---------- queries for tabs ---------- */
-  const buildQueryForTab = useCallback(
-    (tab: TabId) => {
-      const effectiveTab: TabId = tab === "city" && !city ? "new" : tab;
+  /* ---------------- base query builder ---------------- */
+  const baseQuery = useCallback(() => {
+    return supabase
+      .from("products")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
+  }, []);
 
-      let q = supabase
-        .from("products")
-        .select("*")
-        .eq("active", true)
-        .eq("unavailable", false);
+  /* ---------------- first page ---------------- */
+  const loadFirstPage = useCallback(async () => {
+    setLoading(true);
+    setHasMore(true);
+    setPage(0);
 
-      switch (effectiveTab) {
-        case "popular":
-          q = q
-            .order("orders_count", { ascending: false, nullsFirst: false })
-            .order("created_at", { ascending: false });
-          break;
-        case "sale":
-          q = q
-            .not("promo_price_mad", "is", null)
-            .order("promo_starts_at", { ascending: false })
-            .order("created_at", { ascending: false });
-          break;
-        case "under_cap":
-          q = q
-            .lte("price_mad", PRICE_CAP_MAD)
-            .order("created_at", { ascending: false });
-          break;
-        case "city":
-          q = q.eq("city", city).order("created_at", { ascending: false });
-          break;
-        case "new":
-        default:
-          q = q.order("created_at", { ascending: false });
-          break;
+    try {
+      const { data, error } = await baseQuery().range(0, PAGE_SIZE - 1);
+      if (error) {
+        console.error("home:firstPage error", error);
+        setItems([]);
+        setHasMore(false);
+      } else {
+        const rows = normalizeList(data);
+        setItems(rows);
+        setHasMore(rows.length === PAGE_SIZE);
       }
+    } catch (e) {
+      console.error("home:firstPage exception", e);
+      setItems([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [baseQuery]);
 
-      return q;
-    },
-    [city]
-  );
+  /* ---------------- load more ---------------- */
+  const loadMore = useCallback(async () => {
+    if (!hasMore) return;
 
-  const fetchPageForTab = useCallback(
-    async (tab: TabId, pageNumber: number) => {
-      const from = pageNumber * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+    const nextPage = page + 1;
+    const from = nextPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
-      try {
-        const { data, error } = await buildQueryForTab(tab).range(from, to);
-        if (error) {
-          console.error("home:fetchPage error", error);
-          return [];
-        }
-        return normalizeList(data);
-      } catch (e) {
-        console.error("home:fetchPage exception", e);
-        return [];
+    try {
+      const { data, error } = await baseQuery().range(from, to);
+      if (error) {
+        console.error("home:loadMore error", error);
+        return;
       }
-    },
-    [buildQueryForTab]
-  );
+      const batch = normalizeList(data);
+      setItems((prev) => prev.concat(batch));
+      setPage(nextPage);
+      if (batch.length < PAGE_SIZE) setHasMore(false);
+    } catch (e) {
+      console.error("home:loadMore exception", e);
+    }
+  }, [baseQuery, page, hasMore]);
 
-  /* ---------- city rail (horizontal) ---------- */
+  /* ---------------- city rail fetch ---------------- */
   const fetchCityRail = useCallback(async (selectedCity: string) => {
     if (!selectedCity) return;
     setLoadingCityRail(true);
@@ -294,6 +361,7 @@ export default function HomePage(): JSX.Element {
   const handleApplyCity = useCallback(async () => {
     if (!city) return;
 
+    // store locally for guests + logged in
     if (typeof window !== "undefined") {
       localStorage.setItem("zaha_city", city);
       if (region) {
@@ -304,24 +372,12 @@ export default function HomePage(): JSX.Element {
     }
 
     await fetchCityRail(city);
+  }, [city, region, fetchCityRail]);
 
-    if (activeTab === "city") {
-      // show skeleton while refetching city tab
-      setItems([]);
-      setPage(0);
-      setHasMore(true);
-      setLoading(true);
-
-      const rows = await fetchPageForTab("city", 0);
-      setItems(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      setLoading(false);
-    }
-  }, [city, region, fetchCityRail, activeTab, fetchPageForTab]);
-
-  /* ---------- personalization ---------- */
+  /* ---------------- personalization (runs on EVERY mount) ---------------- */
   const refreshPersonalization = useCallback(async () => {
     try {
+      // 0) Recently viewed list (IDs in recency order)
       const viewed = getRecentlyViewed();
       if (viewed.length) {
         const idsOrdered = viewed.map((v) => v.id);
@@ -344,7 +400,9 @@ export default function HomePage(): JSX.Element {
         setRecently(null);
       }
 
+      // If no history, skip deeper personalization
       if (!viewed.length) {
+        setForYou(null);
         setBecause(null);
         return;
       }
@@ -352,6 +410,7 @@ export default function HomePage(): JSX.Element {
       const mostRecent = viewed[0].id;
       const ids = Array.from(new Set(viewed.map((v) => v.id)));
 
+      // 1) Primary categories for each viewed product
       const { data: pcRows } = await supabase
         .from("product_categories")
         .select(
@@ -372,6 +431,7 @@ export default function HomePage(): JSX.Element {
           id: r.categories?.id as string,
         })) ?? [];
 
+      // 2) Because you viewed X → subtree of most recent primary category
       let becauseRail: PersonalizedRail | null = null;
       const recentPrimary = primaries.find((p) => p.product_id === mostRecent);
       if (recentPrimary?.path) {
@@ -414,32 +474,69 @@ export default function HomePage(): JSX.Element {
         }
       }
 
+      // 3) For You → most frequent primary category path across history
+      let forYouRail: PersonalizedRail | null = null;
+      if (primaries.length) {
+        const countByPath = new Map<string, number>();
+        for (const p of primaries) {
+          if (!p.path) continue;
+          countByPath.set(p.path, (countByPath.get(p.path) ?? 0) + 1);
+        }
+        const topPath =
+          [...countByPath.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          null;
+
+        if (topPath) {
+          const { data: catIdsData3 } = await supabase
+            .from("categories")
+            .select("id")
+            .like("path", `${topPath}%`);
+          const catIds3 = (catIdsData3 ?? []).map((c: any) => c.id);
+
+          if (catIds3.length) {
+            const exclude = new Set(ids);
+            const { data: pc3 } = await supabase
+              .from("product_categories")
+              .select("product_id")
+              .in("category_id", catIds3)
+              .limit(260);
+
+            const productIds3 = Array.from(
+              new Set(
+                (pc3 ?? [])
+                  .map((x: any) => x.product_id)
+                  .filter((pid: string) => !exclude.has(pid))
+              )
+            ).slice(0, 24);
+
+            if (productIds3.length) {
+              const { data: prods3 } = await supabase
+                .from("products")
+                .select("*")
+                .in("id", productIds3)
+                .eq("active", true)
+                .eq("unavailable", false)
+                .limit(24);
+
+              const items = normalizeList(prods3);
+              if (items.length) {
+                forYouRail = { title: "For You", items };
+              }
+            }
+          }
+        }
+      }
+
       setBecause(becauseRail);
+      setForYou(forYouRail);
     } catch (e) {
       console.error("home:personalization refresh error", e);
     }
   }, []);
 
-  /* ---------- tab change ---------- */
-  const handleTabChange = useCallback(
-    async (tab: TabId) => {
-      setActiveTab(tab);
-      // clear previous grid so skeleton appears
-      setItems([]);
-      setPage(0);
-      setHasMore(true);
-      setLoading(true);
-
-      const rows = await fetchPageForTab(tab, 0);
-      setItems(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      setLoading(false);
-    },
-    [fetchPageForTab]
-  );
-
-  /* ---------- initial hydrate ---------- */
+  /* ---------------- hydrate or fetch ---------------- */
   useEffect(() => {
+    // hydrate city/region from localStorage
     if (typeof window !== "undefined") {
       const storedCity = localStorage.getItem("zaha_city");
       const storedRegion = localStorage.getItem("zaha_region");
@@ -457,59 +554,105 @@ export default function HomePage(): JSX.Element {
       setItems(__homeStore.items);
       setPage(__homeStore.page);
       setHasMore(__homeStore.hasMore);
+      setTrending(__homeStore.trending);
+      setUnderCap(__homeStore.underCap);
+      setCats(__homeStore.cats);
       setRecently(__homeStore.recently);
+      setForYou(__homeStore.forYou);
       setBecause(__homeStore.because);
-      setActiveTab(__homeStore.activeTab || "new");
 
       requestAnimationFrame(() => {
         window.scrollTo(0, __homeStore.scrollY || 0);
       });
 
+      // IMPORTANT: always refresh personalization on mount
       refreshPersonalization();
     } else {
+      loadFirstPage();
+
+      // parallel rails
       (async () => {
-        setLoading(true);
-        const rows = await fetchPageForTab("new", 0);
-        setItems(rows);
-        setPage(0);
-        setHasMore(rows.length === PAGE_SIZE);
-        setLoading(false);
+        try {
+          const [
+            { data: trend, error: tErr },
+            { data: cheap, error: cErr },
+            { data: catRows, error: catErr },
+          ] = await Promise.all([
+            supabase
+              .from("products")
+              .select("*")
+              .eq("active", true)
+              .order("created_at", { ascending: false })
+              .limit(12),
+            supabase
+              .from("products")
+              .select("*")
+              .eq("active", true)
+              .lte("price_mad", PRICE_CAP_MAD)
+              .order("created_at", { ascending: false })
+              .limit(12),
+            supabase
+              .from("categories")
+              .select("id, slug, name_en, image_url")
+              .eq("depth", 1)
+              .order("name_en", { ascending: true })
+              .limit(24),
+          ]);
+
+          if (tErr) console.error("home:trending error", tErr);
+          if (cErr) console.error("home:underCap error", cErr);
+          if (catErr) console.error("home:categories error", catErr);
+
+          setTrending(normalizeList(trend));
+          setUnderCap(normalizeList(cheap));
+
+          const mappedCats: CategoryCard[] =
+            (catRows ?? []).map((c: any) => ({
+              id: c.id,
+              name: c.name_en ?? c.slug,
+              href: `/c/${c.slug}`,
+              image: c.image_url ?? null,
+            })) ?? [];
+          setCats(mappedCats);
+        } catch (e) {
+          console.error("home:parallel exception", e);
+        }
       })();
 
+      // first-time personalization
       refreshPersonalization();
     }
-  }, [fetchPageForTab, refreshPersonalization, fetchCityRail]);
+  }, [loadFirstPage, refreshPersonalization, fetchCityRail]);
 
-  /* ---------- persist store ---------- */
+  /* ---------------- persist store on unmount ---------------- */
   useEffect(() => {
     return () => {
       __homeStore.items = items;
       __homeStore.page = page;
       __homeStore.hasMore = hasMore;
+      __homeStore.trending = trending;
+      __homeStore.underCap = underCap;
+      __homeStore.cats = cats;
       __homeStore.recently = recently;
+      __homeStore.forYou = forYou;
       __homeStore.because = because;
       __homeStore.scrollY = window.scrollY;
-      __homeStore.activeTab = activeTab;
     };
-  }, [items, page, hasMore, recently, because, activeTab]);
+  }, [
+    items,
+    page,
+    hasMore,
+    trending,
+    underCap,
+    cats,
+    recently,
+    forYou,
+    because,
+  ]);
 
-  /* ---------- infinite scroll ---------- */
+  /* ---------------- intersection observer (infinite) ---------------- */
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
-
-  const loadMore = useCallback(async () => {
-    if (!hasMore || loading) return;
-
-    const nextPage = page + 1;
-    const batch = await fetchPageForTab(activeTab, nextPage);
-    if (!batch.length) {
-      setHasMore(false);
-      return;
-    }
-    setItems((prev) => prev.concat(batch));
-    setPage(nextPage);
-    if (batch.length < PAGE_SIZE) setHasMore(false);
-  }, [hasMore, loading, page, fetchPageForTab, activeTab]);
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -531,47 +674,34 @@ export default function HomePage(): JSX.Element {
     return () => observerRef.current?.disconnect();
   }, [loadMore]);
 
-  /* ---------- tabs list ---------- */
-  const tabs: { id: TabId; label: string }[] = [
-    { id: "new", label: "New" },
-    { id: "popular", label: "Popular" },
-    // city as third tab when it exists
-    ...(city ? [{ id: "city", label: `In ${city}` }] : []),
-    { id: "sale", label: "On Sale" },
-    { id: "under_cap", label: `Under ${PRICE_CAP_MAD} MAD` },
-  ];
-
-  /* ---------- render ---------- */
+  /* ---------------- render ---------------- */
   return (
     <main className="pb-14 bg-neutral-50 min-h-screen">
-      <div className="pt-4 opacity-0">
+      <div className="pt-4">
         <Header />
       </div>
 
-      <header className="fixed inset-x-0 top-0 z-40  border-neutral-200 bg-neutral-50 ">
-        <div className="px-3 pt-2 pb-2">
-          <Header />
-        </div>
-      </header>
+      {/* Category quick tags under the row */}
 
       {/* Hero */}
-      <div className="pt-2 px-3">
+      <div className="pt-4 px-3">
         <HeroCarousel slides={slides} />
       </div>
 
-      {/* Top categories */}
-      <div className="mt-2">
+      <div className="mt-2 ">
         <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3">
           Top Categories
         </h2>
+        {/* <CategoriesStrip variant="hero" title="Explore" /> */}
         <div className="mx-3">
+          {" "}
           <HeroCategoriesStrip />
         </div>
       </div>
 
       {/* City / region picker + city rail */}
-      {/* <section className="px-3 pt-4"> */}
-      {/* <div className="rounded-2xl bg-white border border-neutral-200 px-3 py-3 flex flex-col gap-3">
+      <section className="px-3 pt-4">
+        <div className="rounded-2xl bg-white border border-neutral-200 px-3 py-3 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">
               Shop local treasures — choose your city
@@ -620,9 +750,9 @@ export default function HomePage(): JSX.Element {
               {region ? ` · ${region}` : null}
             </p>
           )}
-        </div> */}
+        </div>
 
-      {/* {city && (
+        {city && (
           <div className="mt-3">
             <h2 className="text-sm font-semibold mb-2">Crafted in {city}</h2>
 
@@ -649,18 +779,18 @@ export default function HomePage(): JSX.Element {
               </p>
             )}
           </div>
-        )} */}
-      {/* </section> */}
+        )}
+      </section>
 
-      {/* Recently viewed */}
+      {/* ===== Recently viewed (only if exists) ===== */}
       {recently && recently.length > 0 && (
         <>
-          <h2 className="mt-6 text-lg font-semibold flex items-center gap-1 px-3">
+          <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3">
             Recently viewed
           </h2>
           <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 px-3">
             {recently.map((p) => (
-              <div key={p.id} className="w-[140px]  shrink-0">
+              <div key={p.id} className="w-[160px] shrink-0">
                 <ProductCard p={p} variant="mini" />
               </div>
             ))}
@@ -668,10 +798,10 @@ export default function HomePage(): JSX.Element {
         </>
       )}
 
-      {/* Because you'll love */}
+      {/* ===== X you'll love ===== */}
       {because && because.items.length > 0 && (
         <>
-          <h2 className="text-lg font-semibold flex items-center gap-1 px-3 pt-8">
+          <h2 className=" text-lg font-semibold flex items-center gap-1 px-3 pt-8">
             {because.title}
           </h2>
           <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 pl-3">
@@ -684,32 +814,28 @@ export default function HomePage(): JSX.Element {
         </>
       )}
 
-      {/* Main grid + tabs */}
-      <section className="space-y-3 px-3 pt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold flex items-center gap-1">
-            Shop by recommendation
+      {/* ===== For You (kept commented out) ===== */}
+      {/* {forYou && forYou.items.length > 0 && (
+        <>
+          <h2 className="mt-2 text-lg font-semibold flex items-center gap-1 px-3">
+            {forYou.title}
           </h2>
-        </div>
+          <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pb-1 pl-3">
+            {forYou.items.map((p) => (
+              <div key={p.id} className="w-[200px] shrink-0">
+                <ProductCard p={p} variant="carousel" />
+              </div>
+            ))}
+          </div>
+        </>
+      )} */}
 
-        {/* Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold border ${
-                  isActive
-                    ? "bg-black text-white border-black"
-                    : "bg-white text-neutral-800 border-neutral-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+      {/* ===== Main Grid (infinite) ===== */}
+      <section className="space-y-2 px-3 pt-8">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold flex items-center gap-1">
+            Crafted in Morocco
+          </h2>
         </div>
 
         {loading && items.length === 0 ? (
@@ -748,6 +874,37 @@ export default function HomePage(): JSX.Element {
           </div>
         )}
       </section>
+
+      {/* ===== Rail: Under 200 MAD (still commented) ===== */}
+      {/* <section className="mt-2 mb-6 px-3">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-base font-semibold flex items-center gap-1">
+            <Tag className="h-4 w-4" />
+            Picks under {PRICE_CAP_MAD} MAD
+          </h2>
+          <Link
+            href={`/explore/under-${PRICE_CAP_MAD}`}
+            className="text-xs text-ink/70 hover:underline flex items-center gap-1"
+          >
+            See all <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+          {(underCap ?? Array.from({ length: 8 })).map((p, i) =>
+            p ? (
+              <div key={p.id} className="w-[200px] shrink-0">
+                <ProductCard p={p} variant="carousel" />
+              </div>
+            ) : (
+              <div
+                key={`under-skel-${i}`}
+                className="w-[200px] h-[240px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
+              />
+            )
+          )}
+        </div>
+      </section> */}
     </main>
   );
 }

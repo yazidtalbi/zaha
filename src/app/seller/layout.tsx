@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { PropsWithChildren } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { PropsWithChildren, useEffect } from "react";
+import { useRequireShop } from "@/hooks/useRequireShop";
 
 // tiny helper; you likely already have cn() in "@/lib/utils"
 function cn(...xs: (string | false | undefined)[]) {
@@ -13,7 +14,6 @@ function cn(...xs: (string | false | undefined)[]) {
 const TABS = [
   { href: "/seller", label: "Dashboard" },
   { href: "/seller/orders", label: "Orders" },
-  { href: "/seller/orders", label: "Orders" },
   { href: "/seller/products", label: "Products" },
   { href: "/seller/customers", label: "Customers" },
   { href: "/seller/analytics", label: "Analytics" },
@@ -21,18 +21,27 @@ const TABS = [
 ];
 
 export default function SellerLayout({ children }: PropsWithChildren) {
+  // ALWAYS call hooks at the top-level and in the same order
+  const router = useRouter();
   const pathname = usePathname();
+  const loading = useRequireShop(); // handles: not logged in → /login?next=/seller, no shop → /onboarding/seller
+
+  // Optional: hide bottom nav or do other side-effects here (but don't redirect again)
+  useEffect(() => {
+    // side-effects only; do not duplicate redirects already handled in useRequireShop
+  }, []);
+
+  // Safe early return AFTER all hooks
+  if (loading) return null;
 
   return (
     <div className="">
-      {/* <div className="px-4 pt-4">
- 
+      {/* Top tabs (optional)
+      <div className="px-4 pt-4">
         <div className="w-full overflow-x-auto">
           <div className="inline-flex min-w-full items-center gap-2 rounded-lg border bg-muted/30 p-1">
             {TABS.map(({ href, label }) => {
-              const active =
-                pathname === href || pathname.startsWith(href + "/");
-
+              const active = pathname === href || pathname.startsWith(href + "/");
               return (
                 <Link
                   key={href}
@@ -51,7 +60,8 @@ export default function SellerLayout({ children }: PropsWithChildren) {
             })}
           </div>
         </div>
-      </div> */}
+      </div>
+      */}
 
       <div className="">{children}</div>
     </div>

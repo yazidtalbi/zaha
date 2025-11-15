@@ -34,6 +34,7 @@ import {
   Plus,
   ChevronUp,
   ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ import ProductReviewsStrip from "@/components/reviews/ProductReviewsStrip";
 import ProductCard from "@/components/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProductSeed } from "@/lib/productSeed";
+import FavButton from "@/components/FavButton";
 
 /* -------------------------------------------------
    Types
@@ -157,7 +159,7 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
 function VisibleAreaSkeleton() {
   return (
     <main className="pb-24 bg-neutral-50 min-h-screen">
-      <div className="px-4 pt-4">
+      <div className="pt-4">
         <div className="relative rounded-2xl bg-white">
           <div className="overflow-hidden rounded-xl">
             <div className="aspect-[7/8] sm:aspect-[4/3]">
@@ -316,8 +318,8 @@ function ProductCarousel({
   const items = media.length ? media : [{ type: "image", src: "" as string }];
 
   return (
-    <div className="px-4 pt-4">
-      <div className="relative rounded-2xl bg-white">
+    <div className="  ">
+      <div className="relative rounded-4xl bg-white">
         <div ref={emblaRef} className="overflow-hidden rounded-xl">
           <div className="flex">
             {items.map((item, i) => (
@@ -874,9 +876,9 @@ export default function ProductPage() {
           </button>
         </div>
         <div className="fixed z-10 top-3 right-3 flex items-center gap-2 p-4">
-          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+          {/* <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
             <MessageSquare size={16} />
-          </button>
+          </button> */}
           <button
             onClick={async () => {
               const url = window.location.href;
@@ -899,7 +901,10 @@ export default function ProductPage() {
             <Share2 size={16} />
           </button>
           <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <Heart size={16} />
+            <FavButton
+              productId={p.id}
+              shopOwner={shop?.owner ?? p?.shop_owner ?? null}
+            />
           </button>
           {isOwner && (
             <Link
@@ -978,7 +983,10 @@ export default function ProductPage() {
                   aria-label="Save"
                   title="Save"
                 >
-                  <Heart className="h-4 w-4" />
+                  <FavButton
+                    productId={p.id}
+                    shopOwner={shop?.owner ?? p?.shop_owner ?? null}
+                  />
                 </button>
               </div>
             </div>
@@ -1541,8 +1549,8 @@ export default function ProductPage() {
         {!!moreFromShop.length && shop?.id && (
           <section className="px-4 py-4 pt-12">
             <h3 className="text-lg font-semibold mb-3">More from this shop</h3>
-            <div className="rounded-2xl bg-white p-5 overflow-hidden border border-neutral-200">
-              <div className="flex gap-3 justify-between items-start">
+            <div className="rounded-2xl bg-white py-5 overflow-hidden border border-neutral-200">
+              <div className="flex gap-3 justify-between items-start px-5">
                 <div className="h-18 w-18 rounded-lg overflow-hidden bg-neutral-200 shrink-0">
                   {shop?.avatar_url ? (
                     <img
@@ -1554,37 +1562,58 @@ export default function ProductPage() {
                 </div>
                 <Link
                   href={`/shop/${shop?.id ?? ""}`}
-                  className="rounded-full border-2 border-black px-4 py-1 text-sm font-semibold"
+                  className="ml-auto inline-flex items-center rounded-full border px-3 py-1 text-sm hover:bg-white"
                 >
                   View the shop
                 </Link>
               </div>
 
-              <div className="min-w-0 grow my-3 mb-6">
+              <div className="min-w-0 grow my-3 mb-6 px-5">
                 <div className="flex items-center gap-1">
                   <div className="font-semibold truncate text-lg">
                     {shop?.title ?? "Shop"}
                   </div>
                 </div>
                 <div className="text-xs text-neutral-500">
+                  {/* {shop?.city ? <span className="mx-1"> | </span> : null} */}
+                  {shop?.city ?? ""} <span className="mx-1"> | </span>
                   {shop?.created_at
                     ? `On Zaha since ${new Date(shop.created_at).getFullYear()}`
                     : "On Zaha"}
-                  {shop?.city ? <span className="mx-1"> | </span> : null}
-                  {shop?.city ?? ""}
                 </div>
               </div>
 
               <div className="mt-4 overflow-x-auto no-scrollbar">
-                <div className="flex gap-3">
-                  {moreFromShop.map((item) => (
-                    <div
-                      key={item.id}
-                      className="min-w-[60%] xs:min-w-[60%] sm:min-w-[48%]"
-                    >
-                      <ProductCard p={item} fromshop />
+                <div className="flex gap-3 px-5">
+                  {/* Show only 3 items */}
+                  {[...moreFromShop]
+                    .sort(() => Math.random() - 0.5)
+                    .slice(0, 4)
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        className="min-w-[60%] xs:min-w-[60%] sm:min-w-[30%]"
+                      >
+                        <ProductCard p={item} fromshop />
+                      </div>
+                    ))}
+
+                  {/* 4th card = View more */}
+                  <Link
+                    href={`/shop/${shop?.id ?? ""}`}
+                    className="min-w-[60%] xs:min-w-[60%] sm:min-w-[48%] flex flex-col items-center justify-center rounded-2xl  bg-white py-6"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      {/* Circle arrow with lucide icon */}
+                      <div className="h-12 w-12 rounded-full border  border-neutral-300 grid place-items-center">
+                        <ArrowRight className="h-5 w-5 stroke-[2.5]" />
+                      </div>
+
+                      <span className="text-sm font-medium text-neutral-700">
+                        See more
+                      </span>
                     </div>
-                  ))}
+                  </Link>
                 </div>
               </div>
             </div>
@@ -1597,7 +1626,7 @@ export default function ProductPage() {
             <div className="grid grid-cols-2 gap-3">
               {similar.map((x) => (
                 <div key={x.id} className="min-w-0">
-                  <ProductCard p={x} />
+                  <ProductCard p={x} variant="carousel" />
                 </div>
               ))}
             </div>

@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   ChevronRight,
   Search,
+  Grid2X2,
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -28,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import CategoriesStrip from "./home/CategoriesStrip";
+import HeroCategoriesStrip from "./home/HeroCategoriesStrip";
 
 type Profile = {
   id: string;
@@ -74,7 +76,6 @@ export default function Header() {
   const [email, setEmail] = useState<string | null>(null);
   const [userMeta, setUserMeta] = useState<UserMeta | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [role, setRole] = useState<"buyer" | "seller">("buyer");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   // — Auth state
@@ -206,24 +207,95 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-paper/60">
       <div className="pt-[env(safe-area-inset-top)]" />
-      <div className="  ">
-        {/* Row: Search (full width) + Avatar */}
-        <div className="flex items-center gap-3 px-3 ">
+
+      <div className=" py-2 md:py-3">
+        {/* Row: Browse (mobile) / All categories (desktop) + Search + Avatar */}
+        <div className="flex items-center gap-3">
+          {/* Mobile: Browse opens bottom sheet */}
+          <Sheet>
+            {/* <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                className="rounded-full h-11 px-4 md:hidden"
+                aria-label="Browse categories"
+              >
+                <Grid2X2 className="h-4 w-4 mr-2" />
+                Browse
+              </Button>
+            </SheetTrigger> */}
+
+            <SheetContent
+              side="bottom"
+              className="h-[85vh] p-0 md:hidden"
+              aria-describedby={undefined}
+            >
+              <div className="sticky top-0 bg-paper/80 backdrop-blur border-b">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <SheetHeader className="p-0">
+                    <SheetTitle className="text-base">
+                      Browse categories
+                    </SheetTitle>
+                  </SheetHeader>
+                  <Link
+                    href="/categories"
+                    className="text-sm font-medium underline underline-offset-4"
+                  >
+                    View all
+                  </Link>
+                </div>
+              </div>
+
+              {/* Scrollable categories content */}
+              <div className="overflow-y-auto h-full px-3 pb-6">
+                {/* Use your existing component to render many categories */}
+                <div className="mt-3">
+                  <CategoriesStrip variant="full" title="Popular & all" />
+                </div>
+
+                {/* Optional: another dense strip */}
+                <div className="mt-4">
+                  <Separator />
+                  <div className="mt-3">
+                    <CategoriesStrip variant="dense" title="More to explore" />
+                  </div>
+                </div>
+
+                {/* Bottom CTA */}
+                <div className="mt-6 flex justify-center">
+                  <Link
+                    href="/categories"
+                    className="text-sm font-medium underline underline-offset-4"
+                  >
+                    Open full categories page
+                  </Link>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          {/* Desktop: direct link to categories page */}
+          <Link
+            href="/categories"
+            className="hidden md:inline-flex items-center gap-2 rounded-full border bg-white h-11 px-4 hover:bg-sand transition"
+          >
+            <Grid2X2 className="h-4 w-4" />
+            <span className="text-sm">All categories</span>
+          </Link>
+
           {/* Search pill — full width */}
           <button
             aria-label="Open search"
             className="flex-1 flex items-center gap-2 rounded-full border bg-white h-11 px-3 active:scale-[0.98] transition"
             onClick={() => router.push("/search")}
           >
-            <Search className="h-3 w-4 opacity-60" />
-            <span className="text-sm opacity-50 select-none text-left">
+            <Search className="h-4 w-4 opacity-60" />
+            <span className="text-sm opacity-50 select-none text-left ml-1">
               Search handmade goods…
             </span>
           </button>
 
-          {/* Avatar with unread badge (no bell) */}
-          {/* Avatar that goes to the You page */}
-          <Link
+          {/* Avatar → You page */}
+          {/* <Link
             href="/you"
             aria-label="Open account"
             className="relative rounded-full p-0.5 outline-none focus:outline-none focus:ring-ink/20"
@@ -247,12 +319,7 @@ export default function Header() {
                 aria-hidden="true"
               />
             )}
-          </Link>
-        </div>
-        {/* Category quick tags */}
-        <div className="mx-3">
-          {" "}
-          <CategoriesStrip variant="minimal" title={"cs"} />
+          </Link> */}
         </div>
       </div>
     </header>

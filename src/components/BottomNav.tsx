@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   Tag,
@@ -18,11 +18,19 @@ import {
   MessageSquareText,
   ChartNoAxesColumnIncreasing,
   ScrollText,
+  Bell,
+  User2,
+  LifeBuoy,
+  LogOut,
+  LogIn,
+  ShoppingBag,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 
 function clsx(...xs: (string | boolean | undefined | null)[]) {
   return xs.filter(Boolean).join(" ");
@@ -32,23 +40,69 @@ type IconType = React.ComponentType<{ size?: number; className?: string }>;
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const path = mounted ? (pathname ?? "") : "";
   const isSeller = mounted && path.startsWith("/seller");
 
   const [uid, setUid] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string>("Account");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
   const [cartCount, setCartCount] = useState(0);
+  const [hasShop, setHasShop] = useState(false);
 
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopSlug, setShopSlug] = useState<string | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
-
   useEffect(() => {
     if (menuOpen) setMenuOpen(false);
   }, [pathname]);
 
+  // unread notifications (for the avatar dot)
+  const unread = useUnreadNotifications();
+
+  useEffect(() => {
+    if (!mounted) return;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data.user;
+      setUid(u?.id ?? null);
+      setEmail(u?.email ?? null);
+
+      if (u?.id) {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("full_name, username, avatar_url")
+          .eq("id", u.id)
+          .maybeSingle();
+
+        const display =
+          (p?.full_name as string) || (p?.username as string) || "Account";
+        setProfileName(display);
+        setAvatarUrl((p?.avatar_url as string) ?? null);
+
+        // shop presence (used on buyer sheet)
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id, slug")
+          .eq("owner", u.id)
+          .maybeSingle();
+
+        if (shop?.id) {
+          setHasShop(true);
+          setShopId(shop.id);
+          setShopSlug((shop as any).slug ?? null);
+        }
+      }
+      await refreshCartCount(u?.id ?? null);
+    })();
+  }, [mounted]); // eslint-disable-line
+
+  // if we’re on seller surface, ensure shop id/slug are loaded (for “View my shop”)
   useEffect(() => {
     if (!mounted || !isSeller) return;
     (async () => {
@@ -63,6 +117,7 @@ export default function BottomNav() {
       if (data) {
         setShopId(data.id);
         setShopSlug((data as any).slug ?? null);
+        setHasShop(true);
       }
     })();
   }, [mounted, isSeller]);
@@ -87,16 +142,6 @@ export default function BottomNav() {
     },
     [mounted, uid]
   );
-
-  useEffect(() => {
-    if (!mounted) return;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const nextUid = data.user?.id ?? null;
-      setUid(nextUid);
-      await refreshCartCount(nextUid);
-    })();
-  }, [mounted, refreshCartCount]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -219,9 +264,11 @@ export default function BottomNav() {
 
   if (!mounted) return null;
 
-  // --------------------------------------------------
-  // **HIDE BOTTOM NAV ON SELL PAGE**
-  // --------------------------------------------------
+  // 👇 ADD THIS
+  if (!mounted) return null;
+  if (path.startsWith("/marketing")) return null;
+
+  // hide bottom nav on the sell flow
   if (path.startsWith("/seller/sell")) return null;
 
   // ---------- SELLER NAV ----------
@@ -363,9 +410,28 @@ export default function BottomNav() {
   }
 
   // ---------- BUYER NAV ----------
+  const initials = (profileName || "U").slice(0, 2).toUpperCase();
+  const manageStoreLabel = hasShop
+    ? "Manage your store"
+    : "Become a Zaha seller";
+  const manageStoreHref = uid
+    ? hasShop
+      ? "/seller"
+      : "/become-seller"
+    : "/login?next=%2Fbecome-seller";
+
+  const ordersHref = uid ? "/orders" : "/login";
+  const youHref = uid ? "/you" : "/login";
+
+  const onLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/login");
+  };
+
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
+        {/* Replace Deals with Avatar/More */}
         <ul className="grid grid-cols-5 px-2 pb-[env(safe-area-inset-bottom)]">
           <li>
             <Item href="/home" label="Home" match="/home" icon={Home} />
@@ -373,9 +439,166 @@ export default function BottomNav() {
           <li>
             <Item href="/search" label="Shop" match="/search" icon={Search} />
           </li>
+
+          {/* Avatar / More sheet */}
           <li>
-            <Item href="/deals" label="Deals" match="/deals" icon={Tag} />
+            <Sheet>
+              <SheetTrigger asChild>
+                <button className="block w-full">
+                  <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink">
+                    <div className="relative grid place-items-center w-10 h-9">
+                      <Avatar className="h-8 w-8 ring-1 ring-black/5">
+                        {avatarUrl ? (
+                          <AvatarImage
+                            src={avatarUrl}
+                            alt={profileName}
+                            referrerPolicy="no-referrer"
+                            onError={() => setAvatarUrl(null)}
+                          />
+                        ) : (
+                          <AvatarFallback className="text-[11px]">
+                            {initials}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      {unread > 0 && (
+                        <span className="absolute top-0 -right-1 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+                      )}
+                    </div>
+                    <span className="leading-none">You</span>
+                  </div>
+                </button>
+              </SheetTrigger>
+
+              <SheetContent
+                side="bottom"
+                className="max-w-screen-sm mx-auto rounded-t-2xl bg-white shadow-2xl border-ink/10 px-0 pt-2 pb-[env(safe-area-inset-bottom)]"
+              >
+                <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
+
+                <div className="px-1">
+                  <ul>
+                    <li>
+                      <Link
+                        href={youHref}
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <User2 size={20} />
+                        <span className="text-[15px] font-medium">Account</span>
+                      </Link>
+                    </li>
+
+                    <li>
+                      <Link
+                        href="/notifications"
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <div className="relative">
+                          <Bell size={20} />
+                          {unread > 0 && (
+                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-600" />
+                          )}
+                        </div>
+                        <span className="text-[15px] font-medium">
+                          Notifications
+                        </span>
+                        {unread > 0 && (
+                          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+                            {unread}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+
+                    <li>
+                      <Link
+                        href={ordersHref}
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <ShoppingBag size={20} />
+                        <span className="text-[15px] font-medium">
+                          Purchases
+                        </span>
+                      </Link>
+                    </li>
+
+                    <li>
+                      <Link
+                        href="/deals"
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <Tag size={20} />
+                        <span className="text-[15px] font-medium">Deals</span>
+                      </Link>
+                    </li>
+
+                    <li>
+                      <Link
+                        href={manageStoreHref}
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <Store size={20} />
+                        <span className="text-[15px] font-medium">
+                          {manageStoreLabel}
+                        </span>
+                      </Link>
+                    </li>
+                  </ul>
+
+                  <div className="my-2 h-px bg-ink/10" />
+
+                  <ul>
+                    <li>
+                      <Link
+                        href="/settings"
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <Settings size={20} />
+                        <span className="text-[15px] font-medium">
+                          Settings
+                        </span>
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        href="/help"
+                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                      >
+                        <LifeBuoy size={20} />
+                        <span className="text-[15px] font-medium">
+                          Help & Support
+                        </span>
+                      </Link>
+                    </li>
+                    <li>
+                      {uid ? (
+                        <button
+                          onClick={onLogout}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                        >
+                          <LogOut size={20} />
+                          <span className="text-[15px] font-medium">
+                            Logout
+                          </span>
+                        </button>
+                      ) : (
+                        <Link
+                          href="/login"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                        >
+                          <LogIn size={20} />
+                          <span className="text-[15px] font-medium">
+                            Sign in
+                          </span>
+                        </Link>
+                      )}
+                    </li>
+                  </ul>
+                </div>
+              </SheetContent>
+            </Sheet>
           </li>
+
           <li>
             <Item
               href="/favorites"

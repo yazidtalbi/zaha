@@ -1,18 +1,37 @@
 // app/seller/edit/[id]/page.tsx
 "use client";
 
-import RequireAuth from "@/components/RequireAuth";
-import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import Link from "next/link";
-import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 
-import { uploadCompressedToSupabase } from "@/lib/compressAndUpload";
+import {
+  ChevronLeft,
+  Trash2,
+  MoveLeft,
+  MoveRight,
+  Play,
+  Pencil,
+} from "lucide-react";
 
-/* -------------------------------------------
-   Types
-------------------------------------------- */
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import CategorySheetPicker from "@/components/listing/CategorySheetPicker";
+import EstimateDays from "@/components/EstimateDays";
+import { ShippingPricingField } from "@/components/ShippingPricingField";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
+/* ---------------- Types (same as create) ---------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
 type OptionGroup = {
   id: string;
@@ -49,27 +68,32 @@ type ItemDetails = {
 type ProductRow = {
   id: string;
   title: string;
-  keywords?: string | null;
-  description?: string | null;
+  keywords: string | null;
+  description: string | null;
   price_mad: number;
   city: string | null;
   active: boolean;
-  photos: string[] | null;
+  photos: string[];
   shop_id: string;
-  shop_owner?: string;
+  shop_owner: string;
+
   promo_price_mad: number | null;
   promo_starts_at: string | null;
   promo_ends_at: string | null;
+
   options_config: OptionGroup[] | null;
-  personalization_enabled?: boolean;
-  personalization_instructions?: string | null;
-  personalization_max_chars?: number | null;
-  item_details?: ItemDetails | null;
+
+  personalization_enabled: boolean | null;
+  personalization_instructions: string | null;
+  personalization_max_chars: number | null;
+
+  item_details: ItemDetails | null;
+
+  video_url: string | null;
+  video_poster_url: string | null;
 };
 
-/* -------------------------------------------
-   Limits & utils
-------------------------------------------- */
+/* ---------------- Limits & helpers ---------------- */
 const LIMITS = {
   title: 100,
   keywordMax: 7,
@@ -84,21 +108,7 @@ const LIMITS = {
   optionGroupName: 60,
   optionValueLabel: 60,
 };
-
 const MAX_PHOTOS = 5;
-
-function uid() {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
-}
-
-function toISO(dtLocal: string): string | null {
-  if (!dtLocal) return null;
-  const ms = Date.parse(dtLocal.replace(" ", "T"));
-  if (Number.isNaN(ms)) return null;
-  return new Date(ms).toISOString();
-}
 
 function parseKeywords(raw: string): string[] {
   return raw
@@ -108,56 +118,54 @@ function parseKeywords(raw: string): string[] {
     .map((s) => s.slice(0, LIMITS.keywordLen))
     .slice(0, LIMITS.keywordMax);
 }
-
 function joinKeywordsForDB(ks: string[]): string {
   return ks.join(", ");
 }
-
-/* -------------------------------------------
-   Page
-------------------------------------------- */
-export default function SellerEditPage() {
-  return (
-    <RequireAuth>
-      <EditInner />
-    </RequireAuth>
-  );
+function toISO(dtLocal: string): string | null {
+  if (!dtLocal) return null;
+  const ms = Date.parse(dtLocal.replace(" ", "T"));
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toISOString();
 }
 
-function EditInner() {
+/* ---------------- Page ---------------- */
+export default function EditProductPage() {
+  const { id: productId } = useParams<{ id: string }>();
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
-  const pid = (id ?? "").toString().trim();
 
-  /* ---------------- State ---------------- */
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  // Basics
+  /* ---------- Basics ---------- */
   const [title, setTitle] = useState("");
   const [keywordsInput, setKeywordsInput] = useState("");
   const [keywordsCount, setKeywordsCount] = useState(0);
   const [description, setDescription] = useState("");
+
   const [price, setPrice] = useState<string>("");
   const [city, setCity] = useState("");
+  const [active, setActive] = useState<boolean>(true);
+
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryPath, setCategoryPath] = useState<string>("");
+
+  /* ---------- Media ---------- */
   const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [active, setActive] = useState(true);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoPosterUrl, setVideoPosterUrl] = useState<string | null>(null);
 
-  // Options
-  const [groups, setGroups] = useState<OptionGroup[]>([]);
-
-  // Personalization
-  const [persoEnabled, setPersoEnabled] = useState(false);
-  const [persoInstr, setPersoInstr] = useState("");
-  const [persoMax, setPersoMax] = useState<string>("");
-
-  // Promo
+  /* ---------- Promo ---------- */
+  const [promoEnabled, setPromoEnabled] = useState(false);
   const [promoPrice, setPromoPrice] = useState<string>("");
   const [promoStart, setPromoStart] = useState<string>("");
   const [promoEnd, setPromoEnd] = useState<string>("");
 
-  // Item Details
+  /* ---------- Options ---------- */
+  const [groups, setGroups] = useState<OptionGroup[]>([]);
+
+  /* ---------- Personalization ---------- */
+  const [persoEnabled, setPersoEnabled] = useState(false);
+  const [persoInstr, setPersoInstr] = useState("");
+  const [persoMax, setPersoMax] = useState<string>("");
+
+  /* ---------- Item Details ---------- */
   const [itemType, setItemType] = useState<"physical" | "digital">("physical");
   const [width, setWidth] = useState<string>("");
   const [height, setHeight] = useState<string>("");
@@ -169,7 +177,6 @@ function EditInner() {
     "not_accepted"
   );
 
-  // Shipping (simplified)
   const [shipMode, setShipMode] = useState<"free" | "fees">("free");
   const [shipFee, setShipFee] = useState<string>("");
   const [shipFreeOver, setShipFreeOver] = useState<string>("");
@@ -180,170 +187,155 @@ function EditInner() {
   const [shipTracking, setShipTracking] = useState(true);
   const [shipNotes, setShipNotes] = useState("");
 
-  /* ---------------- Load product ---------------- */
+  /* ---------- UI ---------- */
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+
+  /* ---------- Load existing product (RLS-safe) ---------- */
   useEffect(() => {
-    if (!pid) return;
     (async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("id", pid)
-        .maybeSingle<ProductRow>();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace(`/login?next=/seller/edit/${productId}`);
+          return;
+        }
 
-      if (error || !data) {
-        toast.error(error?.message || "Product not found");
-        setLoading(false);
-        return;
-      }
+        const { data: p, error: selErr } = await supabase
+          .from("products")
+          .select("*")
+          .eq("id", productId)
+          .eq("shop_owner", user.id) // align with RLS
+          .maybeSingle();
 
-      // Basics
-      setTitle((data.title ?? "").slice(0, LIMITS.title));
-      setPrice(String(data.price_mad ?? ""));
-      setCity((data.city ?? "").slice(0, LIMITS.city));
-      setPhotos(Array.isArray(data.photos) ? data.photos.filter(Boolean) : []);
-      setActive(Boolean(data.active));
+        if (selErr) console.error("products select error:", selErr);
+        if (!p) {
+          alert("Product not found or you don’t have access.");
+          router.replace("/seller/products");
+          return;
+        }
+        const prod = p as ProductRow;
 
-      // Keywords & description
-      const kwRaw = (data.keywords ?? "").toString();
-      setKeywordsInput(kwRaw);
-      setKeywordsCount(parseKeywords(kwRaw).length);
-      setDescription((data.description ?? "").slice(0, LIMITS.description));
+        // basics
+        setTitle(prod.title ?? "");
+        setDescription(prod.description ?? "");
+        setPrice(String(prod.price_mad ?? ""));
+        setCity(prod.city ?? "");
+        setActive(!!prod.active);
 
-      // Options
-      setGroups(Array.isArray(data.options_config) ? data.options_config : []);
+        // keywords
+        setKeywordsInput(prod.keywords ?? "");
+        setKeywordsCount(parseKeywords(prod.keywords ?? "").length);
 
-      // Personalization
-      setPersoEnabled(Boolean(data.personalization_enabled));
-      setPersoInstr(
-        (data.personalization_instructions ?? "").slice(0, LIMITS.persoInstr)
-      );
-      setPersoMax(
-        data.personalization_max_chars != null
-          ? String(data.personalization_max_chars)
-          : ""
-      );
+        // media
+        setPhotos(Array.isArray(prod.photos) ? prod.photos : []);
+        setVideoUrl(prod.video_url ?? null);
+        setVideoPosterUrl(prod.video_poster_url ?? null);
 
-      // Promo
-      setPromoPrice(
-        data.promo_price_mad != null ? String(data.promo_price_mad) : ""
-      );
-      setPromoStart(
-        data.promo_starts_at
-          ? new Date(data.promo_starts_at).toISOString().slice(0, 16)
-          : ""
-      );
-      setPromoEnd(
-        data.promo_ends_at
-          ? new Date(data.promo_ends_at).toISOString().slice(0, 16)
-          : ""
-      );
+        // promo
+        const promoOn =
+          !!prod.promo_price_mad ||
+          !!prod.promo_starts_at ||
+          !!prod.promo_ends_at;
+        setPromoEnabled(promoOn);
+        setPromoPrice(prod.promo_price_mad ? String(prod.promo_price_mad) : "");
+        setPromoStart(
+          prod.promo_starts_at
+            ? new Date(prod.promo_starts_at).toISOString().slice(0, 16)
+            : ""
+        );
+        setPromoEnd(
+          prod.promo_ends_at
+            ? new Date(prod.promo_ends_at).toISOString().slice(0, 16)
+            : ""
+        );
 
-      // Item details + shipping
-      const d: ItemDetails = (data.item_details as any) ?? ({} as any);
+        // options
+        setGroups(prod.options_config ?? []);
 
-      setItemType(d.type === "digital" ? "digital" : "physical");
-      setWidth(d.width_cm != null ? String(d.width_cm) : "");
-      setHeight(d.height_cm != null ? String(d.height_cm) : "");
-      setWeight(d.weight_kg != null ? String(d.weight_kg) : "");
-      setShipsFrom(
-        (d.ships_from ?? data.city ?? "").slice(0, LIMITS.shipsFrom)
-      );
-      setShipsTo(
-        Array.isArray(d.ships_to)
-          ? d.ships_to.join(", ").slice(0, LIMITS.shipsTo)
-          : ""
-      );
-      setMaterials(
-        Array.isArray(d.materials)
-          ? d.materials.join(", ").slice(0, LIMITS.materials)
-          : ""
-      );
-      setReturns(
-        d.returns === "accepted" || d.returns === "not_accepted"
-          ? d.returns
-          : "not_accepted"
-      );
+        // personalization
+        setPersoEnabled(!!prod.personalization_enabled);
+        setPersoInstr(prod.personalization_instructions ?? "");
+        setPersoMax(
+          prod.personalization_max_chars
+            ? String(prod.personalization_max_chars)
+            : ""
+        );
 
-      const s: ShippingDetails | null = (d.shipping as any) ?? null;
-      setShipMode(s?.mode === "fees" ? "fees" : "free");
-      setShipFee(s?.fee_mad != null ? String(s.fee_mad) : "");
-      setShipFreeOver(s?.free_over_mad != null ? String(s.free_over_mad) : "");
-      setEstDaysMin(
-        s?.estimate_days_min != null ? String(s.estimate_days_min) : ""
-      );
-      setEstDaysMax(
-        s?.estimate_days_max != null ? String(s.estimate_days_max) : ""
-      );
-      setShipCOD(Boolean(s?.cod));
-      setShipPickup(Boolean(s?.pickup));
-      setShipTracking(s?.tracking ?? true);
-      setShipNotes((s?.notes ?? "").slice(0, LIMITS.shipNotes));
+        // details + shipping
+        const d = prod.item_details ?? null;
+        if (d) {
+          setItemType(d.type ?? "physical");
+          setWidth(d.width_cm != null ? String(d.width_cm) : "");
+          setHeight(d.height_cm != null ? String(d.height_cm) : "");
+          setWeight(d.weight_kg != null ? String(d.weight_kg) : "");
+          setShipsFrom(d.ships_from ?? "");
+          setShipsTo((d.ships_to ?? []).join(", "));
+          setMaterials((d.materials ?? []).join(", "));
+          setReturns(d.returns ?? "not_accepted");
 
-      setLoading(false);
-    })();
-  }, [pid]);
-
-  /* ---------------- Photos ---------------- */
-  async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(e.target.files ?? []);
-    if (!picked.length) return;
-
-    if (photos.length >= MAX_PHOTOS) {
-      toast.error(`You already have ${photos.length}/${MAX_PHOTOS} photos.`);
-      e.currentTarget.value = "";
-      return;
-    }
-    const remaining = MAX_PHOTOS - photos.length;
-    const toProcess = picked.slice(0, remaining);
-    if (picked.length > toProcess.length) {
-      toast.message(
-        `Only ${remaining} more photo(s) allowed (max ${MAX_PHOTOS}).`
-      );
-    }
-
-    setUploading(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in");
-
-      const urls = await Promise.all(
-        toProcess.map(async (file) => {
-          if (!/^image\/(jpeg|png|webp|gif|bmp)$/i.test(file.type)) {
-            throw new Error(
-              `Unsupported image type: ${
-                file.type || file.name
-              }. Use JPG/PNG/WEBP.`
+          const s = d.shipping ?? null;
+          if (s) {
+            setShipMode(s.mode ?? "free");
+            setShipFee(s.fee_mad != null ? String(s.fee_mad) : "");
+            setShipFreeOver(
+              s.free_over_mad != null ? String(s.free_over_mad) : ""
             );
+            setEstDaysMin(
+              s.estimate_days_min != null ? String(s.estimate_days_min) : ""
+            );
+            setEstDaysMax(
+              s.estimate_days_max != null ? String(s.estimate_days_max) : ""
+            );
+            setShipCOD(!!s.cod);
+            setShipPickup(!!s.pickup);
+            setShipTracking(!!s.tracking);
+            setShipNotes(s.notes ?? "");
           }
-          return uploadCompressedToSupabase(file, user.id, "products");
-        })
-      );
+        }
 
-      setPhotos((prev) => [...prev, ...urls.filter(Boolean)]);
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setUploading(false);
-      e.currentTarget.value = "";
+        // primary category
+        const { data: pc, error: pcErr } = await supabase
+          .from("product_categories")
+          .select("category_id")
+          .eq("product_id", productId)
+          .eq("is_primary", true)
+          .maybeSingle();
+        if (pcErr) console.error("product_categories error:", pcErr);
+        if (pc?.category_id) setCategoryId(pc.category_id);
+
+        setLoaded(true);
+      } catch (e) {
+        console.error("Edit load fatal error:", e);
+        alert("Couldn’t load this product.");
+        router.replace("/seller/products");
+      }
+    })();
+  }, [productId, router]);
+
+  /* ---------- Live keyword normalization ---------- */
+  useEffect(() => {
+    const ks = parseKeywords(keywordsInput);
+    setKeywordsCount(ks.length);
+    const normalized = joinKeywordsForDB(ks);
+    const currentTokens = keywordsInput.split(",").filter(Boolean).length;
+    if (currentTokens > LIMITS.keywordMax || keywordsInput.length > 400) {
+      setKeywordsInput(normalized);
     }
-  }
+  }, [keywordsInput]);
 
-  function removePhoto(i: number) {
-    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  /* ---------------- Options helpers ---------------- */
+  /* ---------- Options CRUD ---------- */
   function addGroup() {
     setGroups((gs) => [
       ...gs,
       {
-        id: uid(),
+        id: uuidv4(),
         name: "Size",
         required: true,
-        values: [{ id: uid(), label: "S", price_delta_mad: 0 }],
+        values: [{ id: uuidv4(), label: "S", price_delta_mad: 0 }],
       },
     ]);
   }
@@ -370,7 +362,7 @@ function EditInner() {
               ...g,
               values: [
                 ...g.values,
-                { id: uid(), label: "New option", price_delta_mad: 0 },
+                { id: uuidv4(), label: "New option", price_delta_mad: 0 },
               ],
             }
           : g
@@ -414,36 +406,23 @@ function EditInner() {
     );
   }
 
-  /* ---------------- Keywords live enforcement ---------------- */
-  useEffect(() => {
-    const ks = parseKeywords(keywordsInput);
-    setKeywordsCount(ks.length);
-    const normalized = joinKeywordsForDB(ks);
-    const tokens = keywordsInput
-      .split(",")
-      .filter((t) => t.trim().length > 0).length;
-    if (tokens > LIMITS.keywordMax || keywordsInput.length > 400) {
-      setKeywordsInput(normalized);
-    }
-  }, [keywordsInput]);
-
-  /* ---------------- Save ---------------- */
+  /* ---------- Save (UPDATE) ---------- */
   async function handleSave() {
     try {
       const base = Number(price);
+
       if (!title.trim()) throw new Error("Title is required");
       if (title.trim().length > LIMITS.title)
         throw new Error(`Title must be ≤ ${LIMITS.title} characters`);
       if (!Number.isFinite(base) || base <= 0)
         throw new Error("Enter a valid price");
       if (!photos.length) throw new Error("Add at least one photo");
+      if (!categoryId) throw new Error("Please select a category.");
 
-      // enforce keywords
       const kw = parseKeywords(keywordsInput);
       if (kw.length > LIMITS.keywordMax)
         throw new Error(`Use at most ${LIMITS.keywordMax} keywords`);
 
-      // validate options
       for (const g of groups) {
         if (!g.name.trim()) throw new Error("Option group needs a name");
         if (g.name.length > LIMITS.optionGroupName)
@@ -462,8 +441,9 @@ function EditInner() {
           if (
             v.price_delta_mad != null &&
             !Number.isFinite(Number(v.price_delta_mad))
-          )
+          ) {
             throw new Error(`Invalid price delta in "${g.name}"`);
+          }
         }
       }
 
@@ -471,7 +451,8 @@ function EditInner() {
       let promo_price_mad: number | null = null;
       let promo_starts_at: string | null = null;
       let promo_ends_at: string | null = null;
-      if (promoPrice || promoStart || promoEnd) {
+
+      if (promoEnabled) {
         const p = Number(promoPrice);
         if (!Number.isFinite(p) || p <= 0)
           throw new Error("Enter a valid promo price");
@@ -479,41 +460,35 @@ function EditInner() {
           throw new Error("Promo price must be lower than base price");
         if (!promoStart || !promoEnd)
           throw new Error("Select both promo start and end");
+
         const sISO = toISO(promoStart)!;
         const eISO = toISO(promoEnd)!;
         if (new Date(eISO).getTime() <= new Date(sISO).getTime())
           throw new Error("Promo end must be after start");
+
         promo_price_mad = Math.round(p);
         promo_starts_at = sISO;
         promo_ends_at = eISO;
       }
 
-      // personalization
       let personalization_enabled = !!persoEnabled;
       let personalization_instructions: string | null = null;
       let personalization_max_chars: number | null = null;
 
       if (personalization_enabled) {
         const max = Number(persoMax);
-        if (!Number.isFinite(max) || max <= 0) {
+        if (!Number.isFinite(max) || max <= 0)
           throw new Error("Enter a valid max characters for personalization");
-        }
-        if (!persoInstr.trim()) {
+        if (!persoInstr.trim())
           throw new Error("Add buyer instructions for personalization");
-        }
         if (persoInstr.length > LIMITS.persoInstr)
           throw new Error(
             `Personalization instructions must be ≤ ${LIMITS.persoInstr} chars`
           );
         personalization_instructions = persoInstr.trim();
         personalization_max_chars = Math.round(max);
-      } else {
-        personalization_enabled = false;
-        personalization_instructions = null;
-        personalization_max_chars = null;
       }
 
-      // quick field lengths
       if (description.length > LIMITS.description)
         throw new Error(`Description must be ≤ ${LIMITS.description} chars`);
       if (city.length > LIMITS.city)
@@ -527,25 +502,23 @@ function EditInner() {
       if (shipNotes.length > LIMITS.shipNotes)
         throw new Error(`Shipping notes must be ≤ ${LIMITS.shipNotes} chars`);
 
-      // shipping JSON
       const shipping: ShippingDetails = {
         mode: shipMode,
         fee_mad: shipMode === "fees" ? (shipFee ? Number(shipFee) : 0) : null,
         free_over_mad: shipFreeOver ? Number(shipFreeOver) : null,
-        estimate_days_min: estDaysMin ? Number(estDaysMin) : null,
-        estimate_days_max: estDaysMax ? Number(estDaysMax) : null,
+        estimate_days_min: estDaysMin !== "" ? Number(estDaysMin) : null,
+        estimate_days_max: estDaysMax !== "" ? Number(estDaysMax) : null,
         cod: shipCOD,
         pickup: shipPickup,
         tracking: shipTracking,
         notes: shipNotes.trim() || null,
       };
 
-      // item_details JSON
       const item_details: ItemDetails = {
         type: itemType,
-        width_cm: width ? Number(width) : null,
-        height_cm: height ? Number(height) : null,
-        weight_kg: weight ? Number(weight) : null,
+        width_cm: width !== "" ? Number(width) : null,
+        height_cm: height !== "" ? Number(height) : null,
+        weight_kg: weight !== "" ? Number(weight) : null,
         personalizable: personalization_enabled,
         ships_from: shipsFrom || city || null,
         ships_to: shipsTo
@@ -562,627 +535,823 @@ function EditInner() {
 
       setSaving(true);
 
-      const payload = {
-        title: title.trim(),
-        keywords: kw.length ? joinKeywordsForDB(kw) : null,
-        description: description.trim() || null,
-        price_mad: Math.round(base),
-        city: city.trim() || null,
-        active,
-        photos,
-        // promo
-        promo_price_mad,
-        promo_starts_at,
-        promo_ends_at,
-        // options
-        options_config: groups,
-        // personalization
-        personalization_enabled,
-        personalization_instructions,
-        personalization_max_chars,
-        // details
-        item_details,
-      };
+      // Ensure owner (align with RLS)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
 
-      const { data, error } = await supabase
+      // UPDATE products
+      const { error: updErr } = await supabase
         .from("products")
-        .update(payload)
-        .eq("id", pid)
-        .select("id")
-        .maybeSingle();
+        .update({
+          title: title.trim(),
+          keywords: kw.length ? joinKeywordsForDB(kw) : null,
+          description: description.trim() || null,
+          price_mad: Math.round(Number(price)),
+          city: city.trim() || null,
+          active: active,
+          photos,
+          promo_price_mad,
+          promo_starts_at,
+          promo_ends_at,
+          options_config: groups,
+          personalization_enabled,
+          personalization_instructions,
+          personalization_max_chars,
+          item_details,
+          video_url: videoUrl ?? null,
+          video_poster_url: videoPosterUrl ?? null,
+        })
+        .eq("id", productId)
+        .eq("shop_owner", user.id);
 
-      if (error) throw error;
-      toast.success("Product updated");
-      if (data?.id) router.push(`/product/${data.id}`);
+      if (updErr) throw updErr;
+
+      // Upsert primary category mapping
+      if (categoryId) {
+        const { error: catErr } = await supabase
+          .from("product_categories")
+          .upsert(
+            [
+              {
+                product_id: productId,
+                category_id: categoryId,
+                is_primary: true,
+              },
+            ],
+            { onConflict: "product_id,category_id" }
+          );
+        if (catErr) throw catErr;
+      }
+
+      alert("Changes saved.");
+      router.push(`/product/${productId}`);
     } catch (err) {
-      toast.error((err as Error).message);
+      console.error(err);
+      alert((err as Error).message || "Failed to save changes.");
     } finally {
       setSaving(false);
     }
   }
 
-  /* ---------------- Render ---------------- */
-  if (!pid) return <main className="p-4">Invalid product</main>;
-  if (loading) return <main className="p-4">Loading…</main>;
+  /* ---------- Photo helpers ---------- */
+  function removePhoto(i: number) {
+    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  if (!loaded) {
+    return (
+      <main className="min-h-[100dvh] grid place-items-center">
+        <div className="text-sm text-neutral-600">Loading…</div>
+      </main>
+    );
+  }
 
   return (
-    <main className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Edit item</h1>
-        <Link href={`/product/${pid}`} className="text-sm underline">
-          View product
-        </Link>
-      </div>
-
-      {/* Active toggle */}
-      <label className="inline-flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={active}
-          onChange={(e) => setActive(e.target.checked)}
-        />
-        Active (visible in shop & search)
-      </label>
-
-      {/* Photos */}
-      <label className="block">
-        <div className="flex items-center justify-between mb-1">
-          <div className="text-sm">Photos</div>
-          <div className="text-xs text-neutral-500">
-            {photos.length}/{MAX_PHOTOS}
-          </div>
-        </div>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
-          multiple
-          onChange={handleSelect}
-          disabled={photos.length >= MAX_PHOTOS}
-        />
-        {uploading && <div className="text-sm mt-1">Uploading…</div>}
-        {photos.length >= MAX_PHOTOS && (
-          <div className="text-xs text-neutral-500 mt-1">
-            You reached the maximum of {MAX_PHOTOS} photos.
-          </div>
-        )}
-      </label>
-
-      {!!photos.length && (
-        <div className="grid grid-cols-3 gap-2">
-          {photos.map((src, i) => (
-            <div key={src + i} className="relative rounded-lg overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" className="w-full h-28 object-cover" />
-              <button
-                type="button"
-                onClick={() => removePhoto(i)}
-                className="absolute top-1 right-1 rounded bg-black/60 text-white text-xs px-2 py-1"
-                aria-label="Remove photo"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Title */}
-      <label className="block">
-        <div className="text-sm mb-1">Title</div>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value.slice(0, LIMITS.title))}
-          className="w-full rounded border px-3 py-2"
-          placeholder="Handmade clay cup"
-          maxLength={LIMITS.title}
-        />
-        <div className="text-xs text-neutral-500 mt-1">
-          {title.length}/{LIMITS.title}
-        </div>
-      </label>
-
-      {/* Keywords */}
-      <label className="block">
-        <div className="text-sm mb-1">Keywords / Tags</div>
-        <input
-          value={keywordsInput}
-          onChange={(e) => setKeywordsInput(e.target.value)}
-          className="w-full rounded border px-3 py-2"
-          placeholder="The Great Wave, Hokusai, Japanese Art, Poster"
-        />
-        <div className="text-xs text-neutral-500 mt-1">
-          {keywordsCount}/{LIMITS.keywordMax} tags (each ≤ {LIMITS.keywordLen}{" "}
-          chars)
-        </div>
-        <p className="text-xs text-neutral-500">
-          Separate with commas — shown beneath the title on product page.
-        </p>
-      </label>
-
-      {/* Description */}
-      <label className="block">
-        <div className="text-sm mb-1">Description</div>
-        <textarea
-          value={description}
-          onChange={(e) =>
-            setDescription(e.target.value.slice(0, LIMITS.description))
-          }
-          className="w-full rounded border px-3 py-2"
-          placeholder="Write anything — new lines, emojis, etc. ✨"
-          rows={5}
-          maxLength={LIMITS.description}
-        />
-        <div className="text-xs text-neutral-500 mt-1">
-          {description.length}/{LIMITS.description}
-        </div>
-      </label>
-
-      {/* Price */}
-      <label className="block">
-        <div className="text-sm mb-1">Base Price (MAD)</div>
-        <input
-          type="number"
-          min={0}
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          className="w-full rounded border px-3 py-2"
-          inputMode="numeric"
-        />
-      </label>
-
-      {/* City */}
-      <label className="block">
-        <div className="text-sm mb-1">
-          City{" "}
-          <span className="text-neutral-500">(used for search filters)</span>
-        </div>
-        <input
-          value={city}
-          onChange={(e) => setCity(e.target.value.slice(0, LIMITS.city))}
-          className="w-full rounded border px-3 py-2"
-          placeholder="Tetouan"
-          maxLength={LIMITS.city}
-        />
-        <div className="text-xs text-neutral-500 mt-1">
-          {city.length}/{LIMITS.city}
-        </div>
-      </label>
-
-      {/* ——————————— Item Details ——————————— */}
-      <div className="rounded-xl border p-3 space-y-3">
-        <div className="text-sm font-medium">Item Details</div>
-
-        <div>
-          <div className="text-sm mb-1">Item type</div>
-          <select
-            value={itemType}
-            onChange={(e) =>
-              setItemType(e.target.value as "physical" | "digital")
-            }
-            className="w-full rounded border px-3 py-2"
-          >
-            <option value="physical">Physical item</option>
-            <option value="digital">Digital download</option>
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <div className="text-sm mb-1">Width (cm)</div>
-            <input
-              type="number"
-              value={width}
-              onChange={(e) => setWidth(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-            />
-          </label>
-          <label className="block">
-            <div className="text-sm mb-1">Height (cm)</div>
-            <input
-              type="number"
-              value={height}
-              onChange={(e) => setHeight(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-            />
-          </label>
-        </div>
-
-        <label className="block">
-          <div className="text-sm mb-1">Weight (kg)</div>
-          <input
-            type="number"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            className="w-full rounded border px-3 py-2"
-          />
-        </label>
-
-        {/* Ships from (buyer-facing) */}
-        <label className="block">
-          <div className="text-sm mb-1">
-            Ships from{" "}
-            <span className="text-neutral-500">(shown to buyers)</span>
-          </div>
-          <input
-            value={shipsFrom}
-            onChange={(e) =>
-              setShipsFrom(e.target.value.slice(0, LIMITS.shipsFrom))
-            }
-            className="w-full rounded border px-3 py-2"
-            placeholder="Casablanca"
-            maxLength={LIMITS.shipsFrom}
-          />
-          <div className="text-xs text-neutral-500 mt-1">
-            {shipsFrom.length}/{LIMITS.shipsFrom}
-          </div>
-        </label>
-
-        {/* Ships to */}
-        <label className="block">
-          <div className="text-sm mb-1">Only ships to (comma separated)</div>
-          <input
-            value={shipsTo}
-            onChange={(e) =>
-              setShipsTo(e.target.value.slice(0, LIMITS.shipsTo))
-            }
-            className="w-full rounded border px-3 py-2"
-            placeholder="Casablanca, Rabat, Marrakech"
-            maxLength={LIMITS.shipsTo}
-          />
-          <div className="text-xs text-neutral-500 mt-1">
-            {shipsTo.length}/{LIMITS.shipsTo}
-          </div>
-        </label>
-
-        {/* Materials */}
-        <label className="block">
-          <div className="text-sm mb-1">Materials</div>
-          <input
-            value={materials}
-            onChange={(e) =>
-              setMaterials(e.target.value.slice(0, LIMITS.materials))
-            }
-            className="w-full rounded border px-3 py-2"
-            placeholder="Wood, Bamboo, Plastics, Electronics"
-            maxLength={LIMITS.materials}
-          />
-          <div className="text-xs text-neutral-500 mt-1">
-            {materials.length}/{LIMITS.materials}
-          </div>
-        </label>
-
-        {/* Returns */}
-        <label className="block">
-          <div className="text-sm mb-1">Returns & exchanges</div>
-          <select
-            value={returns}
-            onChange={(e) =>
-              setReturns(e.target.value as "accepted" | "not_accepted")
-            }
-            className="w-full rounded border px-3 py-2"
-          >
-            <option value="accepted">Accepted</option>
-            <option value="not_accepted">Not accepted</option>
-          </select>
-        </label>
-      </div>
-
-      {/* ——————————— Shipping (simplified) ——————————— */}
-      <div className="rounded-xl border p-3 space-y-3">
-        <div className="text-sm font-medium">Shipping</div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <div className="text-sm mb-1">Pricing</div>
-            <select
-              value={shipMode}
-              onChange={(e) => setShipMode(e.target.value as "free" | "fees")}
-              className="w-full rounded border px-3 py-2"
-            >
-              <option value="free">Free shipping</option>
-              <option value="fees">+ Fees (flat)</option>
-            </select>
-          </label>
-
-          {shipMode === "fees" && (
-            <label className="block">
-              <div className="text-sm mb-1">Flat fee (MAD)</div>
-              <input
-                type="number"
-                min={0}
-                value={shipFee}
-                onChange={(e) => setShipFee(e.target.value)}
-                className="w-full rounded border px-3 py-2"
-                placeholder="e.g., 29"
-              />
-            </label>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="block">
-            <div className="text-sm mb-1">Free over (MAD)</div>
-            <input
-              type="number"
-              min={0}
-              value={shipFreeOver}
-              onChange={(e) => setShipFreeOver(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              placeholder="optional"
-            />
-          </label>
-
-          <label className="block">
-            <div className="text-sm mb-1">Estimate (min days)</div>
-            <input
-              type="number"
-              min={0}
-              value={estDaysMin}
-              onChange={(e) => setEstDaysMin(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              placeholder="e.g., 3"
-            />
-          </label>
-
-          <label className="block">
-            <div className="text-sm mb-1">Estimate (max days)</div>
-            <input
-              type="number"
-              min={0}
-              value={estDaysMax}
-              onChange={(e) => setEstDaysMax(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              placeholder="e.g., 7"
-            />
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={shipCOD}
-              onChange={(e) => setShipCOD(e.target.checked)}
-            />
-            Cash on delivery (COD)
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={shipPickup}
-              onChange={(e) => setShipPickup(e.target.checked)}
-            />
-            Pickup available
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={shipTracking}
-              onChange={(e) => setShipTracking(e.target.checked)}
-            />
-            Tracking provided
-          </label>
-        </div>
-
-        <label className="block">
-          <div className="text-sm mb-1">Shipping notes / policy (optional)</div>
-          <textarea
-            className="w-full rounded border px-3 py-2"
-            value={shipNotes}
-            onChange={(e) =>
-              setShipNotes(e.target.value.slice(0, LIMITS.shipNotes))
-            }
-            rows={3}
-            placeholder="Packaging care, cut-off time, carrier, etc."
-            maxLength={LIMITS.shipNotes}
-          />
-          <div className="text-xs text-neutral-500 mt-1">
-            {shipNotes.length}/{LIMITS.shipNotes}
-          </div>
-        </label>
-      </div>
-
-      {/* ——————————— Options Builder ——————————— */}
-      <div className="rounded-xl border p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Options (custom dropdowns)</div>
+    <main
+      className="min-h-[100dvh] flex flex-col bg-white text-ink overflow-hidden
+                 [--h-header:56px] [--h-footer:80px]"
+    >
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-40 bg-white h-[var(--h-header)] border-b">
+        <div className="mx-auto max-w-2xl h-full flex items-center justify-between px-2">
           <button
-            type="button"
-            onClick={addGroup}
-            className="text-sm rounded bg-black text-white px-3 py-1.5"
+            onClick={() => router.back()}
+            className="p-2 rounded-full hover:bg-neutral-100"
+            aria-label="Back"
           >
-            + Add option group
+            <ChevronLeft size={26} strokeWidth={2.5} />
           </button>
+
+          <div className="text-sm font-medium">Edit product</div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-600">Active</span>
+            <Switch checked={active} onCheckedChange={setActive} />
+          </div>
         </div>
+      </div>
 
-        {!groups.length && (
-          <p className="text-sm text-neutral-500">
-            Add groups like <b>Size</b> or <b>Fabric Color</b>. Each value can
-            change the price relative to the base price.
-          </p>
-        )}
+      {/* Content */}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto
+                   pt-[var(--h-header)]
+                   pb-[calc(var(--h-footer)+env(safe-area-inset-bottom))]"
+      >
+        <div className="mx-auto w-full max-w-2xl px-4 py-6">
+          <Accordion
+            type="multiple"
+            defaultValue={["media", "basics"]}
+            className="space-y-3"
+          >
+            {/* MEDIA */}
+            <AccordionItem
+              value="media"
+              className="rounded-xl border bg-white px-4"
+            >
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Photos & Video
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Photos</div>
+                  <div className="text-xs text-neutral-600">
+                    {photos.length}/{MAX_PHOTOS}
+                  </div>
+                </div>
 
-        {groups.map((g) => (
-          <div key={g.id} className="rounded-lg border p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                value={g.name}
-                onChange={(e) => setGroupName(g.id, e.target.value)}
-                className="flex-1 rounded border px-3 py-2"
-                placeholder="Group name (e.g., Size)"
-                maxLength={LIMITS.optionGroupName}
-              />
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={g.required ?? true}
-                  onChange={() => toggleRequired(g.id)}
-                />
-                required
-              </label>
-              <button
-                type="button"
-                onClick={() => removeGroup(g.id)}
-                className="text-sm rounded border px-2 py-1"
-              >
-                Remove
-              </button>
-            </div>
+                {!!photos.length && (
+                  <div className="grid grid-cols-3 gap-3">
+                    {photos.map((src, i) => (
+                      <div
+                        key={src + i}
+                        className="relative rounded-xl overflow-hidden border bg-white group"
+                        draggable
+                        onDragStart={() => setDragFrom(i)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (dragFrom === null || dragFrom === i) return;
+                          setPhotos((prev) => {
+                            const copy = [...prev];
+                            const [m] = copy.splice(dragFrom, 1);
+                            copy.splice(i, 0, m);
+                            return copy;
+                          });
+                          setDragFrom(null);
+                        }}
+                        title="Drag to reorder"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={src}
+                          alt=""
+                          className="w-full h-32 object-cover"
+                        />
 
-            <div className="space-y-2">
-              {g.values.map((v) => (
-                <div key={v.id} className="grid grid-cols-5 gap-2 items-center">
+                        {i === 0 && (
+                          <div className="absolute left-1 top-1 rounded-md bg-ink text-white text-[10px] px-1.5 py-0.5">
+                            Cover
+                          </div>
+                        )}
+
+                        {i !== 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPhotos((prev) => {
+                                const copy = [...prev];
+                                const [m] = copy.splice(i, 1);
+                                copy.unshift(m);
+                                return copy;
+                              })
+                            }
+                            className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] shadow-sm opacity-0 group-hover:opacity-100 transition"
+                          >
+                            Make cover
+                          </button>
+                        )}
+
+                        <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                              onClick={() =>
+                                i > 0 &&
+                                setPhotos((prev) => {
+                                  const copy = [...prev];
+                                  const [m] = copy.splice(i, 1);
+                                  copy.splice(i - 1, 0, m);
+                                  return copy;
+                                })
+                              }
+                              aria-label="Move left"
+                            >
+                              <MoveLeft className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                              onClick={() =>
+                                i < photos.length - 1 &&
+                                setPhotos((prev) => {
+                                  const copy = [...prev];
+                                  const [m] = copy.splice(i, 1);
+                                  copy.splice(i + 1, 0, m);
+                                  return copy;
+                                })
+                              }
+                              aria-label="Move right"
+                            >
+                              <MoveRight className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(i)}
+                            className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                            aria-label="Remove photo"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Video preview (display-only) */}
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Video (optional)</div>
+                    <div className="text-xs text-neutral-600">Preview</div>
+                  </div>
+                  {!videoUrl ? (
+                    <p className="text-xs text-neutral-600 mt-2">
+                      No video attached to this listing.
+                    </p>
+                  ) : (
+                    <div className="relative overflow-hidden rounded-xl border bg-white w-36 mt-2">
+                      <div className="w-full aspect-[9/12] overflow-hidden">
+                        <img
+                          src={videoPosterUrl || "/placeholder.svg"}
+                          alt="Video poster"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute inset-0 grid place-items-center pointer-events-none">
+                        <div className="rounded-full bg-black/70 p-1.5">
+                          <Play className="h-4 w-4 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* BASICS */}
+            <AccordionItem
+              value="basics"
+              className="rounded-xl border bg-white px-4"
+            >
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Basics
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-4">
+                <label htmlFor="title" className="block text-sm">
+                  Title
                   <input
-                    className="col-span-3 rounded border px-3 py-2"
-                    value={v.label}
-                    onChange={(e) =>
-                      updateValue(g.id, v.id, { label: e.target.value })
-                    }
-                    placeholder="Option label (e.g., M - Hoodie)"
-                    maxLength={LIMITS.optionValueLabel}
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
+                    maxLength={LIMITS.title}
                   />
+                </label>
+
+                <label className="block">
+                  <div className="text-sm mb-1">Category</div>
+                  <CategorySheetPicker
+                    title={title}
+                    value={categoryId}
+                    onChange={(id, path) => {
+                      setCategoryId(id);
+                      setCategoryPath(path);
+                    }}
+                  />
+                </label>
+
+                <label className="block">
+                  <div className="text-sm mb-1">Base Price (MAD)</div>
                   <input
                     type="number"
+                    min={0}
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
                     inputMode="numeric"
-                    className="col-span-1 rounded border px-3 py-2"
-                    value={String(v.price_delta_mad ?? 0)}
-                    onChange={(e) =>
-                      updateValue(g.id, v.id, {
-                        price_delta_mad: Number(e.target.value || 0),
-                      })
-                    }
-                    placeholder="Δ MAD"
-                    title="Price delta relative to base price (can be 0 or negative)."
                   />
-                  <button
-                    type="button"
-                    onClick={() => removeValue(g.id, v.id)}
-                    className="col-span-1 text-sm rounded border px-2 py-2"
-                  >
-                    ✕
-                  </button>
+                </label>
+
+                <label className="block">
+                  <div className="text-sm mb-1">Keywords / Tags</div>
+                  <input
+                    value={keywordsInput}
+                    onChange={(e) => setKeywordsInput(e.target.value)}
+                    className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
+                    placeholder="The Great Wave, Hokusai, Japanese Art, Poster"
+                  />
+                  <div className="text-xs text-neutral-500 mt-1">
+                    {keywordsCount}/{LIMITS.keywordMax} tags (each ≤{" "}
+                    {LIMITS.keywordLen} chars)
+                  </div>
+                </label>
+
+                <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="text-neutral-500">Category</div>
+                  <div className="text-right">{categoryPath || "—"}</div>
                 </div>
-              ))}
-            </div>
+              </AccordionContent>
+            </AccordionItem>
 
-            <button
-              type="button"
-              onClick={() => addValue(g.id)}
-              className="text-sm rounded bg-neutral-100 px-3 py-1.5"
+            {/* DETAILS */}
+            <AccordionItem
+              value="details"
+              className="rounded-xl border bg-white px-4"
             >
-              + Add value
-            </button>
-          </div>
-        ))}
-      </div>
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Details
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-6">
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={description}
+                    onChange={(e) =>
+                      setDescription(
+                        e.target.value.slice(0, LIMITS.description)
+                      )
+                    }
+                    placeholder="Describe the item. Materials, story, process…"
+                    rows={5}
+                    className="rounded-lg shadow-none"
+                  />
+                  <div className="text-xs text-neutral-500 text-right">
+                    {description.length}/{LIMITS.description}
+                  </div>
+                </div>
 
-      {/* ——————————— Promo ——————————— */}
-      <div className="rounded-xl border p-3 space-y-3">
-        <div className="text-sm font-medium">Promo (optional)</div>
-        <label className="block">
-          <div className="text-sm mb-1">Promo Price (MAD)</div>
-          <input
-            type="number"
-            min={0}
-            value={promoPrice}
-            onChange={(e) => setPromoPrice(e.target.value)}
-            className="w-full rounded border px-3 py-2"
-            inputMode="numeric"
-            placeholder="e.g., 199"
-          />
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <div className="text-sm mb-1">Promo starts</div>
-            <input
-              type="datetime-local"
-              value={promoStart}
-              onChange={(e) => setPromoStart(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-            />
-          </label>
-          <label className="block">
-            <div className="text-sm mb-1">Promo ends</div>
-            <input
-              type="datetime-local"
-              value={promoEnd}
-              onChange={(e) => setPromoEnd(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-            />
-          </label>
+                <div className="border rounded-lg p-4 space-y-4 bg-white">
+                  <div className="text-sm font-medium">Item Details</div>
+
+                  <div className="space-y-1">
+                    <Label>Item type</Label>
+                    <select
+                      value={itemType}
+                      onChange={(e) =>
+                        setItemType(e.target.value as "physical" | "digital")
+                      }
+                      className="w-full rounded-lg border px-3 py-3 bg-white"
+                    >
+                      <option value="physical">Physical item</option>
+                      <option value="digital">Digital download</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Width (cm)</Label>
+                      <Input
+                        value={width}
+                        onChange={(e) => setWidth(e.target.value)}
+                        type="number"
+                        className="rounded-lg shadow-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Height (cm)</Label>
+                      <Input
+                        value={height}
+                        onChange={(e) => setHeight(e.target.value)}
+                        type="number"
+                        className="rounded-lg shadow-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Weight (kg)</Label>
+                    <Input
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
+                      type="number"
+                      className="rounded-lg shadow-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>
+                      Ships from{" "}
+                      <span className="text-neutral-500">
+                        (shown to buyers)
+                      </span>
+                    </Label>
+                    <Input
+                      value={shipsFrom}
+                      onChange={(e) =>
+                        setShipsFrom(e.target.value.slice(0, LIMITS.shipsFrom))
+                      }
+                      placeholder="Casablanca"
+                      className="rounded-lg shadow-none"
+                    />
+                    <div className="text-xs text-neutral-500 text-right">
+                      {shipsFrom.length}/{LIMITS.shipsFrom}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Only ships to (comma separated)</Label>
+                    <Input
+                      value={shipsTo}
+                      onChange={(e) =>
+                        setShipsTo(e.target.value.slice(0, LIMITS.shipsTo))
+                      }
+                      placeholder="Casablanca, Rabat, Marrakech"
+                      className="rounded-lg shadow-none"
+                    />
+                    <div className="text-xs text-neutral-500 text-right">
+                      {shipsTo.length}/{LIMITS.shipsTo}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Materials</Label>
+                    <Input
+                      value={materials}
+                      onChange={(e) =>
+                        setMaterials(e.target.value.slice(0, LIMITS.materials))
+                      }
+                      placeholder="Wood, Bamboo, Cotton"
+                      className="rounded-lg shadow-none"
+                    />
+                    <div className="text-xs text-neutral-500 text-right">
+                      {materials.length}/{LIMITS.materials}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Returns & exchanges</Label>
+                    <select
+                      value={returns}
+                      onChange={(e) =>
+                        setReturns(
+                          e.target.value as "accepted" | "not_accepted"
+                        )
+                      }
+                      className="w-full rounded-lg border px-3 py-3 bg-white"
+                    >
+                      <option value="accepted">Accepted</option>
+                      <option value="not_accepted">Not accepted</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Shipping */}
+                <div className="border rounded-lg p-4 space-y-4 bg-white">
+                  <div className="text-sm font-medium">Shipping</div>
+
+                  <ShippingPricingField
+                    value={shipMode}
+                    onChange={setShipMode}
+                  />
+
+                  {shipMode === "fees" && (
+                    <div className="space-y-1">
+                      <Label>Flat fee (MAD)</Label>
+                      <Input
+                        value={shipFee}
+                        onChange={(e) => setShipFee(e.target.value)}
+                        type="number"
+                        className="rounded-lg shadow-none"
+                        placeholder="e.g., 29"
+                      />
+                    </div>
+                  )}
+
+                  {shipMode === "free" && (
+                    <div className="space-y-1">
+                      <Label>Free over (MAD)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={shipFreeOver}
+                        onChange={(e) => setShipFreeOver(e.target.value)}
+                        className="rounded-lg shadow-none"
+                        placeholder="optional"
+                        inputMode="numeric"
+                      />
+                    </div>
+                  )}
+
+                  <EstimateDays
+                    min={0}
+                    max={60}
+                    valueMin={Number(estDaysMin || 0)}
+                    valueMax={Number(estDaysMax || 0)}
+                    onChange={({ min, max }) => {
+                      setEstDaysMin(String(min));
+                      setEstDaysMax(String(max));
+                    }}
+                  />
+
+                  <div className="grid gap-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="cod">Cash on delivery (COD)</Label>
+                      <Switch
+                        id="cod"
+                        checked={shipCOD}
+                        onCheckedChange={setShipCOD}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="pickup">Pickup available</Label>
+                      <Switch
+                        id="pickup"
+                        checked={shipPickup}
+                        onCheckedChange={setShipPickup}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="tracking">Tracking provided</Label>
+                      <Switch
+                        id="tracking"
+                        checked={shipTracking}
+                        onCheckedChange={setShipTracking}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Shipping notes (optional)</Label>
+                    <Textarea
+                      value={shipNotes}
+                      onChange={(e) =>
+                        setShipNotes(e.target.value.slice(0, LIMITS.shipNotes))
+                      }
+                      rows={3}
+                      className="rounded-lg shadow-none"
+                    />
+                    <div className="text-xs text-neutral-500 text-right">
+                      {shipNotes.length}/{LIMITS.shipNotes}
+                    </div>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* OPTIONS */}
+            <AccordionItem
+              value="options"
+              className="rounded-xl border bg-white px-4"
+            >
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Options (custom dropdowns)
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-neutral-700">
+                    Add groups like <b>Size</b> or <b>Fabric Color</b>.
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={addGroup}
+                    className="rounded-lg bg-black text-white hover:bg-black/90"
+                    size="sm"
+                  >
+                    + Add group
+                  </Button>
+                </div>
+
+                {!groups.length && (
+                  <p className="text-sm text-neutral-600">
+                    No option groups yet.
+                  </p>
+                )}
+
+                {groups.map((g, gi) => (
+                  <div key={g.id} className="rounded-lg border p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-neutral-700">
+                        Option {gi + 1}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => removeGroup(g.id)}
+                        className="rounded-lg h-10 w-10"
+                        aria-label="Remove group"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Group name</Label>
+                      <Input
+                        value={g.name}
+                        onChange={(e) => setGroupName(g.id, e.target.value)}
+                        className="rounded-lg"
+                        placeholder="e.g., Size"
+                        maxLength={LIMITS.optionGroupName}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`req-${g.id}`} className="text-sm">
+                        Required
+                      </Label>
+                      <Switch
+                        id={`req-${g.id}`}
+                        checked={g.required ?? true}
+                        onCheckedChange={() => toggleRequired(g.id)}
+                      />
+                    </div>
+
+                    {/* Header */}
+                    <div className="grid grid-cols-5 gap-2 text-[13px] text-neutral-500 mb-1">
+                      <div className="col-span-3">Name</div>
+                      <div className="col-span-1">Added price</div>
+                      <div className="col-span-1" />
+                    </div>
+
+                    <div className="space-y-2">
+                      {g.values.map((v) => (
+                        <div
+                          key={v.id}
+                          className="grid grid-cols-5 gap-2 items-center"
+                        >
+                          <Input
+                            className="col-span-3 rounded-lg h-10"
+                            value={v.label}
+                            onChange={(e) =>
+                              updateValue(g.id, v.id, { label: e.target.value })
+                            }
+                            placeholder="Option label (e.g., M - Hoodie)"
+                            maxLength={LIMITS.optionValueLabel}
+                          />
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            className="col-span-1 rounded-lg h-10"
+                            value={String(v.price_delta_mad ?? 0)}
+                            onChange={(e) =>
+                              updateValue(g.id, v.id, {
+                                price_delta_mad: Number(e.target.value || 0),
+                              })
+                            }
+                            placeholder="Δ"
+                            title="Price delta relative to base price."
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => removeValue(g.id, v.id)}
+                            className="col-span-1 rounded-lg bg-red-400 h-10 w-10"
+                            aria-label="Remove value"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={() => addValue(g.id)}
+                      size="sm"
+                      className="rounded-lg bg-neutral-100 text-neutral-900 hover:bg-neutral-200"
+                      variant="secondary"
+                    >
+                      + Add value
+                    </Button>
+                  </div>
+                ))}
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* PERSONALIZATION */}
+            <AccordionItem
+              value="personalization"
+              className="rounded-xl border bg-white px-4"
+            >
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Personalization
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Enable</div>
+                  <Switch
+                    id="perso-switch"
+                    checked={persoEnabled}
+                    onCheckedChange={setPersoEnabled}
+                  />
+                </div>
+
+                {persoEnabled && (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-sm">Buyer instructions</Label>
+                      <Textarea
+                        className="rounded-lg shadow-none"
+                        value={persoInstr}
+                        onChange={(e) =>
+                          setPersoInstr(
+                            e.target.value.slice(0, LIMITS.persoInstr)
+                          )
+                        }
+                        placeholder="Tell the buyer what to write (e.g., 'Enter the name to engrave…')"
+                        rows={3}
+                        maxLength={LIMITS.persoInstr}
+                      />
+                      <div className="text-xs text-neutral-500">
+                        {persoInstr.length}/{LIMITS.persoInstr}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">Max characters</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        className="rounded-lg"
+                        value={persoMax}
+                        onChange={(e) => setPersoMax(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="e.g., 80"
+                      />
+                    </div>
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* PROMO */}
+            <AccordionItem
+              value="promo"
+              className="rounded-xl border bg-white px-4"
+            >
+              <AccordionTrigger className="py-4 text-base font-medium">
+                Promo
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Enable promo</div>
+                  <Switch
+                    id="promo-switch"
+                    checked={promoEnabled}
+                    onCheckedChange={setPromoEnabled}
+                  />
+                </div>
+
+                {promoEnabled && (
+                  <>
+                    <label className="block">
+                      <div className="text-sm mb-1">Promo Price (MAD)</div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={promoPrice}
+                        onChange={(e) => setPromoPrice(e.target.value)}
+                        className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
+                        inputMode="numeric"
+                        placeholder="e.g., 199"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="block">
+                        <div className="text-sm mb-1">Promo starts</div>
+                        <input
+                          type="datetime-local"
+                          value={promoStart}
+                          onChange={(e) => setPromoStart(e.target.value)}
+                          className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="text-sm mb-1">Promo ends</div>
+                        <input
+                          type="datetime-local"
+                          value={promoEnd}
+                          onChange={(e) => setPromoEnd(e.target.value)}
+                          className="w-full rounded-lg shadow-none border px-3 py-3 bg-white"
+                        />
+                      </label>
+                    </div>
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
-        <p className="text-xs text-neutral-500">
-          If you set a promo price, both start and end are required.
-        </p>
       </div>
 
-      {/* ——————————— Personalization ——————————— */}
-      <div className="rounded-xl border p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Personalization</div>
+      {/* Bottom sticky actions */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t h-[var(--h-footer)]">
+        <div className="mx-auto max-w-2xl px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full rounded-full bg-black text-white py-3 text-center font-medium disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
         </div>
-
-        <label className="text-sm flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={persoEnabled}
-            onChange={(e) => setPersoEnabled(e.target.checked)}
-          />
-          Enable
-        </label>
-
-        {persoEnabled && (
-          <>
-            <label className="block">
-              <div className="text-sm mb-1">
-                Buyer instructions (shown in sheet)
-              </div>
-              <textarea
-                className="w-full rounded border px-3 py-2"
-                value={persoInstr}
-                onChange={(e) =>
-                  setPersoInstr(e.target.value.slice(0, LIMITS.persoInstr))
-                }
-                placeholder="Tell the buyer what to write (e.g., 'Enter the name to engrave…')"
-                rows={3}
-                maxLength={LIMITS.persoInstr}
-              />
-              <div className="text-xs text-neutral-500 mt-1">
-                {persoInstr.length}/{LIMITS.persoInstr}
-              </div>
-            </label>
-
-            <label className="block">
-              <div className="text-sm mb-1">Max characters</div>
-              <input
-                type="number"
-                min={1}
-                className="w-full rounded border px-3 py-2"
-                value={persoMax}
-                onChange={(e) => setPersoMax(e.target.value)}
-                inputMode="numeric"
-                placeholder="e.g., 80"
-              />
-            </label>
-          </>
-        )}
-      </div>
-
-      <div className="flex gap-8">
-        <button
-          onClick={handleSave}
-          disabled={saving || uploading}
-          className="flex-1 rounded-xl px-4 py-3 bg-black text-white font-medium disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save changes"}
-        </button>
-
-        <Link
-          href={`/product/${pid}`}
-          className="flex-1 text-center rounded-xl px-4 py-3 border font-medium"
-        >
-          Cancel
-        </Link>
       </div>
     </main>
   );

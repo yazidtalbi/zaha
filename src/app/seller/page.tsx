@@ -2,6 +2,7 @@
 "use client";
 
 import RequireAuth from "@/components/RequireAuth";
+import { useRequireShop } from "@/hooks/useRequireShop";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -210,6 +211,9 @@ function SegmentedBar({
 
 /* ---------------- Page ---------------- */
 export default function SellerDashboardPage() {
+  const loading = useRequireShop();
+
+  if (loading) return null; // or a nice loader
   return (
     <RequireAuth>
       <div className="pb-24 pt-4 px-4 max-w-screen-sm mx-auto">

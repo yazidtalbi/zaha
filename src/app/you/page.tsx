@@ -44,13 +44,15 @@ export default function YouPage() {
   const [uid, setUid] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const unread = useUnreadNotifications(); // <-- unread count
+  const [hasShop, setHasShop] = useState<boolean>(false);
+  const unread = useUnreadNotifications();
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
+
       const u = data.user;
       setUid(u?.id ?? null);
       setEmail(u?.email ?? null);
@@ -62,6 +64,14 @@ export default function YouPage() {
           .eq("id", u.id)
           .maybeSingle();
         if (mounted) setProfile((p as Profile) ?? null);
+
+        // Does the user own a shop?
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id")
+          .eq("owner", u.id)
+          .maybeSingle();
+        if (mounted) setHasShop(Boolean(shop?.id));
       }
     })();
     return () => {
@@ -76,6 +86,14 @@ export default function YouPage() {
     await supabase.auth.signOut();
     router.replace("/login");
   };
+
+  // Seller row destination + label
+  const sellerHref = uid
+    ? hasShop
+      ? "/seller"
+      : "/become-seller"
+    : "/login?next=%2Fbecome-seller";
+  const sellerLabel = hasShop ? "Manage your store" : "Become a Zaha seller";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -193,12 +211,12 @@ export default function YouPage() {
         </Row>
       </nav>
 
-      {/* Callout row (seller) */}
+      {/* Seller callout row */}
       <div className="bg-card mt-3">
-        <Row href={uid ? "/seller" : "/login?next=%2Fseller"}>
+        <Row href={sellerHref}>
           <div className="flex items-center gap-3">
             <Store className="h-5 w-5 opacity-80" />
-            <span>Open Zaha Seller</span>
+            <span>{sellerLabel}</span>
           </div>
         </Row>
       </div>

@@ -20,13 +20,34 @@ function clsx(...xs: (string | false | null | undefined)[]) {
 /* -------- simple cross-mount cache (persists while app lives) -------- */
 let TOP_LVL_CAT_CACHE: CategoryCard[] | null = null;
 
+const HERO_STATIC: CategoryCard[] = [
+  { id: "hero-jewelry", name: "Jewelry", href: "/c/jewelry", image: undefined },
+  { id: "hero-art", name: "Art", href: "/c/art", image: undefined },
+  { id: "hero-beauty", name: "Beauty", href: "/c/beauty", image: undefined },
+  {
+    id: "hero-clothing",
+    name: "Clothing",
+    href: "/c/clothing",
+    image: undefined,
+  },
+  { id: "hero-bags", name: "Bags", href: "/c/bags", image: undefined },
+  { id: "hero-baby", name: "Baby", href: "/c/baby", image: undefined },
+  {
+    id: "hero-home-living",
+    name: "Home & Living",
+    href: "/c/home-living",
+    image: undefined,
+  },
+];
+// you can put your final image URLs in the `image` fields above
+
 export default function CategoriesStrip({
   initial,
   title = "Shop by category",
   limit = 24,
   rows = 3,
   lang = "en",
-  /** 'default' keeps card layout; 'minimal' shows pill tags */
+  /** 'default' keeps card layout; 'minimal' shows pill tags; 'hero' shows big renders with label below */
   variant = "default",
   moreHref = "/categories",
 }: {
@@ -35,7 +56,7 @@ export default function CategoriesStrip({
   limit?: number;
   rows?: number;
   lang?: "en" | "fr" | "ar";
-  variant?: "default" | "minimal";
+  variant?: "default" | "minimal" | "hero";
   moreHref?: string;
 }) {
   const [emblaRef] = useEmblaCarousel({
@@ -119,6 +140,153 @@ export default function CategoriesStrip({
   const groups = useMemo(() => chunk(items, rows), [items, rows]);
   const empty = !loading && items.length === 0;
 
+  /* ---------- HERO VARIANT (big render + label below) ---------- */
+  if (variant === "hero") {
+    const visible = useMemo(() => items.slice(0, 7), [items]);
+    const showSkeletons = loading && visible.length === 0;
+
+    return (
+      <section className="py-8">
+        <div ref={emblaRef} className="overflow-visible">
+          <div className="flex items-center gap-10">
+            {(showSkeletons ? Array.from({ length: 7 }) : visible).map(
+              (item, idx) => (
+                <div
+                  key={showSkeletons ? `sk-${idx}` : item!.id}
+                  className="flex flex-col items-center gap-3 shrink-0"
+                >
+                  {/* Placeholder for your SVG / render */}
+                  <div
+                    className={clsx(
+                      "flex h-[120px] w-[120px] items-center justify-center",
+                      "rounded-[32px] bg-sand shadow-[0_10px_30px_rgba(0,0,0,0.06)]",
+                      showSkeletons && "animate-pulse bg-neutral-100"
+                    )}
+                  >
+                    {!showSkeletons && item?.image && (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-[70%] w-[70%] object-contain"
+                        loading="lazy"
+                      />
+                    )}
+
+                    {!showSkeletons && !item?.image && (
+                      <div className="h-10 w-10 rounded-full bg-neutral-300" />
+                    )}
+                  </div>
+
+                  {/* Label under the placeholder */}
+                  <Link
+                    href={item ? item.href : "#"}
+                    prefetch
+                    className={clsx(
+                      "text-sm font-semibold tracking-tight text-ink",
+                      "hover:underline"
+                    )}
+                  >
+                    {item ? item.name : "—"}
+                  </Link>
+                </div>
+              )
+            )}
+
+            {/* See more */}
+            <Link
+              href={moreHref}
+              prefetch
+              className="flex flex-col items-center gap-3 shrink-0"
+            >
+              <button
+                type="button"
+                className="flex h-[120px] w-[120px] items-center justify-center rounded-full border border-neutral-300 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.03)]"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-neutral-300 text-lg">
+                  →
+                </span>
+              </button>
+              <span className="text-sm font-medium text-neutral-700">
+                See more
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ---------- HERO VARIANT (big render + label below, static) ---------- */
+  if (variant === "hero") {
+    const cats = HERO_STATIC; // fixed order, static
+
+    return (
+      <section className="py-6">
+        <div ref={emblaRef} className="overflow-visible">
+          <div className="flex items-center gap-6">
+            {cats.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                prefetch
+                className="group block cursor-pointer shrink-0"
+              >
+                <div className="flex w-[110px] flex-col items-center gap-1">
+                  {/* placeholder for your render */}
+                  <div
+                    className="
+          flex h-[110px] w-[110px] items-center justify-center
+          rounded-[28px] bg-sand
+          shadow-[0_8px_22px_rgba(0,0,0,0.06)]
+        "
+                  >
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-[70%] w-[70%] object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-neutral-300" />
+                    )}
+                  </div>
+
+                  <span className="text-sm font-semibold tracking-tight text-ink text-center">
+                    {item.name}
+                  </span>
+                </div>
+              </Link>
+            ))}
+
+            {/* See more */}
+            <Link
+              href={moreHref}
+              prefetch
+              className="flex w-[110px] flex-col items-center gap-2 shrink-0"
+            >
+              <button
+                type="button"
+                className="
+                flex h-[110px] w-[110px] items-center justify-center
+                rounded-full border border-neutral-300 bg-white
+                shadow-[0_8px_22px_rgba(0,0,0,0.04)]
+              "
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 text-base">
+                  →
+                </span>
+              </button>
+              <span className="text-sm font-medium text-neutral-700">
+                See more
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   /* ---------- MINIMAL VARIANT (pill tags) ---------- */
   if (variant === "minimal") {
     const pills = useMemo(() => items.slice(0, 10), [items]); // stable cap 10
@@ -199,6 +367,8 @@ export default function CategoriesStrip({
     </section>
   );
 }
+
+/* ---------- Card (default variant) ---------- */
 
 function Card({
   name,

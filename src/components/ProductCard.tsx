@@ -161,7 +161,7 @@ export default function ProductCard({
         }}
         className={`block ${className}`}
       >
-        <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99]">
+        <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99] ">
           <div className="flex items-stretch gap-3">
             {/* Image (no overlay, no badges) */}
             <div className="relative shrink-0 w-28 h-28 rounded-xl overflow-hidden bg-neutral-100 sm:w-32 sm:h-32">
@@ -182,14 +182,14 @@ export default function ProductCard({
             {/* Right content */}
             <div className="min-w-0 flex-1 py-1 pr-2">
               {/* Title */}
-              <div className="line-clamp-2 text-[13px] sm:text-[14px] font-semibold leading-snug text-neutral-900">
+              <div className="line-clamp-2 text-[13px] sm:text-[14px] font-medium leading-snug text-neutral-900">
                 {p.title}
               </div>
 
               {/* Rating (optional) */}
               {p.rating_avg && (
                 <div className="mt-1 text-[11px] text-neutral-600">
-                  <span className="font-semibold text-neutral-900">
+                  <span className="font-medium text-neutral-900">
                     {p.rating_avg.toFixed(1)}
                   </span>
                   <span className="ml-1 text-amber-600">★</span>
@@ -203,7 +203,7 @@ export default function ProductCard({
 
               {/* Price row */}
               <div className="mt-2 flex items-center gap-2">
-                <span className="text-[13px] sm:text-[14px] font-semibold text-emerald-700">
+                <span className="text-[13px] sm:text-[14px] font-medium text-emerald-700">
                   {formatMAD(current)}
                 </span>
                 {compareAt && (
@@ -253,7 +253,7 @@ export default function ProductCard({
         className={`block overflow-hidden ${className}`}
       >
         <div className="relative">
-          <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100">
+          <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100 ">
             {imgs[0] ? (
               <img
                 src={imgs[0]}
@@ -275,7 +275,7 @@ export default function ProductCard({
         </div>
 
         <div className="pt-2">
-          <div className="line-clamp-2 text-sm font-normal leading-snug text-neutral-900 truncate">
+          <div className="line-clamp-2 text-sm font-medium leading-snug text-neutral-900 truncate">
             {p.title}
           </div>
         </div>
@@ -343,12 +343,12 @@ export default function ProductCard({
 
         {/* BODY */}
         <div className="pt-3 -space-y-1">
-          <div className="line-clamp-2 text-md font-semibold text-neutral-900 leading-snug">
+          <div className="line-clamp-2 text-md font-medium text-neutral-900 leading-snug">
             {p.title}
           </div>
 
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-md font-semibold text-emerald-700">
+            <span className="text-md font-medium text-emerald-700">
               {formatMAD(current)}
             </span>
             {compareAt && (
@@ -361,7 +361,7 @@ export default function ProductCard({
           {/* Rating + reviews */}
           {!fromshop && p.rating_avg != null && p.rating_avg > 0 && (
             <div className="mt-1 flex items-center gap-1.5 text-md text-neutral-900">
-              <span className="font-semibold">{p.rating_avg.toFixed(1)}</span>
+              <span className="font-medium">{p.rating_avg.toFixed(1)}</span>
               <span className="text-amber-600">★</span>
 
               {p.reviews_count != null && p.reviews_count > 0 && (
@@ -374,9 +374,9 @@ export default function ProductCard({
 
           {/* Orders count */}
           {!fromshop && p.orders_count != null && p.orders_count > 0 && (
-            <div className="mt-1 text-[16px] font-semibold text-neutral-900">
+            <div className="mt-1 text-[16px] font-medium text-neutral-900">
               {fmtOrders(p.orders_count)}{" "}
-              <span className="font-normal">Orders</span>
+              <span className="font-medium">Orders</span>
             </div>
           )}
 

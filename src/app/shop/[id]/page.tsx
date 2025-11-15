@@ -1,7 +1,7 @@
 // app/shop/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
@@ -23,6 +23,8 @@ import {
   ShoppingBag,
   Star,
   X,
+  ChevronLeft,
+  Share2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Image from "next/image";
@@ -66,6 +68,9 @@ type ProductEx = Product & {
 
 type Collection = { id: string; title: string; cover_url: string | null };
 
+// ===== Pagination config =====
+const PAGE_SIZE = 16;
+
 // ================== Page ==================
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
@@ -73,7 +78,14 @@ export default function ShopPage() {
   const shopId = (id ?? "").toString().trim();
 
   const [shop, setShop] = useState<Shop | null>(null);
+
+  // paginated products
   const [items, setItems] = useState<ProductEx[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingPage, setLoadingPage] = useState(false);
+
+  // other shop data
   const [collections, setCollections] = useState<Collection[]>([]);
   const [links, setLinks] = useState<Record<string, string[]>>({}); // product_id -> collection_ids[]
   const [selectedCol, setSelectedCol] = useState<string | null>(null);
@@ -84,6 +96,42 @@ export default function ShopPage() {
     null
   );
   const [isOwner, setIsOwner] = useState(false);
+
+  // sticky header stuff
+  const [showStickyTop, setShowStickyTop] = useState(false);
+  const coverSentinelRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+
+  // load-more sentinel
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const hasHistory = window.history.length > 1;
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      const sameOriginRef = ref && ref.origin === window.location.origin;
+      setCanGoBack(Boolean(hasHistory || sameOriginRef));
+    } catch {
+      setCanGoBack(false);
+    }
+  }, []);
+  const goBack = useCallback(() => {
+    if (canGoBack) router.back();
+    else router.push("/home");
+  }, [canGoBack, router]);
+
+  // observe the cover to toggle sticky header
+  useEffect(() => {
+    const el = coverSentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowStickyTop(!entry.isIntersecting),
+      { rootMargin: "80px 0px 0px 0px", threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   // filters/sort state
   const [sort, setSort] = useState<"new" | "price_asc" | "price_desc">("new");
@@ -141,7 +189,7 @@ export default function ShopPage() {
 
       setCount(total ?? 0);
 
-      // 2) Average rating (simple client-side mean)
+      // 2) Average rating
       const { data: ratings } = await supabase
         .from("reviews")
         .select("rating")
@@ -156,8 +204,11 @@ export default function ShopPage() {
     })();
   }, [shopId]);
 
+  // ---- INITIAL SHOP + AUX DATA, then first page of products ----
   useEffect(() => {
     if (!shopId) return;
+    let cancelled = false;
+
     (async () => {
       setLoading(true);
 
@@ -169,34 +220,31 @@ export default function ShopPage() {
         )
         .eq("id", shopId)
         .maybeSingle();
+
+      if (cancelled) return;
       setShop((s as any) ?? null);
       if (!s) {
         setLoading(false);
         return;
       }
 
-      // 2) products
-      const { data: prods } = await supabase
-        .from("products")
-        .select("*")
-        .eq("shop_id", shopId)
-        .eq("active", true)
-        .order("created_at", { ascending: false });
-      const products = (prods as any[]) ?? [];
-      setItems(products);
-
-      // 3) collections
+      // 2) collections
       const { data: cols } = await supabase
         .from("collections")
         .select("id,title,cover_url")
         .eq("shop_id", shopId)
         .order("title");
+
+      if (cancelled) return;
       setCollections((cols as any[]) ?? []);
 
-      // 4) product↔collection links
+      // 3) product↔collection links
       const { data: pcs } = await supabase
         .from("product_collections")
-        .select("product_id, collection_id");
+        .select("product_id, collection_id")
+        .eq("shop_id", shopId);
+
+      if (cancelled) return;
       const map: Record<string, string[]> = {};
       (pcs as any[])?.forEach((l) => {
         if (!map[l.product_id]) map[l.product_id] = [];
@@ -204,10 +252,18 @@ export default function ShopPage() {
       });
       setLinks(map);
 
-      // 5) lightweight stats
+      // reset pagination, then fetch first page
+      setItems([]);
+      setPage(0);
+      setHasMore(true);
+
+      await fetchProductsPage({ pageIndex: 0, replace: true });
+
+      // lightweight stats (based on currently known products; acceptable as a hint)
       let sales = 0;
-      if (products.length) {
-        const ids = products.map((p) => p.id);
+      const productsNow = items.length ? items : []; // after first page, items will be filled
+      if (productsNow.length) {
+        const ids = productsNow.map((p) => p.id);
         const { count } = await supabase
           .from("orders")
           .select("id", { count: "exact", head: true })
@@ -225,12 +281,74 @@ export default function ShopPage() {
           )
         ) || 1;
 
-      setStats({ sales, years });
-      setLoading(false);
+      if (!cancelled) {
+        setStats({ sales, years });
+        setLoading(false);
+      }
     })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopId]);
 
-  // ✅ single memo for both search & collection filter
+  // ---- Pagination fetcher ----
+  const fetchProductsPage = useCallback(
+    async ({
+      pageIndex,
+      replace = false,
+    }: {
+      pageIndex: number;
+      replace?: boolean;
+    }) => {
+      if (!shopId || loadingPage) return;
+      setLoadingPage(true);
+
+      const from = pageIndex * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("shop_id", shopId)
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      const list = (data as ProductEx[]) ?? [];
+      if (error) {
+        // keep going gracefully
+        setLoadingPage(false);
+        return;
+      }
+
+      setItems((prev) => (replace ? list : [...prev, ...list]));
+      setHasMore(list.length === PAGE_SIZE); // if fewer than PAGE_SIZE, we've reached the end
+      setPage(pageIndex);
+      setLoadingPage(false);
+    },
+    [shopId, loadingPage]
+  );
+
+  // infinite scroll via IntersectionObserver on the sentinel
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first?.isIntersecting && hasMore && !loadingPage) {
+          fetchProductsPage({ pageIndex: page + 1, replace: false });
+        }
+      },
+      { rootMargin: "800px 0px 0px 0px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [page, hasMore, loadingPage, fetchProductsPage]);
+
+  // ✅ unified filtered+sorted view over loaded pages
   const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase();
 
@@ -248,11 +366,9 @@ export default function ShopPage() {
       return byText && byCol && byPromo && byMin && byMax;
     });
 
-    // sort
     out = out.slice().sort((a, b) => {
       if (sort === "price_asc") return (a.price_mad ?? 0) - (b.price_mad ?? 0);
       if (sort === "price_desc") return (b.price_mad ?? 0) - (a.price_mad ?? 0);
-      // "new" (default): latest first
       return (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -279,14 +395,113 @@ export default function ShopPage() {
     items.find((p) => Array.isArray(p.photos) && p.photos[0])?.photos?.[0];
 
   const goToCollection = (cid: string) => {
-    // Navigate to collection page under this shop
     router.push(`/shop/${shopId}/collection/${cid}`);
+  };
+
+  // share helper
+  const shareShop = async () => {
+    const url = window.location.href;
+    const title = shop?.title ?? "Zaha shop";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {}
+    }
   };
 
   return (
     <main className="pb-24 overflow-visible ">
+      {/* Sticky top title bar */}
+      <div
+        className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
+          showStickyTop
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 -translate-y-4 pointer-events-none"
+        }`}
+      >
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={goBack}
+              className="h-8 w-8 shrink-0 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+              aria-label="Go back"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            {/* Avatar */}
+            <div className="h-10 w-10 rounded-md overflow-hidden bg-neutral-200 shrink-0">
+              {shop?.avatar_url ? (
+                <img
+                  src={shop.avatar_url}
+                  alt={shop?.title ?? ""}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-xs font-semibold text-neutral-700">
+                  {shop?.title?.slice(0, 1).toUpperCase() ?? "S"}
+                </div>
+              )}
+            </div>
+
+            {/* Title + rating */}
+            <div className="min-w-0">
+              <div className="flex space-x-2">
+                <div className="text-md font-semibold truncate">
+                  {shop?.title ?? "Shop"}
+                </div>
+                {shop?.is_verified && (
+                  <Image
+                    src="/icons/verified_zaha.svg"
+                    alt="Verified"
+                    width={16}
+                    height={16}
+                    className="opacity-90"
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-sm">
+                {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
+                <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                <span className="text-xs text-neutral-500">({count ?? 0})</span>
+              </div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => searchInputRef.current?.focus()}
+                className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                aria-label="Search in shop"
+                title="Search in shop"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={shareShop}
+                className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                aria-label="Share shop"
+                title="Share shop"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ——— COVER ——— */}
-      {loading ? <CoverSkeleton /> : <Cover cover={cover} />}
+      <div ref={coverSentinelRef}>
+        {loading ? <CoverSkeleton /> : <Cover cover={cover} />}
+      </div>
 
       {/* ——— HEADER (avatar overlaps cover) ——— */}
       <section className="-mt-12 px-4 relative ">
@@ -350,7 +565,12 @@ export default function ShopPage() {
         {loading ? (
           <SearchBarSkeleton />
         ) : (
-          <SearchBar q={q} setQ={setQ} itemsLen={items.length} />
+          <SearchBar
+            q={q}
+            setQ={setQ}
+            itemsLen={items.length}
+            inputRef={searchInputRef}
+          />
         )}
       </section>
 
@@ -370,7 +590,7 @@ export default function ShopPage() {
 
       {/* ——— PRODUCT GRID ——— */}
       <section className="px-4 mt-4 grid grid-cols-2 gap-3">
-        {loading ? (
+        {loading && items.length === 0 ? (
           <ProductGridSkeleton />
         ) : filteredProducts.length ? (
           filteredProducts.map((p) => (
@@ -382,6 +602,25 @@ export default function ShopPage() {
           </div>
         )}
       </section>
+
+      {/* ——— LOAD MORE / SENTINEL ——— */}
+      <div className="px-4 mt-4 mb-6">
+        {/* sentinel for intersection observer */}
+        <div ref={loadMoreRef} className="h-2" />
+        {hasMore && (
+          <div className="grid place-items-center mt-2">
+            <button
+              disabled={loadingPage}
+              onClick={() =>
+                fetchProductsPage({ pageIndex: page + 1, replace: false })
+              }
+              className="text-sm rounded-full border border-neutral-200 px-4 py-2 bg-white active:scale-[0.98]"
+            >
+              {loadingPage ? "Loading…" : "Load more"}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* <ShopReviewsStrip shopId={shop?.id!} /> */}
     </main>
@@ -582,15 +821,18 @@ function SearchBar({
   q,
   setQ,
   itemsLen,
+  inputRef,
 }: {
   q: string;
   setQ: (v: string) => void;
   itemsLen: number;
+  inputRef?: React.RefObject<HTMLInputElement>;
 }) {
   return (
     <div className="relative">
       <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-ink/50" />
       <Input
+        ref={inputRef as any}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         className="h-12 pl-12 pr-12 text-base rounded-full border bg-transparent"

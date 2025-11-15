@@ -2,11 +2,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
-import { Filter as FilterIcon, X } from "lucide-react";
 import EmptyState from "@/components/EmptyState";
 import {
   Sheet,
@@ -56,11 +55,13 @@ type RecentView = {
   at: number;
 };
 
+const PAGE_SIZE = 24;
+
 export default function SearchPage() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // ===== COMMITTED (URL) =====
+  /* ==================== URL-COMMITTED STATE ==================== */
   const committed = useMemo(() => {
     const chips: Chips = {
       under250: sp.get("under250") === "1",
@@ -75,7 +76,8 @@ export default function SearchPage() {
       sort: (sp.get("sort") ?? "new") as "new" | "price-asc" | "price-desc",
       chips,
     };
-  }, [sp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp?.toString()]); // re-compute when URL changes
 
   const hasActiveQuery =
     !!committed.q ||
@@ -84,7 +86,7 @@ export default function SearchPage() {
     committed.sort !== "new" ||
     Object.values(committed.chips).some(Boolean);
 
-  // ===== DRAFT UI =====
+  /* ==================== DRAFT (UI) STATE ==================== */
   const [q, setQ] = useState(committed.q);
   const [city, setCity] = useState(committed.city);
   const [max, setMax] = useState(committed.max);
@@ -107,15 +109,16 @@ export default function SearchPage() {
     committed.chips,
   ]);
 
-  // ===== RESULTS FETCHING =====
+  /* ==================== RESULTS & PAGINATION ==================== */
   const [items, setItems] = useState<Item[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
-  const pageSize = 24;
+  const pageRef = useRef(0); // guard for race conditions
+  pageRef.current = page;
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    // focus after mount
     inputRef.current?.focus();
   }, []);
 
@@ -131,9 +134,17 @@ export default function SearchPage() {
 
   async function load(reset: boolean) {
     if (!hasActiveQuery) return;
+
     setLoading(true);
     try {
-      let query = supabase.from("products").select("*").eq("active", true);
+      let query = supabase
+        .from("products")
+        .select(
+          // select only what ProductCard needs
+          "id,title,photos,price_mad,city,active,created_at,tags,on_sale",
+          { count: "exact" }
+        )
+        .eq("active", true);
 
       if (committed.q) query = query.ilike("title", `%${committed.q}%`);
       if (committed.city) query = query.eq("city", committed.city);
@@ -153,9 +164,10 @@ export default function SearchPage() {
       if (committed.sort === "price-desc")
         query = query.order("price_mad", { ascending: false });
 
-      const from = page * pageSize;
-      const to = from + pageSize - 1;
-      const { data, error } = await query.range(from, to);
+      const from = pageRef.current * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, error, count } = await query.range(from, to);
       if (error) throw error;
 
       setItems((prev) =>
@@ -163,6 +175,7 @@ export default function SearchPage() {
           ? ((data as Item[]) ?? [])
           : [...prev, ...((data as Item[]) ?? [])]
       );
+      if (reset) setTotal(count ?? 0);
     } catch (e) {
       console.error(e);
     } finally {
@@ -171,12 +184,20 @@ export default function SearchPage() {
   }
 
   useEffect(() => {
+    setPage(0); // reset page when filters change
+    setItems([]);
+    setTotal(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  useEffect(() => {
+    if (!hasActiveQuery) return;
+    // when page changes or filters changed (reseted above), load
     load(page === 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey, page, hasActiveQuery]);
+  }, [page, paramsKey, hasActiveQuery]);
 
-  // ===== URL COMMIT =====
-  // 1) Replace your pushUrlFromDrafts with an override-friendly version:
+  /* ==================== URL COMMIT / CLEAR ==================== */
   function pushUrlFromDrafts(
     resetPage = true,
     overrides?: Partial<{
@@ -204,7 +225,6 @@ export default function SearchPage() {
     if (resetPage) setPage(0);
   }
 
-  // **Clear all** → default state (discovery)
   function clearAll() {
     setQ("");
     setCity("");
@@ -216,16 +236,29 @@ export default function SearchPage() {
       handmade: false,
       personalized: false,
     });
-
-    // 🔥 instantly clear current results
     setItems([]);
-
-    // reset pagination and return to default
     setPage(0);
+    setTotal(null);
     router.replace("/search");
   }
 
-  // ===== DISCOVERY DATA =====
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    pushUrlFromDrafts(true);
+  }
+
+  /* ==================== AUTO-APPLY QUICK CHIPS ==================== */
+  useEffect(() => {
+    const t = setTimeout(() => pushUrlFromDrafts(true, { chips }), 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chips]);
+
+  function toggleChipDraft(key: keyof Chips) {
+    setChips((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  /* ==================== DISCOVERY DATA ==================== */
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [popularSearches, setPopularSearches] = useState<string[]>(
     POPULAR_SEARCHES_FALLBACK
@@ -246,17 +279,18 @@ export default function SearchPage() {
       try {
         const { data, error } = await supabase
           .from("search_popular")
-          .select("term")
+          .select("term,rank")
           .order("rank", { ascending: true })
           .limit(10);
         if (!error && data?.length)
-          setPopularSearches(data.map((d: any) => d.term));
+          setPopularSearches((data as any[]).map((d) => d.term));
       } catch {}
     })();
   }, []);
 
-  // ===== SHEET =====
+  /* ==================== SHEET OPEN STATE ==================== */
   const [sheetOpen, setSheetOpen] = useState(false);
+
   const leftCount =
     (committed.sort !== "new" ? 1 : 0) +
     (committed.city ? 1 : 0) +
@@ -264,14 +298,44 @@ export default function SearchPage() {
   const rightCount = Object.values(committed.chips).filter(Boolean).length;
   const selectedCount = leftCount + rightCount;
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    pushUrlFromDrafts(true);
-  }
+  /* ==================== INFINITE SCROLL SENTINEL ==================== */
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const el = sentinelRef.current;
 
-  function toggleChipDraft(key: keyof Chips) {
-    setChips((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
+    const io = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        const canLoadMore =
+          !loading &&
+          hasActiveQuery &&
+          items.length > 0 &&
+          items.length % PAGE_SIZE === 0 &&
+          (total === null || items.length < total);
+
+        if (first.isIntersecting && canLoadMore) {
+          setPage((n) => n + 1);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+
+    io.observe(el);
+    return () => io.unobserve(el);
+  }, [loading, items.length, hasActiveQuery, total]);
+
+  /* ==================== KEYBOARD: ESC TO CLEAR ==================== */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && document.activeElement === inputRef.current) {
+        clearAll();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showDiscovery = !hasActiveQuery;
 
@@ -283,45 +347,38 @@ export default function SearchPage() {
         className="p-4 sticky top-0 bg-neutral-50 z-10"
       >
         <div className="relative">
-          <div className="flex items-center gap-2 rounded-full border bg-white pl-10 pr-24 h-11 ">
-            <Search className="absolute left-3 h-4 w-4 opacity-60" />
+          <div className="flex items-center gap-2 rounded-full border bg-white pl-10 pr-2 h-11">
+            <SearchIcon className="absolute left-3 h-4 w-4 opacity-60" />
             <input
               ref={inputRef}
+              aria-label="Search products"
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search handmade goods…"
               className="flex-1 outline-none text-sm placeholder:text-neutral-400 bg-transparent"
             />
-
-            {/* Clear X (only when there is text) */}
-            {q.trim().length > 0 && (
+            {/* Clear X (only when there is text/filters) */}
+            {(q.trim().length > 0 || hasActiveQuery) && (
               <button
                 type="button"
                 onClick={clearAll}
                 aria-label="Clear search"
-                className="absolute right-2 top-1.5 h-9 w-9 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
+                className="h-9 w-9 grid place-items-center rounded-full text-neutral-500 hover:bg-neutral-100"
               >
                 <X size={16} />
               </button>
             )}
-
-            {/* <button
-              type="submit"
-              className="absolute right-1 top-1 rounded-full px-4 h-10 text-sm bg-black text-white"
-            >
-              Search
-            </button> */}
           </div>
         </div>
 
         {/* Filters row */}
-        <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar pr-4">
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <button
                 type="button"
-                className="relative h-9  grid place-items-center rounded-full border bg-transparent min-w-14"
+                className="relative h-9 grid place-items-center rounded-full border bg-white px-3 shrink-0"
                 aria-label="Filters"
               >
                 <SlidersHorizontal size={16} />
@@ -350,6 +407,7 @@ export default function SearchPage() {
                     ].map((srt) => (
                       <button
                         key={srt.v}
+                        type="button"
                         onClick={() => setSort(srt.v as typeof sort)}
                         className={`rounded-full border px-3 py-2 text-sm ${
                           sort === srt.v
@@ -378,6 +436,7 @@ export default function SearchPage() {
                     ].map((c) => (
                       <button
                         key={c || "all"}
+                        type="button"
                         onClick={() => setCity(c)}
                         className={`rounded-full border px-3 py-2 text-sm ${
                           city === c
@@ -407,6 +466,7 @@ export default function SearchPage() {
               <SheetFooter className="mt-4">
                 <div className="flex w-full items-center justify-between">
                   <button
+                    type="button"
                     onClick={() => {
                       setSort("new");
                       setCity("");
@@ -418,6 +478,7 @@ export default function SearchPage() {
                   </button>
                   <SheetClose asChild>
                     <button
+                      type="button"
                       onClick={() => pushUrlFromDrafts(true)}
                       className="rounded-full bg-black text-white px-4 py-2 text-sm"
                     >
@@ -429,28 +490,79 @@ export default function SearchPage() {
             </SheetContent>
           </Sheet>
 
+          {/* Quick filters — auto-apply */}
           {QUICK_FILTERS.map((f) => (
             <button
               key={f.key}
               type="button"
               onClick={() => toggleChipDraft(f.key)}
-              className={`rounded-full border px-3 py-2 text-sm whitespace-nowrap ${
+              className={`shrink-0 rounded-full border px-3 py-2 text-sm whitespace-nowrap ${
                 chips[f.key] ? "bg-black text-white border-black" : "bg-white"
               }`}
             >
               {f.label}
             </button>
           ))}
-
-          <button
-            type="button"
-            onClick={() => pushUrlFromDrafts(true)}
-            className="ml-1 rounded-full border bg-white px-3 py-2 text-sm"
-            aria-label="Apply quick filters"
-          >
-            Apply
-          </button>
         </div>
+
+        {/* Active filters as removable pills */}
+        {hasActiveQuery && (
+          <div className="px-0 mt-2 flex flex-wrap gap-2">
+            {committed.city && (
+              <button
+                type="button"
+                onClick={() => pushUrlFromDrafts(true, { city: "" })}
+                className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1.5 text-xs"
+              >
+                City: {committed.city} <X size={12} />
+              </button>
+            )}
+            {committed.max && (
+              <button
+                type="button"
+                onClick={() => pushUrlFromDrafts(true, { max: "" })}
+                className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1.5 text-xs"
+              >
+                Max: MAD {committed.max} <X size={12} />
+              </button>
+            )}
+            {committed.sort !== "new" && (
+              <button
+                type="button"
+                onClick={() => pushUrlFromDrafts(true, { sort: "new" })}
+                className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1.5 text-xs"
+              >
+                {committed.sort === "price-asc" ? "Price ↑" : "Price ↓"}{" "}
+                <X size={12} />
+              </button>
+            )}
+            {Object.entries(committed.chips).map(([k, v]) =>
+              v ? (
+                <button
+                  type="button"
+                  key={k}
+                  onClick={() =>
+                    pushUrlFromDrafts(true, {
+                      chips: { ...committed.chips, [k]: false } as Chips,
+                    })
+                  }
+                  className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1.5 text-xs"
+                >
+                  {QUICK_FILTERS.find((qf) => qf.key === k)?.label}
+                  <X size={12} />
+                </button>
+              ) : null
+            )}
+
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-xs underline ml-1"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </form>
 
       {/* DISCOVERY */}
@@ -480,14 +592,6 @@ export default function SearchPage() {
                         />
                       ) : null}
                     </div>
-                    {/* <div className="p-2  text-left">
-                      <div className="text-xs line-clamp-2 font-semibold truncate">
-                        {v.title}
-                      </div>
-                      <div className="text-xs mt-1 text-neutral-500">
-                        MAD {v.price_mad}
-                      </div>
-                    </div> */}
                   </button>
                 ))}
               </div>
@@ -504,8 +608,8 @@ export default function SearchPage() {
                 <button
                   key={term}
                   onClick={() => {
-                    setQ(term); // for immediate visual feedback
-                    pushUrlFromDrafts(true, { q: term }); // commit using the new term
+                    setQ(term);
+                    pushUrlFromDrafts(true, { q: term });
                   }}
                   className="w-full text-left rounded-xl bg-white px-4 py-3 text-sm hover:bg-neutral-100"
                 >
@@ -519,12 +623,30 @@ export default function SearchPage() {
         // RESULTS
         <section className="px-4 space-y-2">
           <div className="text-xs text-neutral-500">
-            {loading
+            {loading && items.length === 0
               ? "Searching…"
-              : `${items.length} item${items.length !== 1 ? "s" : ""}`}
+              : total !== null
+                ? `${total} result${total !== 1 ? "s" : ""}`
+                : `${items.length} item${items.length !== 1 ? "s" : ""}`}
           </div>
 
-          {!loading && items.length === 0 ? (
+          {/* First-page skeletons */}
+          {loading && items.length === 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl overflow-hidden border bg-white"
+                >
+                  <div className="h-[140px] bg-neutral-100 animate-pulse" />
+                  <div className="p-2 space-y-2">
+                    <div className="h-3 bg-neutral-100 rounded animate-pulse" />
+                    <div className="h-3 w-2/3 bg-neutral-100 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !loading && items.length === 0 ? (
             <EmptyState q={committed.q} />
           ) : (
             <>
@@ -534,15 +656,15 @@ export default function SearchPage() {
                 ))}
               </div>
 
-              <div className="py-4">
-                <button
-                  disabled={loading}
-                  onClick={() => setPage((n) => n + 1)}
-                  className="w-full rounded-full border bg-white px-4 py-2 text-sm"
-                >
-                  {loading ? "Loading…" : "Load more"}
-                </button>
-              </div>
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} className="h-8" />
+
+              {/* Optional loader at bottom while fetching more */}
+              {loading && items.length > 0 && (
+                <div className="py-4 text-center text-sm text-neutral-500">
+                  Loading…
+                </div>
+              )}
             </>
           )}
         </section>

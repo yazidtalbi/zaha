@@ -1,67 +1,94 @@
 "use client";
+
+import { useState, useEffect } from "react";
+import { Heart } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import { useEffect, useState } from "react";
+import { useFavorites } from "@/hooks/useFavorites";
 
-export default function FavButton({ productId }: { productId: string }) {
-  const [liked, setLiked] = useState(false);
+export default function FavButton({
+  productId,
+  shopOwner,
+  className = "",
+  size = 18,
+}: {
+  productId: string;
+  shopOwner?: string | null;
+  className?: string;
+  size?: number;
+}) {
+  const { favorites, uid, toggleFavorite } = useFavorites();
   const [busy, setBusy] = useState(false);
+  const on = favorites.has(productId);
 
+  // Load initial liked state ONCE per user session
   useEffect(() => {
     let ignore = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!uid) return;
       const { data } = await supabase
         .from("favorites")
         .select("product_id")
+        .eq("user_id", uid)
         .eq("product_id", productId)
         .maybeSingle();
-      if (!ignore) setLiked(!!data);
+      if (!ignore && !!data && !on) toggleFavorite(productId);
     })();
     return () => {
       ignore = true;
     };
-  }, [productId]);
+  }, [uid, productId]);
 
   async function toggle() {
     if (busy) return;
     setBusy(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+
+    // user not logged in → ask login only once
+    if (!uid) {
       window.location.href = "/login";
       return;
     }
 
-    if (liked) {
-      const { error } = await supabase
-        .from("favorites")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("product_id", productId);
-      if (!error) setLiked(false);
-    } else {
-      const { error } = await supabase
-        .from("favorites")
-        .insert({ user_id: user.id, product_id: productId });
-      if (!error) setLiked(true);
+    // Prevent favoriting own product (no need to re-fetch)
+    if (shopOwner && shopOwner === uid) {
+      toast.error("You can’t favorite your own product.");
+      setBusy(false);
+      return;
     }
-    setBusy(false);
+
+    try {
+      if (on) {
+        await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", uid)
+          .eq("product_id", productId);
+        toggleFavorite(productId);
+        toast("Removed");
+      } else {
+        await supabase
+          .from("favorites")
+          .insert({ user_id: uid, product_id: productId });
+        toggleFavorite(productId);
+        toast.success("Added ❤️");
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <button
-      aria-label={liked ? "Remove from favorites" : "Add to favorites"}
-      onClick={toggle}
-      className={`absolute top-2 right-2 h-8 w-8 grid place-items-center rounded-full
-                  ${
-                    liked ? "bg-rose-500 text-white" : "bg-white/90 text-black"
-                  }`}
+      type="button"
+      disabled={busy}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      }}
+      className={`grid place-items-center active:scale-[0.98] disabled:opacity-60 ${className}`}
     >
-      {liked ? "♥" : "♡"}
+      <Heart size={size} className={on ? "fill-current" : ""} />
     </button>
   );
 }
