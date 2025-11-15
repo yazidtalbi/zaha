@@ -16,15 +16,20 @@ import {
 
 import ShopReviewsStrip from "@/components/reviews/ShopReviewsStrip";
 import {
-  CheckCircle2,
-  Clock,
   MapPin,
   Search,
-  ShoppingBag,
   Star,
   X,
   ChevronLeft,
   Share2,
+  Phone,
+  MessageCircle,
+  Facebook,
+  Instagram,
+  Globe,
+  Mail,
+  Link2,
+  Zap,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Image from "next/image";
@@ -35,8 +40,15 @@ import {
 } from "@radix-ui/react-popover";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 
-// ================== Types (unchanged) ==================
+// ================== Types ==================
 type Shop = {
   id: string;
   title: string;
@@ -47,6 +59,8 @@ type Shop = {
   avatar_url: string | null;
   cover_urls: string[] | null;
   created_at?: string | null;
+  custom_commissions?: boolean | null;
+  orders_count?: number | null; // 👈
 };
 
 type Product = {
@@ -71,6 +85,24 @@ type Collection = { id: string; title: string; cover_url: string | null };
 // ===== Pagination config =====
 const PAGE_SIZE = 16;
 
+function WhatsAppGlyph(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 740 740"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+      fill="#3b302f"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M630.056 107.658C560.727 38.271 468.525.039 370.294 0 167.891 0 3.16 164.668 3.079 367.072c-.027 64.699 16.883 127.855 49.016 183.523L0 740.824l194.666-51.047c53.634 29.244 114.022 44.656 175.481 44.682h.151c202.382 0 367.128-164.689 367.21-367.094.039-98.088-38.121-190.32-107.452-259.707m-259.758 564.8h-.125c-54.766-.021-108.483-14.729-155.343-42.529l-11.146-6.613-115.516 30.293 30.834-112.592-7.258-11.543c-30.552-48.58-46.689-104.729-46.665-162.379C65.146 198.865 202.065 62 370.419 62c81.521.031 158.154 31.81 215.779 89.482s89.342 134.332 89.311 215.859c-.07 168.242-136.987 305.117-305.211 305.117m167.415-228.514c-9.176-4.591-54.286-26.782-62.697-29.843-8.41-3.061-14.526-4.591-20.644 4.592-6.116 9.182-23.7 29.843-29.054 35.964-5.351 6.122-10.703 6.888-19.879 2.296-9.175-4.591-38.739-14.276-73.786-45.526-27.275-24.32-45.691-54.36-51.043-63.542-5.352-9.183-.569-14.148 4.024-18.72 4.127-4.11 9.175-10.713 13.763-16.07 4.587-5.356 6.116-9.182 9.174-15.303 3.059-6.122 1.53-11.479-.764-16.07-2.294-4.591-20.643-49.739-28.29-68.104-7.447-17.886-15.012-15.466-20.644-15.746-5.346-.266-11.469-.323-17.585-.323-6.117 0-16.057 2.296-24.468 11.478-8.41 9.183-32.112 31.374-32.112 76.521s32.877 88.763 37.465 94.885c4.587 6.122 64.699 98.771 156.741 138.502 21.891 9.45 38.982 15.093 52.307 19.323 21.981 6.979 41.983 5.994 57.793 3.633 17.628-2.633 54.285-22.19 61.932-43.616 7.646-21.426 7.646-39.791 5.352-43.617-2.293-3.826-8.41-6.122-17.585-10.714"
+      />
+    </svg>
+  );
+}
+
 // ================== Page ==================
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
@@ -88,7 +120,6 @@ export default function ShopPage() {
   // other shop data
   const [collections, setCollections] = useState<Collection[]>([]);
   const [links, setLinks] = useState<Record<string, string[]>>({}); // product_id -> collection_ids[]
-  const [selectedCol, setSelectedCol] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -105,6 +136,11 @@ export default function ShopPage() {
 
   // load-more sentinel
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // contact drawer
+  const [contactOpen, setContactOpen] = useState(false);
+
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -216,7 +252,7 @@ export default function ShopPage() {
       const { data: s } = await supabase
         .from("shops")
         .select(
-          "id,title,bio,is_verified, city,owner,avatar_url,cover_urls,created_at"
+          "id,title,bio,is_verified,city,owner,avatar_url,cover_urls,created_at,custom_commissions,orders_count"
         )
         .eq("id", shopId)
         .maybeSingle();
@@ -238,13 +274,20 @@ export default function ShopPage() {
       if (cancelled) return;
       setCollections((cols as any[]) ?? []);
 
-      // 3) product↔collection links
+      // 3) product↔collection links (correct join)
       const { data: pcs } = await supabase
         .from("product_collections")
-        .select("product_id, collection_id")
-        .eq("shop_id", shopId);
+        .select(
+          `
+    product_id,
+    collection_id,
+    products!inner(shop_id)
+  `
+        )
+        .eq("products.shop_id", shopId);
 
       if (cancelled) return;
+
       const map: Record<string, string[]> = {};
       (pcs as any[])?.forEach((l) => {
         if (!map[l.product_id]) map[l.product_id] = [];
@@ -259,18 +302,7 @@ export default function ShopPage() {
 
       await fetchProductsPage({ pageIndex: 0, replace: true });
 
-      // lightweight stats (based on currently known products; acceptable as a hint)
-      let sales = 0;
-      const productsNow = items.length ? items : []; // after first page, items will be filled
-      if (productsNow.length) {
-        const ids = productsNow.map((p) => p.id);
-        const { count } = await supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .in("product_id", ids)
-          .eq("status", "delivered");
-        sales = count ?? 0;
-      }
+      // compute "years on Zaha" from shop.created_at
       const created = (s as any)?.created_at ?? new Date().toISOString();
       const years =
         Math.max(
@@ -282,7 +314,11 @@ export default function ShopPage() {
         ) || 1;
 
       if (!cancelled) {
-        setStats({ sales, years });
+        // sales will be filled by another effect once products are loaded
+        setStats((prev) => ({
+          sales: prev?.sales ?? 0,
+          years,
+        }));
         setLoading(false);
       }
     })();
@@ -318,13 +354,12 @@ export default function ShopPage() {
 
       const list = (data as ProductEx[]) ?? [];
       if (error) {
-        // keep going gracefully
         setLoadingPage(false);
         return;
       }
 
       setItems((prev) => (replace ? list : [...prev, ...list]));
-      setHasMore(list.length === PAGE_SIZE); // if fewer than PAGE_SIZE, we've reached the end
+      setHasMore(list.length === PAGE_SIZE);
       setPage(pageIndex);
       setLoadingPage(false);
     },
@@ -348,14 +383,40 @@ export default function ShopPage() {
     return () => obs.disconnect();
   }, [page, hasMore, loadingPage, fetchProductsPage]);
 
+  // ---- Compute sales once we know which products belong to this shop ----
+  useEffect(() => {
+    if (!shopId || !items.length) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const ids = items.map((p) => p.id);
+
+      const { count, error } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .in("product_id", ids)
+        .eq("status", "delivered");
+
+      if (cancelled) return;
+
+      setStats((prev) => ({
+        years: prev?.years ?? 1,
+        sales: error ? (prev?.sales ?? 0) : (count ?? 0),
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shopId, items]);
+
   // ✅ unified filtered+sorted view over loaded pages
   const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase();
 
     let out = items.filter((p) => {
       const byText = !term || p.title.toLowerCase().includes(term);
-      const byCol =
-        !selectedCol || (links[p.id]?.includes(selectedCol) ?? false);
 
       const byPromo = !onSaleOnly || isPromo(p);
 
@@ -363,7 +424,7 @@ export default function ShopPage() {
       const byMin = priceRange.min == null || price >= priceRange.min;
       const byMax = priceRange.max == null || price <= priceRange.max;
 
-      return byText && byCol && byPromo && byMin && byMax;
+      return byText && byPromo && byMin && byMax;
     });
 
     out = out.slice().sort((a, b) => {
@@ -375,19 +436,106 @@ export default function ShopPage() {
     });
 
     return out;
-  }, [
-    items,
-    q,
-    selectedCol,
-    links,
-    onSaleOnly,
-    priceRange.min,
-    priceRange.max,
-    sort,
-  ]);
+  }, [items, q, onSaleOnly, priceRange.min, priceRange.max, sort]);
+
+  function CollectionBoardCard({
+    collection,
+    products,
+  }: {
+    collection: Collection;
+    products: ProductEx[];
+  }) {
+    const count = products.length;
+
+    // first 3 product photos
+    const thumbs = products
+      .map((p) => p.photos?.[0])
+      .filter(Boolean) as string[];
+
+    const primary = thumbs[0] || collection.cover_url || null;
+    const secondary = thumbs[1] || null;
+    const tertiary = thumbs[2] || null;
+
+    const abbr =
+      collection.title?.trim()?.[0] != null
+        ? collection.title.trim()[0].toUpperCase()
+        : "Z";
+
+    return (
+      <div className="inline-block w-full">
+        {/* Card */}
+        <div className="rounded-lg border border-neutral-200 bg-white p-3">
+          <div className="grid grid-cols-12 gap-3 items-stretch">
+            {/* LEFT SQUARE (real height via aspect-square) */}
+            <div className="col-span-8">
+              <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-neutral-100">
+                {primary ? (
+                  <img
+                    src={primary}
+                    alt={collection.title}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-2xl font-semibold text-neutral-500">
+                    {abbr}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN – matches height perfectly */}
+            <div className="col-span-4 flex flex-col gap-3">
+              <div className="relative flex-1 overflow-hidden rounded-lg bg-neutral-100">
+                {secondary && (
+                  <img
+                    src={secondary}
+                    alt={`${collection.title} secondary`}
+                    className="h-full w-full object-cover"
+                  />
+                )}
+              </div>
+              <div className="relative flex-1 overflow-hidden rounded-lg bg-neutral-100">
+                {tertiary && (
+                  <img
+                    src={tertiary}
+                    alt={`${collection.title} tertiary`}
+                    className="h-full w-full object-cover"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Text under card */}
+        <div className="mt-3">
+          <p className="text-sm font-semibold leading-tight truncate text-ink">
+            {collection.title}
+          </p>
+          <p className="text-xs text-neutral-500">
+            {count} item{count !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ group products by collection for the "categories" section
+  const collectionSections = useMemo(
+    () =>
+      collections
+        .map((c) => ({
+          collection: c,
+          products: items.filter((p) => (links[p.id] ?? []).includes(c.id)),
+        }))
+        .filter((section) => section.products.length > 0),
+    [collections, items, links]
+  );
 
   if (!shopId) return <main className="p-4">Invalid shop.</main>;
   if (!shop && !loading) return <main className="p-4">Shop not found.</main>;
+
+  const commissionsOpen = !!shop?.custom_commissions;
 
   // cover: shop.cover_urls[0] → fallback to first product photo
   const cover =
@@ -415,223 +563,253 @@ export default function ShopPage() {
     }
   };
 
+  const openContact = () => setContactOpen(true);
+
   return (
-    <main className="pb-24 overflow-visible ">
-      {/* Sticky top title bar */}
-      <div
-        className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
-          showStickyTop
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 -translate-y-4 pointer-events-none"
-        }`}
-      >
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={goBack}
-              className="h-8 w-8 shrink-0 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
-              aria-label="Go back"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
+    <Sheet open={contactOpen} onOpenChange={setContactOpen}>
+      <main className="pb-24 overflow-visible max-w-xl mx-auto">
+        <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} shop={shop} />
+        {/* Sticky top title bar */}
+        <div
+          className={`fixed top-0 inset-x-0 z-50 border-b border-neutral-200 backdrop-blur-md bg-white/90 transition-all duration-300 ease-out transform ${
+            showStickyTop
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 -translate-y-4 pointer-events-none"
+          }`}
+        >
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={goBack}
+                className="h-8 w-8 shrink-0 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                aria-label="Go back"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
 
-            {/* Avatar */}
-            <div className="h-10 w-10 rounded-md overflow-hidden bg-neutral-200 shrink-0">
-              {shop?.avatar_url ? (
-                <img
-                  src={shop.avatar_url}
-                  alt={shop?.title ?? ""}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center text-xs font-semibold text-neutral-700">
-                  {shop?.title?.slice(0, 1).toUpperCase() ?? "S"}
-                </div>
-              )}
-            </div>
-
-            {/* Title + rating */}
-            <div className="min-w-0">
-              <div className="flex space-x-2">
-                <div className="text-md font-semibold truncate">
-                  {shop?.title ?? "Shop"}
-                </div>
-                {shop?.is_verified && (
-                  <Image
-                    src="/icons/verified_zaha.svg"
-                    alt="Verified"
-                    width={16}
-                    height={16}
-                    className="opacity-90"
+              {/* Avatar */}
+              <div className="h-10 w-10 rounded-md overflow-hidden bg-neutral-200 shrink-0">
+                {shop?.avatar_url ? (
+                  <img
+                    src={shop.avatar_url}
+                    alt={shop?.title ?? ""}
+                    className="h-full w-full object-cover"
                   />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-xs font-semibold text-neutral-700">
+                    {shop?.title?.slice(0, 1).toUpperCase() ?? "S"}
+                  </div>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-sm">
-                {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
-                <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
-                <span className="text-xs text-neutral-500">({count ?? 0})</span>
-              </div>
-            </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => searchInputRef.current?.focus()}
-                className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
-                aria-label="Search in shop"
-                title="Search in shop"
-              >
-                <Search className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={shareShop}
-                className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
-                aria-label="Share shop"
-                title="Share shop"
-              >
-                <Share2 className="h-4 w-4" />
-              </button>
+              {/* Title + rating */}
+              <div className="min-w-0">
+                <div className="flex space-x-2">
+                  <div className="text-md font-semibold truncate">
+                    {shop?.title ?? "Shop"}
+                  </div>
+                  {shop?.is_verified && (
+                    <Image
+                      src="/icons/verified_zaha.svg"
+                      alt="Verified"
+                      width={16}
+                      height={16}
+                      className="opacity-90"
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-1 text-sm">
+                  {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
+                  <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                  <span className="text-xs text-neutral-500">
+                    ({count ?? 0})
+                  </span>
+                </div>
+              </div>
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => searchInputRef.current?.focus()}
+                  className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                  aria-label="Search in shop"
+                  title="Search in shop"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={shareShop}
+                  className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
+                  aria-label="Share shop"
+                  title="Share shop"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ——— COVER ——— */}
-      <div ref={coverSentinelRef}>
-        {loading ? <CoverSkeleton /> : <Cover cover={cover} />}
-      </div>
+        {/* ——— COVER ——— */}
+        <div ref={coverSentinelRef}>
+          {loading ? <CoverSkeleton /> : <Cover cover={cover} />}
+        </div>
 
-      {/* ——— HEADER (avatar overlaps cover) ——— */}
-      <section className="-mt-12 px-4 relative ">
-        {isOwner && !loading && (
-          <Link
-            href="/seller/shop"
-            className="absolute right-4 -top-6 z-10 text-xs rounded-full border px-3 py-1 bg-white/90 hover:bg-white"
-          >
-            Edit shop
-          </Link>
-        )}
-
-        {loading ? (
-          <ShopHeaderSkeleton />
-        ) : (
-          <ShopHeader
-            shop={shop!}
-            avg={avg}
-            count={count}
-            stats={stats}
-            shopId={shopId}
-          />
-        )}
-      </section>
-
-      {/* ——— COLLECTIONS ——— */}
-      <section className="px-4 mt-5 space-y-3 overflow-visible ">
-        <div className="flex items-baseline justify-between ">
-          {!loading && <h2 className="font-semibold">Collections</h2>}
-          {selectedCol && !loading && (
-            <button
-              onClick={() => setSelectedCol(null)}
-              className="text-xs underline"
+        {/* ——— HEADER (avatar overlaps cover) ——— */}
+        <section className="-mt-12 px-4 relative ">
+          {isOwner && !loading && (
+            <Link
+              href="/seller/shop"
+              className="absolute right-4 top-15 z-10 text-xs rounded-full border px-3 py-1 bg-white"
             >
-              Clear
-            </button>
+              Edit shop
+            </Link>
+          )}
+
+          {loading ? (
+            <ShopHeaderSkeleton />
+          ) : (
+            <ShopHeader
+              shop={shop!}
+              avg={avg}
+              count={count}
+              stats={stats}
+              onOpenContact={openContact}
+              onOpenAbout={() => setAboutOpen(true)}
+            />
+          )}
+        </section>
+        {/* ——— SHOP CATEGORIES (collection cards) ——— */}
+        {!loading && collectionSections.length > 0 && (
+          <section className="px-4 mt-5 space-y-3 overflow-visible">
+            <h2 className="font-semibold">Collections</h2>
+
+            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+              {collectionSections.map(({ collection, products }) => (
+                <button
+                  key={collection.id}
+                  type="button"
+                  onClick={() => goToCollection(collection.id)}
+                  className="shrink-0 w-[260px] text-left active:scale-[0.98] transition"
+                >
+                  <CollectionBoardCard
+                    collection={collection}
+                    products={products}
+                  />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ——— SEARCH ——— */}
+        <section className="px-4 mt-4">
+          {!loading && (
+            <h2 className="font-semibold mt-5 mb-4">Browse the shop</h2>
+          )}
+          {loading ? (
+            <SearchBarSkeleton />
+          ) : (
+            <SearchBar
+              q={q}
+              setQ={setQ}
+              itemsLen={items.length}
+              inputRef={searchInputRef}
+            />
+          )}
+        </section>
+
+        {/* ——— FILTER BAR ——— */}
+        <section className="px-4 mt-3">
+          {loading ? (
+            <FilterBarSkeleton />
+          ) : (
+            <FilterBar
+              sort={sort}
+              setSort={setSort}
+              onSaleOnly={onSaleOnly}
+              setOnSaleOnly={setOnSaleOnly}
+            />
+          )}
+        </section>
+
+        {/* ——— PRODUCT GRID ——— */}
+        <section className="px-4 mt-4 grid grid-cols-2 gap-3">
+          {loading && items.length === 0 ? (
+            <ProductGridSkeleton />
+          ) : filteredProducts.length ? (
+            filteredProducts.map((p) => (
+              <ProductCard key={p.id} p={p} variant="carousel" />
+            ))
+          ) : (
+            <div className="col-span-2 text-sm text-ink/70 py-8 text-center space-y-3">
+              <p>No results found.</p>
+
+              {commissionsOpen ? (
+                <>
+                  <p className="text-xs text-neutral-500">
+                    Didn’t find what you&apos;re looking for? This shop accepts
+                    custom commissions.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openContact}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-medium text-neutral-900 hover:bg-neutral-50 active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>Request a custom commission</span>
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  This shop is not accepting custom commissions at the moment.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ——— LOAD MORE / SENTINEL ——— */}
+        <div className="px-4 mt-4 mb-6">
+          {/* sentinel for intersection observer */}
+          <div ref={loadMoreRef} className="h-2" />
+          {hasMore && (
+            <div className="grid place-items-center mt-2">
+              <button
+                disabled={loadingPage}
+                onClick={() =>
+                  fetchProductsPage({ pageIndex: page + 1, replace: false })
+                }
+                className="text-sm rounded-full border border-neutral-200 px-4 py-2 bg-white active:scale-[0.98]"
+              >
+                {loadingPage ? "Loading…" : "Load more"}
+              </button>
+            </div>
           )}
         </div>
 
-        {loading ? (
-          <div className="hidden">
-            <CollectionsRailSkeleton />
-          </div>
-        ) : collections.length > 0 ? (
-          <CollectionsRail
-            collections={collections}
-            items={items}
-            links={links}
-            goToCollection={goToCollection}
-          />
-        ) : (
-          <div className="text-xs text-ink/60">No collections yet.</div>
-        )}
-      </section>
+        {/* <ShopReviewsStrip shopId={shop?.id!} /> */}
+      </main>
 
-      {/* ——— SEARCH ——— */}
-      <section className="px-4 mt-4">
-        {!loading && (
-          <h2 className="font-semibold mt-5 mb-4">Browse the shop</h2>
-        )}
-        {loading ? (
-          <SearchBarSkeleton />
-        ) : (
-          <SearchBar
-            q={q}
-            setQ={setQ}
-            itemsLen={items.length}
-            inputRef={searchInputRef}
-          />
-        )}
-      </section>
-
-      {/* ——— FILTER BAR ——— */}
-      <section className="px-4 mt-3">
-        {loading ? (
-          <FilterBarSkeleton />
-        ) : (
-          <FilterBar
-            sort={sort}
-            setSort={setSort}
-            onSaleOnly={onSaleOnly}
-            setOnSaleOnly={setOnSaleOnly}
-          />
-        )}
-      </section>
-
-      {/* ——— PRODUCT GRID ——— */}
-      <section className="px-4 mt-4 grid grid-cols-2 gap-3">
-        {loading && items.length === 0 ? (
-          <ProductGridSkeleton />
-        ) : filteredProducts.length ? (
-          filteredProducts.map((p) => (
-            <ProductCard key={p.id} p={p} variant="carousel" />
-          ))
-        ) : (
-          <div className="col-span-2 text-sm text-ink/70 py-8 text-center">
-            No results.
-          </div>
-        )}
-      </section>
-
-      {/* ——— LOAD MORE / SENTINEL ——— */}
-      <div className="px-4 mt-4 mb-6">
-        {/* sentinel for intersection observer */}
-        <div ref={loadMoreRef} className="h-2" />
-        {hasMore && (
-          <div className="grid place-items-center mt-2">
-            <button
-              disabled={loadingPage}
-              onClick={() =>
-                fetchProductsPage({ pageIndex: page + 1, replace: false })
-              }
-              className="text-sm rounded-full border border-neutral-200 px-4 py-2 bg-white active:scale-[0.98]"
-            >
-              {loadingPage ? "Loading…" : "Load more"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* <ShopReviewsStrip shopId={shop?.id!} /> */}
-    </main>
+      {/* ========= CONTACT SHEET ========= */}
+      <ContactSheet
+        open={contactOpen}
+        shop={shop}
+        avg={avg}
+        count={count}
+        onOpenChange={setContactOpen}
+      />
+    </Sheet>
   );
 }
 
-// ================== Presentational Sections (unchanged visuals) ==================
+// ================== Presentational Sections ==================
 
 function Cover({ cover }: { cover?: string | null }) {
   return (
-    <div className="relative w-full h-56 overflow-hidden bg-neutral-900">
+    <div className="relative w-full h-62 overflow-hidden bg-neutral-900">
       {cover ? (
         <img
           src={cover}
@@ -641,7 +819,6 @@ function Cover({ cover }: { cover?: string | null }) {
       ) : (
         <div className="absolute inset-0 bg-neutral-800" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-white/100 via-white/50 to-transparent" />
       <div className="pointer-events-none absolute inset-x-0" />
     </div>
   );
@@ -652,19 +829,23 @@ function ShopHeader({
   avg,
   count,
   stats,
-  shopId,
+  onOpenContact,
+  onOpenAbout,
 }: {
   shop: Shop;
   avg: number;
   count: number;
   stats: { sales: number; years: number } | null;
-  shopId: string;
+  onOpenContact: () => void;
+  onOpenAbout: () => void;
 }) {
+  const cityLabel = shop.city ? `${shop.city}, Morocco` : "Morocco";
+
   return (
     <>
-      <div className="flex items-end gap-3">
+      <div className=" ">
         <div className="relative shrink-0">
-          <div className="h-24 w-24 rounded-xl ring-4 ring-paper overflow-hidden shadow-2xl bg-neutral-300">
+          <div className="h-24 w-24 rounded-2xl ring-4 ring-paper overflow-hidden shadow-2xl bg-neutral-300">
             {shop.avatar_url ? (
               <img
                 src={shop.avatar_url}
@@ -678,142 +859,138 @@ function ShopHeader({
             )}
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 mt-6">
-        <h1 className="text-2xl font-semibold leading-tight mb-1 flex space-x-2 gap-2">
-          {shop.title}{" "}
-          {shop.is_verified && (
-            <Popover>
-              <PopoverTrigger asChild>
+        <div className="flex-1 mt-6">
+          {/* Name + verified + location + main CTAs */}
+          <div className="flex flex-col gap-3  items-end justify-between align-baseline items-stretch">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-semibold leading-tight">
+                  {shop.title}
+                </h1>
+                {shop.is_verified && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Verified store details"
+                        className="inline-flex items-center"
+                      >
+                        <Image
+                          src="/icons/verified_zaha.svg"
+                          alt="Verified"
+                          width={20}
+                          height={20}
+                          className="opacity-90"
+                        />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      side="top"
+                      align="center"
+                      className="max-w-[240px] p-3 text-xs leading-snug bg-neutral-100 rounded-2xl z-100"
+                    >
+                      <span className="font-medium">Verified store</span> —
+                      proven success with many fulfilled orders and a solid
+                      track record on Zaha.
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+
+              <div className="mt- text-md text-ink/70 inline-flex items-center gap-1">
+                <MapPin className="w-4 h-4" />
+                <span>{cityLabel}</span>
+              </div>
+            </div>
+
+            <div className="mt-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  aria-label="Verified store details"
-                  className="inline-flex items-center pr-4 mr-4"
+                  onClick={onOpenContact}
+                  className="h-10 p-4 px-5 rounded-full bg-ink text-sand text-md font-medium   hover:brightness-105 active:scale-[0.98] inline-flex items-center gap-1.5"
                 >
-                  <Image
-                    src="/icons/verified_zaha.svg"
-                    alt="Verified"
-                    width={20}
-                    height={20}
-                    className="opacity-90"
-                  />
+                  <Zap className="h-3.5 w-3.5 fill-current" />
+                  <span>Get in touch</span>
                 </button>
-              </PopoverTrigger>
-              <PopoverContent
-                side="top"
-                align="center"
-                className="max-w-[240px] p-3 text-xs leading-snug bg-neutral-100 rounded-2xl"
-              >
-                <span className="font-medium">Verified store</span> — proven
-                success with many fulfilled orders and long-standing presence on
-                Zaha.
-              </PopoverContent>
-            </Popover>
-          )}
-        </h1>
-
-        <div className="text-sm text-ink/70 inline-flex items-center gap-1">
-          <MapPin className="w-4 h-4" />
-          <span>{`${shop.city}, Morocco` ?? "Morocco"}</span>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <div className="flex-1 rounded-lg px-3 py-2 bg-neutral-100/75 text-center content-center">
-            <div className="text-sm font-medium text-neutral-900">
-              {stats ? stats.sales.toLocaleString() : "—"}
-            </div>
-            <div className="text-sm text-neutral-500">Sales</div>
-          </div>
-
-          <Link href={`/shop/${shopId}/reviews`}>
-            <div className="flex-1 rounded-lg bg-neutral-100/75 px-3 py-2 text-center content-center">
-              <div className="mt-1 text-sm font-medium text-neutral-900">
-                <span className="inline-flex items-center gap-1">
-                  {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
-                  <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
-                  <span className="text-xs text-neutral-500">
-                    ({count ?? 0})
-                  </span>
-                </span>
+                <button
+                  type="button"
+                  className="h-10   w-10 justify-center rounded-full border border-neutral-200 bg-white text-sm font-medium text-neutral-900 hover:bg-neutral-50 active:scale-[0.98] inline-flex items-center gap-1.5"
+                >
+                  <WhatsAppGlyph className="h-4 w-4" />
+                  {/* <span>Follow shop</span> */}
+                </button>
               </div>
-              <div className="text-sm text-neutral-500">Ratings</div>
+              <div>
+                {shop.custom_commissions && (
+                  <div className=" text-xs text-emerald-700 inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span>Open for commissions </span>
+                  </div>
+                )}
+              </div>
             </div>
-          </Link>
 
-          <div className="flex-1 rounded-lg bg-neutral-100/75 px-3 py-2 text-center content-center">
-            <div className="text-sm font-medium text-neutral-900">
-              {stats
-                ? `${stats.years} ${stats.years > 1 ? "years" : "year"}`
-                : "—"}
+            <div className="justify-start">
+              {/* Bio */}
+              {shop.bio ? (
+                <p className="text-sm text-neutral-500 mt-4 line-clamp-2 mr-2">
+                  {shop.bio}
+                </p>
+              ) : null}
+
+              {/* --- ABOUT LINK --- */}
+              {shop.bio && (
+                <button
+                  type="button"
+                  onClick={onOpenAbout}
+                  className="text-sm text- underline mt font-semibold"
+                >
+                  About
+                </button>
+              )}
             </div>
-            <div className="text-sm text-neutral-500">On Zaha</div>
+
+            {/* Stats */}
+            <div className=" grid grid-cols-3 gap-2 mt-4">
+              <div className="flex-1 rounded-lg px-3 py-2 bg-neutral-100/75 text-center content-center">
+                <div className="text-sm font-medium text-neutral-900">
+                  {shop.orders_count ? shop.orders_count : "—"}
+                </div>
+                <div className="text-sm text-neutral-500">Sales</div>
+              </div>
+
+              <Link href={`/shop/${shop.id}/reviews`}>
+                <div className="flex-1 rounded-lg bg-neutral-100/75 px-3 py-2 text-center content-center">
+                  <div className="mt-1 text-sm font-medium text-neutral-900">
+                    <span className="inline-flex items-center gap-1">
+                      {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
+                      <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                      <span className="text-xs text-neutral-500">
+                        ({count ?? 0})
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-sm text-neutral-500">Ratings</div>
+                </div>
+              </Link>
+
+              <div className="flex-1 rounded-lg bg-neutral-100/75 px-3 py-2 text-center content-center">
+                <div className="text-sm font-medium text-neutral-900">
+                  {stats
+                    ? `${stats.years} ${stats.years > 1 ? "years" : "year"}`
+                    : "—"}
+                </div>
+                <div className="text-sm text-neutral-500">On Zaha</div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {shop.bio ? (
-          <p className="text-sm text-ink/80 mt-3 line-clamp-3">{shop.bio}</p>
-        ) : null}
+          {/* Secondary CTA icons (just open the drawer for now) */}
+        </div>
       </div>
     </>
-  );
-}
-
-function CollectionsRail({
-  collections,
-  items,
-  links,
-  goToCollection,
-}: {
-  collections: Collection[];
-  items: ProductEx[];
-  links: Record<string, string[]>;
-  goToCollection: (cid: string) => void;
-}) {
-  return (
-    <div className="flex gap-4 overflow-x-scroll no-scrollbar mt-3">
-      {collections.map((c) => {
-        const count = items.filter((p) =>
-          (links[p.id] ?? []).includes(c.id)
-        ).length;
-        const fallbackImg = items.find((p) =>
-          (links[p.id] ?? []).includes(c.id)
-        )?.photos?.[0];
-        const img = c.cover_url || fallbackImg;
-        const abbr = `${c.title?.trim()?.[0]?.toUpperCase() ?? "?"}&`;
-
-        return (
-          <button
-            key={c.id}
-            onClick={() => goToCollection(c.id)}
-            className="snap-start shrink-0 flex items-center gap-3 rounded-xl border border-neutral-200 bg-white active:scale-[0.98] transition overflow-hidden"
-            style={{ width: "200px" }}
-          >
-            <div className="w-16 h-16 overflow-hidden bg-neutral-100/80 flex items-center justify-center">
-              {img ? (
-                <img
-                  src={img}
-                  alt={c.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="font-semibold text-neutral-800">{abbr}</span>
-              )}
-            </div>
-            <div className="flex flex-col flex-1 text-left pr-3">
-              <div className="text-sm font-medium text-neutral-900 leading-snug line-clamp-2">
-                {c.title}
-              </div>
-              {count > 0 && (
-                <div className="text-xs text-neutral-500 mt-0.5">
-                  {count} product{count > 1 ? "s" : ""}
-                </div>
-              )}
-            </div>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -929,6 +1106,173 @@ function FilterBar({
   );
 }
 
+// ================== Contact Sheet ==================
+
+function ContactSheet({
+  open,
+  onOpenChange,
+  shop,
+  avg,
+  count,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  shop: Shop | null;
+  avg: number;
+  count: number;
+}) {
+  const title = shop?.title ?? "Shop";
+
+  const supportItems = [
+    {
+      id: "phone",
+      fieldLabel: "Phone number",
+      valueLabel: "Call this shop",
+      Icon: Phone,
+    },
+    {
+      id: "whatsapp",
+      fieldLabel: "WhatsApp",
+      valueLabel: "Chat with the seller",
+      Icon: WhatsAppGlyph,
+    },
+    {
+      id: "email",
+      fieldLabel: "Email address",
+      valueLabel: "Send an email",
+      Icon: Mail,
+    },
+  ];
+
+  const socialItems = [
+    {
+      id: "instagram",
+      fieldLabel: "Instagram",
+      valueLabel: "Open Instagram profile",
+      Icon: Instagram,
+    },
+    {
+      id: "facebook",
+      fieldLabel: "Facebook",
+      valueLabel: "Visit Facebook page",
+      Icon: Facebook,
+    },
+  ];
+
+  const handleClick = async (id: string) => {
+    // your existing logic (copy link / open URL / etc.)
+    onOpenChange(false);
+  };
+
+  return (
+    <SheetContent
+      side="bottom"
+      className="rounded-t-3xl border-t border-neutral-200 bg-white px-4 pt-4 pb-6 max-h-[80vh] overflow-y-auto"
+    >
+      {/* Header */}
+      <SheetHeader className="mb-4">
+        <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3 " />
+        <SheetTitle className="text-base">Contact this shop</SheetTitle>
+        <SheetDescription className="text-xs text-neutral-500 px-10 pb-2">
+          You can get in touch with{" "}
+          <span className="font-medium text-neutral-800">{title}</span> using
+          the options below.
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="space-y-4">
+        {/* CUSTOMER SUPPORT CARD */}
+        <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
+          <p className="text-xs font-medium text-neutral-500 mb-3">
+            Customer Support
+          </p>
+
+          {supportItems.map(({ id, fieldLabel, valueLabel, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleClick(id)}
+              className="w-full flex items-center gap-3 py-2 text-left"
+            >
+              <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+                <Icon className="h-4 w-4 text-neutral-800" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium   tracking-wide text-neutral-500">
+                  {fieldLabel}
+                </div>
+                <div className="text-sm font-medium text-neutral-900 truncate">
+                  {valueLabel}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* SOCIAL MEDIA CARD */}
+        <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
+          <p className="text-xs font-medium text-neutral-500 mb-3">
+            Social media
+          </p>
+
+          {socialItems.map(({ id, fieldLabel, valueLabel, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleClick(id)}
+              className="w-full flex items-center gap-3 py-2 text-left"
+            >
+              <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+                <Icon className="h-4 w-4 text-neutral-800" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium   tracking-wide text-neutral-500">
+                  {fieldLabel}
+                </div>
+                <div className="text-sm font-medium text-neutral-900 truncate">
+                  {valueLabel}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </SheetContent>
+  );
+}
+
+function AboutSheet({
+  open,
+  onOpenChange,
+  shop,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  shop: Shop | null;
+}) {
+  if (!shop) return null;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="rounded-t-3xl border-t border-neutral-200 bg-white px-4 pt-4 pb-8 max-h-[75vh] overflow-y-auto"
+      >
+        <SheetHeader className="mb-4">
+          <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3" />
+          <SheetTitle className="text-base text-left">
+            About this shop
+          </SheetTitle>
+        </SheetHeader>
+
+        <div className="text-sm text-ink/90 leading-relaxed whitespace-pre-line">
+          {shop.bio}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ================== Skeletons ==================
 
 function CoverSkeleton() {
@@ -942,9 +1286,9 @@ function CoverSkeleton() {
 function ShopHeaderSkeleton() {
   return (
     <>
-      <div className="flex items-end gap-3">
+      <div className=" ">
         <div className="relative shrink-0">
-          <Skeleton className="h-24 w-24 rounded-xl ring-4 ring-paper shadow-2xl" />
+          <Skeleton className="h-24 w-24 rounded-2xl ring-4 ring-paper shadow-2xl" />
         </div>
       </div>
 
@@ -964,26 +1308,6 @@ function ShopHeaderSkeleton() {
         </div>
       </div>
     </>
-  );
-}
-
-function CollectionsRailSkeleton() {
-  return (
-    <div className="flex gap-4 overflow-x-auto no-scrollbar mt-3 pb-1">
-      {[...Array(4)].map((_, i) => (
-        <div
-          key={i}
-          className="snap-start shrink-0 flex items-center gap-3 rounded-xl border border-neutral-200 bg-white overflow-hidden"
-          style={{ width: 200 }}
-        >
-          <Skeleton className="h-16 w-16" />
-          <div className="flex-1 py-2 pr-3">
-            <Skeleton className="h-4 w-28 mb-2" />
-            <Skeleton className="h-3 w-16" />
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 

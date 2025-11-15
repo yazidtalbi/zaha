@@ -66,6 +66,8 @@ type Order = {
 type RangeKey = "7d" | "30d" | "90d" | "all";
 type SortKey = "new" | "old" | "amount_desc" | "amount_asc";
 
+const MAIN_CLASS = "px-4 pt-4 pb-24 max-w-screen-sm mx-auto";
+
 /* ───────────────── Utils ───────────────── */
 function toCSV(rows: Record<string, any>[]) {
   if (!rows.length) return "";
@@ -639,7 +641,7 @@ Options: ${opts}
   /* ────────────── render ────────────── */
   if (loading) {
     return (
-      <main className="p-4 space-y-4 max-w-screen-sm mx-auto">
+      <main className={MAIN_CLASS}>
         <OrdersHeaderCompact
           counts={{
             total: 0,
@@ -680,7 +682,7 @@ Options: ${opts}
 
   if (!rows.length) {
     return (
-      <main className="p-4 max-w-screen-sm mx-auto">
+      <main className={MAIN_CLASS}>
         <OrdersHeaderCompact
           counts={{
             total: 0,
@@ -710,7 +712,7 @@ Options: ${opts}
   }
 
   return (
-    <main className="pb-24 px-4 max-w-screen-sm mx-auto">
+    <main className={MAIN_CLASS}>
       <OrdersHeaderCompact
         counts={counts}
         qLive={qLive}

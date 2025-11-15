@@ -47,7 +47,7 @@ export default function DashboardHeader({
   return (
     <div
       className={cx(
-        "relative mb-6",
+        "relative  ",
         withDivider && "pb-3 border-b border-ink/10",
         className
       )}

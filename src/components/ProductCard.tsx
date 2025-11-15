@@ -30,6 +30,14 @@ type Product = {
   keywords?: string | null;
   video_url?: string | null;
   video_poster_url?: string | null;
+
+  // availability + minimal shop context from parent
+  unavailable?: boolean | null;
+  active?: boolean | null;
+  deleted_at?: string | null;
+  shop_id?: string | null;
+  shop_title?: string | null;
+  city?: string | null;
 };
 
 type Props = {
@@ -131,6 +139,12 @@ export default function ProductCard({
     keywords: p.keywords ?? null,
     video_url: p.video_url ?? null,
     video_poster_url: p.video_poster_url ?? null,
+    unavailable: p.unavailable ?? null,
+    active: p.active ?? null,
+    deleted_at: p.deleted_at ?? null,
+    shop_id: p.shop_id ?? null,
+    shop_title: p.shop_title ?? null,
+    city: p.city ?? null,
   };
 
   function writeCache() {
@@ -142,118 +156,177 @@ export default function ProductCard({
     } catch {}
   }
 
-  return (
-    // LOVE VARIANT ("You'll love" section)
+  return variant === "love" ? (
     // LOVE VARIANT — horizontal, clean, no overlay/infos inside the image
-    variant === "love" ? (
-      <Link
-        href={`/product/${p.id}`}
-        prefetch
-        onMouseEnter={() => {
-          setSeed(p.id, slim);
-          writeCache();
-          router.prefetch(`/product/${p.id}`);
-          if (imgs[0]) new Image().src = imgs[0];
-        }}
-        onClick={() => {
-          setSeed(p.id, slim);
-          writeCache();
-        }}
-        className={`block ${className}`}
-      >
-        <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99] ">
-          <div className="flex items-stretch gap-3">
-            {/* Image (no overlay, no badges) */}
-            <div className="relative shrink-0 w-28 h-28 rounded-xl overflow-hidden bg-neutral-100 sm:w-32 sm:h-32">
-              {imgs[0] ? (
-                <img
-                  src={imgs[0]}
-                  alt={p.title}
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
-                  No image
-                </div>
-              )}
+    <Link
+      href={`/product/${p.id}`}
+      prefetch
+      onMouseEnter={() => {
+        setSeed(p.id, slim);
+        writeCache();
+        router.prefetch(`/product/${p.id}`);
+        if (imgs[0]) new Image().src = imgs[0];
+      }}
+      onClick={() => {
+        setSeed(p.id, slim);
+        writeCache();
+      }}
+      className={`block ${className}`}
+    >
+      <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99] ">
+        <div className="flex items-stretch gap-3">
+          {/* Image (no overlay, no badges) */}
+          <div className="relative shrink-0 w-28 h-28 rounded-xl overflow-hidden bg-neutral-100 sm:w-32 sm:h-32">
+            {imgs[0] ? (
+              <img
+                src={imgs[0]}
+                alt={p.title}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                loading="lazy"
+              />
+            ) : (
+              <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
+                No image
+              </div>
+            )}
+          </div>
+
+          {/* Right content */}
+          <div className="min-w-0 flex-1 py-1 pr-2">
+            {/* Title */}
+            <div className="line-clamp-2 text-[13px] sm:text-[14px] font-medium leading-snug text-neutral-900">
+              {p.title}
             </div>
 
-            {/* Right content */}
-            <div className="min-w-0 flex-1 py-1 pr-2">
-              {/* Title */}
-              <div className="line-clamp-2 text-[13px] sm:text-[14px] font-medium leading-snug text-neutral-900">
-                {p.title}
-              </div>
-
-              {/* Rating (optional) */}
-              {p.rating_avg && (
-                <div className="mt-1 text-[11px] text-neutral-600">
-                  <span className="font-medium text-neutral-900">
-                    {p.rating_avg.toFixed(1)}
-                  </span>
-                  <span className="ml-1 text-amber-600">★</span>
-                  {p.reviews_count ? (
-                    <span className="ml-1">
-                      ({p.reviews_count.toLocaleString("en-US")})
-                    </span>
-                  ) : null}
-                </div>
-              )}
-
-              {/* Price row */}
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[13px] sm:text-[14px] font-medium text-emerald-700">
-                  {formatMAD(current)}
+            {/* Rating (optional) */}
+            {p.rating_avg && (
+              <div className="mt-1 text-[11px] text-neutral-600">
+                <span className="font-medium text-neutral-900">
+                  {p.rating_avg.toFixed(1)}
                 </span>
-                {compareAt && (
-                  <span className="text-[12px] line-through text-neutral-400">
-                    {compareAt.toLocaleString("en-US")}
-                  </span>
-                )}
-                {promoOn && (
-                  <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px] text-[10px] font-medium">
-                    Promo
-                  </span>
-                )}
-              </div>
-
-              {/* Meta chips (optional) */}
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {p.free_shipping && (
-                  <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
-                    Free shipping
-                  </span>
-                )}
-                {p.orders_count ? (
-                  <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
-                    {fmtOrders(p.orders_count)} orders
+                <span className="ml-1 text-amber-600">★</span>
+                {p.reviews_count ? (
+                  <span className="ml-1">
+                    ({p.reviews_count.toLocaleString("en-US")})
                   </span>
                 ) : null}
               </div>
+            )}
+
+            {/* Price row */}
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[13px] sm:text-[14px] font-medium text-emerald-700">
+                {formatMAD(current)}
+              </span>
+              {compareAt && (
+                <span className="text-[12px] line-through text-neutral-400">
+                  {compareAt.toLocaleString("en-US")}
+                </span>
+              )}
+              {promoOn && (
+                <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px] text-[10px] font-medium">
+                  Promo
+                </span>
+              )}
+            </div>
+
+            {/* Meta chips (optional) */}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {p.free_shipping && (
+                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                  Free shipping
+                </span>
+              )}
+              {p.orders_count ? (
+                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                  {fmtOrders(p.orders_count)} orders
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
-      </Link>
-    ) : variant === "mini" ? (
-      // MINI VARIANT (Used for "Because you viewed" rail)
-      <Link
-        href={`/product/${p.id}`}
-        prefetch
-        onMouseEnter={() => {
-          setSeed(p.id, slim);
-          writeCache();
-          router.prefetch(`/product/${p.id}`);
-          if (imgs[0]) new Image().src = imgs[0];
-        }}
-        onClick={() => {
-          setSeed(p.id, slim);
-          writeCache();
-        }}
-        className={`block overflow-hidden ${className}`}
-      >
+      </div>
+    </Link>
+  ) : variant === "mini" ? (
+    // MINI VARIANT (Used for "Because you viewed" rail)
+    <Link
+      href={`/product/${p.id}`}
+      prefetch
+      onMouseEnter={() => {
+        setSeed(p.id, slim);
+        writeCache();
+        router.prefetch(`/product/${p.id}`);
+        if (imgs[0]) new Image().src = imgs[0];
+      }}
+      onClick={() => {
+        setSeed(p.id, slim);
+        writeCache();
+      }}
+      className={`block overflow-hidden ${className}`}
+    >
+      <div className="relative">
+        <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100 ">
+          {imgs[0] ? (
+            <img
+              src={imgs[0]}
+              alt={p.title}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
+              No image
+            </div>
+          )}
+          {promoOn && (
+            <span className="absolute top-1 left-1 z-10 rounded-full px-2 py-[2px] text-[10px] font-medium bg-emerald-500 text-white">
+              Promo
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="pt-2">
+        <div className="line-clamp-2 text-sm font-medium leading-snug text-neutral-900 truncate">
+          {p.title}
+        </div>
+      </div>
+    </Link>
+  ) : (
+    // DEFAULT OR CAROUSEL
+    <Link
+      href={`/product/${p.id}`}
+      prefetch
+      onMouseEnter={() => {
+        setSeed(p.id, slim);
+        writeCache();
+        router.prefetch(`/product/${p.id}`);
+        if (imgs[0]) new Image().src = imgs[0];
+      }}
+      onClick={() => {
+        setSeed(p.id, slim);
+        writeCache();
+      }}
+      className={`block overflow-hidden ${className}`}
+    >
+      {useCarousel ? (
+        <CardCarousel
+          images={imagesForCard}
+          title={p.title}
+          productId={p.id}
+          shopOwner={p.shop_owner ?? undefined}
+          promoOn={promoOn}
+          onUnfavorite={onUnfavorite}
+          videoSrc={p.video_url ?? undefined}
+          videoIndex={videoIndex}
+        />
+      ) : (
         <div className="relative">
-          <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100 ">
+          <div
+            className={`relative h-36 bg-neutral-100 overflow-hidden ${
+              fromshop ? "rounded-xl" : "rounded-lg"
+            }`}
+          >
             {imgs[0] ? (
               <img
                 src={imgs[0]}
@@ -262,134 +335,72 @@ export default function ProductCard({
                 loading="lazy"
               />
             ) : (
-              <div className="h-full w-full grid place-items-center text-neutral-500 text-xs">
+              <div className="h-full w-full grid place-items-center text-neutral-500 text-sm">
                 No image
               </div>
             )}
             {promoOn && (
-              <span className="absolute top-1 left-1 z-10 rounded-full px-2 py-[2px] text-[10px] font-medium bg-emerald-500 text-white">
+              <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
                 Promo
               </span>
             )}
           </div>
-        </div>
-
-        <div className="pt-2">
-          <div className="line-clamp-2 text-sm font-medium leading-snug text-neutral-900 truncate">
-            {p.title}
-          </div>
-        </div>
-      </Link>
-    ) : (
-      // DEFAULT OR CAROUSEL
-      <Link
-        href={`/product/${p.id}`}
-        prefetch
-        onMouseEnter={() => {
-          setSeed(p.id, slim);
-          writeCache();
-          router.prefetch(`/product/${p.id}`);
-          if (imgs[0]) new Image().src = imgs[0];
-        }}
-        onClick={() => {
-          setSeed(p.id, slim);
-          writeCache();
-        }}
-        className={`block overflow-hidden ${className}`}
-      >
-        {useCarousel ? (
-          <CardCarousel
-            images={imagesForCard}
-            title={p.title}
+          <FavButton
             productId={p.id}
-            shopOwner={p.shop_owner}
-            promoOn={promoOn}
+            shopOwner={p.shop_owner ?? undefined}
             onUnfavorite={onUnfavorite}
-            videoSrc={p.video_url ?? undefined}
-            videoIndex={videoIndex}
           />
-        ) : (
-          <div className="relative">
-            <div
-              className={`relative h-36 bg-neutral-100 overflow-hidden ${
-                fromshop ? "rounded-xl" : "rounded-lg"
-              }`}
-            >
-              {imgs[0] ? (
-                <img
-                  src={imgs[0]}
-                  alt={p.title}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="h-full w-full grid place-items-center text-neutral-500 text-sm">
-                  No image
-                </div>
-              )}
-              {promoOn && (
-                <span className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-500 text-white">
-                  Promo
-                </span>
-              )}
-            </div>
-            <FavButton
-              productId={p.id}
-              shopOwner={p.shop_owner ?? undefined}
-              onUnfavorite={onUnfavorite}
-            />
-          </div>
-        )}
+        </div>
+      )}
 
-        {/* BODY */}
-        <div className="pt-3 -space-y-1">
-          <div className="line-clamp-2 text-md font-medium text-neutral-900 leading-snug">
-            {p.title}
-          </div>
+      {/* BODY */}
+      <div className="pt-3 -space-y-1">
+        <div className="line-clamp-2 text-md font-medium text-neutral-900 leading-snug">
+          {p.title}
+        </div>
 
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-md font-medium text-emerald-700">
-              {formatMAD(current)}
+        <div className="mt-1 flex items-baseline gap-2">
+          <span className="text-md font-medium text-emerald-700">
+            {formatMAD(current)}
+          </span>
+          {compareAt && (
+            <span className="text-[14px] line-through text-neutral-400">
+              {compareAt.toLocaleString("en-US")}
             </span>
-            {compareAt && (
-              <span className="text-[14px] line-through text-neutral-400">
-                {compareAt.toLocaleString("en-US")}
+          )}
+        </div>
+
+        {/* Rating + reviews */}
+        {!fromshop && p.rating_avg != null && p.rating_avg > 0 && (
+          <div className="mt-1 flex items-center gap-1.5 text-md text-neutral-900">
+            <span className="font-medium">{p.rating_avg.toFixed(1)}</span>
+            <span className="text-amber-600">★</span>
+
+            {p.reviews_count != null && p.reviews_count > 0 && (
+              <span className="opacity-75">
+                ({p.reviews_count.toLocaleString("en-US")})
               </span>
             )}
           </div>
+        )}
 
-          {/* Rating + reviews */}
-          {!fromshop && p.rating_avg != null && p.rating_avg > 0 && (
-            <div className="mt-1 flex items-center gap-1.5 text-md text-neutral-900">
-              <span className="font-medium">{p.rating_avg.toFixed(1)}</span>
-              <span className="text-amber-600">★</span>
+        {/* Orders count */}
+        {!fromshop && p.orders_count != null && p.orders_count > 0 && (
+          <div className="mt-1 text-[16px] font-medium text-neutral-900">
+            {fmtOrders(p.orders_count)}{" "}
+            <span className="font-medium">Orders</span>
+          </div>
+        )}
 
-              {p.reviews_count != null && p.reviews_count > 0 && (
-                <span className="opacity-75">
-                  ({p.reviews_count.toLocaleString("en-US")})
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Orders count */}
-          {!fromshop && p.orders_count != null && p.orders_count > 0 && (
-            <div className="mt-1 text-[16px] font-medium text-neutral-900">
-              {fmtOrders(p.orders_count)}{" "}
-              <span className="font-medium">Orders</span>
-            </div>
-          )}
-
-          {p.free_shipping && (
-            <div className="mt-2">
-              <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 text-xs px-3 py-1 font-medium">
-                Free shipping
-              </span>
-            </div>
-          )}
-        </div>
-      </Link>
-    )
+        {p.free_shipping && (
+          <div className="mt-2">
+            <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 text-xs px-3 py-1 font-medium">
+              Free shipping
+            </span>
+          </div>
+        )}
+      </div>
+    </Link>
   );
 }
 

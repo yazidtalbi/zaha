@@ -12,7 +12,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Star } from "lucide-react";
 
 type Review = {
   id: string;
@@ -123,11 +123,9 @@ export default function ProductReviewStrip({
       {/* ===== Header summary (matches mock) ===== */}
       <div className="flex items-center justify-between">
         <div className="  items-baseline gap-4">
-          <div className="flex items-center gap-3">
-            <div className="text-3xl leading-none font-semibold">
-              {avg.toFixed(2)}
-            </div>
-            <div className="text-2xl leading-none text-amber-500">★</div>
+          <div className="flex items-center gap-2">
+            <div className="text-2xl font-semibold">{avg.toFixed(2)}</div>
+            <Star className="  h-4 w-4 fill-current text-amber-500" />
           </div>
           <div className="text-neutral-500 text-md">
             {formatCount(count)} rating{count === 1 ? "" : "s"}
@@ -137,14 +135,14 @@ export default function ProductReviewStrip({
         <Link
           href={seeAllHref}
           prefetch={false}
-          className="rounded-full border-2 border-black px-4 py-1 text-sm     font-semibold"
+          className="ml-auto inline-flex items-center rounded-full border px-3 py-1 text-sm hover:bg-white"
         >
           All reviews
         </Link>
       </div>
 
       {/* ===== Horizontal strip ===== */}
-      <div className="-mx-4 mt-4 overflow-x-auto px-4">
+      <div className="-mx-4 mt-3 overflow-x-auto px-4">
         <ul className="flex gap-4 snap-x snap-mandatory">
           {reviews.map((r) => (
             <li

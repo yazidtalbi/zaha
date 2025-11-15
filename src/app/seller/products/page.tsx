@@ -251,6 +251,8 @@ export default function SellerProducts() {
 function Inner() {
   const PAGE_SIZE = 20;
 
+  const MAIN_CLASS = "px-4 pt-4 pb-28 max-w-screen-sm mx-auto";
+
   const [shopId, setShopId] = useState<string | null>(null);
   const [rows, setRows] = useState<Product[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -568,7 +570,7 @@ function Inner() {
 
   if (loading) {
     return (
-      <main className="p-4 space-y-4 max-w-screen-sm mx-auto">
+      <main className={MAIN_CLASS}>
         <ProductsHeaderCompact
           counts={counts}
           q={q}
@@ -598,7 +600,7 @@ function Inner() {
 
   if (!shopId) {
     return (
-      <main className="p-4 max-w-screen-sm mx-auto">
+      <main className={MAIN_CLASS}>
         <div className="rounded-2xl border bg-neutral-50d p-6">
           <p className="text-sm text-ink/80">
             You don’t have a shop yet. Create one to start listing products.
@@ -618,7 +620,7 @@ function Inner() {
   const shown = rows;
 
   return (
-    <main className="pb-28 px-4 max-w-screen-sm mx-auto">
+    <main className={MAIN_CLASS}>
       <ProductsHeaderCompact
         counts={counts}
         q={q}

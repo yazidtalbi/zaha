@@ -28,11 +28,10 @@ import Image from "next/image";
 import {
   Select,
   SelectContent,
-  SelectIcon,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@radix-ui/react-select";
+} from "@/components/ui/select";
 import DashboardHeader from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
 import Home from "../page";
@@ -150,10 +149,10 @@ function KpiCard({
         ? "bg-green-50"
         : "bg-red-50";
   return (
-    <div className="rounded-xl    bg-neutral-50  px-3 py-3 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg grid place-items-center bg-white border">
+    <div className="rounded-xl    bg-neutral-50  px-3 py-3   items-center gap-3 block">
+      {/* <div className="w-9 h-9 rounded-lg grid place-items-center bg-white border">
         <Icon size={18} />
-      </div>
+      </div> */}
       <div className="flex-1 min-w-0">
         <div className="text-xs text-ink/70">{label}</div>
         <div className="text-lg font-semibold truncate">{value}</div>
@@ -542,7 +541,7 @@ function OverviewInner() {
       )}
 
       {/* Top bar */}
-      <div className="mb-6 relative flex justify-between">
+      <div className="mb-3 relative flex justify-between">
         <DashboardHeader
           title="Dashboard"
           subtitle="Manage your shop"
@@ -677,41 +676,10 @@ function OverviewInner() {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="hidden sm:inline text-xs text-ink/60">Range</span>
-
-          <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-            <SelectTrigger
-              aria-label="Select date range"
-              className="
-          h-9 w-[168px]
-          rounded-full
-          border border-ink/15 bg-white
-          pl-3 pr-8
-          text-sm text-ink
-          justify-start
-          data-[placeholder]:text-ink/60
-        "
-            >
-              {/* shows the selected item's label; placeholder used only if none selected */}
-              <SelectValue placeholder="Select range" />
-              {/* guaranteed chevron on the right */}
-              <SelectIcon asChild>
-                <ChevronDown className="h-4 w-4 opacity-60" />
-              </SelectIcon>
-            </SelectTrigger>
-
-            <SelectContent className="rounded-xl">
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-          <SelectTrigger className={" w-auto inline-flex shadow-none"}>
+          <SelectTrigger
+            className={" w-auto inline-flex shadow-none rounded-full"}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
@@ -868,7 +836,7 @@ function OverviewInner() {
           )}
         </div>
 
-        <div className="rounded-xl border bg-white p-3 space-y-2">
+        {/* <div className="rounded-xl border bg-white p-3 space-y-2">
           <div className="flex items-center justify-between">
             <div className="font-medium flex items-center gap-2">
               <AlertTriangle size={16} /> Low stock
@@ -895,7 +863,7 @@ function OverviewInner() {
               ))}
             </ul>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Filters + search */}

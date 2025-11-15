@@ -2,7 +2,7 @@
 "use client";
 
 import RequireAuth from "@/components/RequireAuth";
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,20 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Download } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
+
+// ⬇️ Recharts (for shadcn-style charts)
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 /* ───────────────── Types ───────────────── */
 type Order = {
@@ -63,7 +77,10 @@ function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 function fmtDate(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function fmtMonth(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -96,7 +113,8 @@ function AnalyticsInner() {
   const [loading, setLoading] = useState(true);
 
   // Controls
-  const [range, setRange] = useState<RangeKey>("90d");
+  // ⬇️ default to last 7 days (not 90)
+  const [range, setRange] = useState<RangeKey>("7d");
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [granularity, setGranularity] = useState<Granularity>("auto");
 
@@ -253,7 +271,7 @@ function AnalyticsInner() {
     return { max, items };
   }, [filtered, effectiveGranularity, rangeFilter]);
 
-  // Revenue by status (stack)
+  // Revenue by status (MAD)
   const byStatus = useMemo(() => {
     const keys: Order["status"][] = [
       "pending",
@@ -273,8 +291,48 @@ function AnalyticsInner() {
     const total = Object.values(sums).reduce((a, b) => a + b, 0) || 1;
     const pct = Object.fromEntries(
       keys.map((k) => [k, (sums[k] / total) * 100])
-    );
+    ) as Record<Order["status"], number>;
     return { sums, pct, total };
+  }, [filtered]);
+
+  // ⬇️ Orders-by-status (for donut chart – counts, not MAD)
+  const ordersByStatus = useMemo(() => {
+    const keys: Order["status"][] = [
+      "pending",
+      "confirmed",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+    const counts: Record<Order["status"], number> = {
+      pending: 0,
+      confirmed: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+    };
+    filtered.forEach((o) => {
+      counts[o.status] += 1;
+    });
+    const total = keys.reduce((acc, k) => acc + counts[k], 0);
+    const pct: Record<Order["status"], number> = {
+      pending: 0,
+      confirmed: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+    };
+    keys.forEach((k) => {
+      pct[k] = total ? (counts[k] / total) * 100 : 0;
+    });
+
+    const chartRows = keys.map((k) => ({
+      key: k,
+      label: k[0].toUpperCase() + k.slice(1),
+      value: counts[k],
+    }));
+
+    return { counts, pct, total, chartRows };
   }, [filtered]);
 
   // Top products
@@ -332,10 +390,20 @@ function AnalyticsInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `zaha_analytics_${range}${includeCancelled ? "_incl_cancelled" : ""}.csv`;
+    a.download = `zaha_analytics_${range}${
+      includeCancelled ? "_incl_cancelled" : ""
+    }.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const STATUS_COLORS: Record<Order["status"], string> = {
+    pending: "#FACC15", // yellow
+    confirmed: "#60A5FA", // blue
+    shipped: "#A855F7", // purple
+    delivered: "#22C55E", // green
+    cancelled: "#F97373", // red-ish
+  };
 
   return (
     <main className="space-y-6 p-4 max-w-screen-md mx-auto pb-24">
@@ -353,7 +421,7 @@ function AnalyticsInner() {
       <div className="flex flex-wrap items-center gap-2">
         {/* Range */}
         <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-          <SelectTrigger className="w-[140px] rounded-xl">
+          <SelectTrigger className="w-[140px] rounded-full shadow-none">
             <SelectValue placeholder="Range" />
           </SelectTrigger>
           <SelectContent>
@@ -383,7 +451,7 @@ function AnalyticsInner() {
           value={granularity}
           onValueChange={(v) => setGranularity(v as Granularity)}
         >
-          <SelectTrigger className="w-[140px] rounded-xl">
+          <SelectTrigger className="w-[140px] rounded-full shadow-none">
             <SelectValue placeholder="Granularity" />
           </SelectTrigger>
           <SelectContent>
@@ -418,7 +486,7 @@ function AnalyticsInner() {
         />
       </div>
 
-      {/* Trend (compact) */}
+      {/* Trend (Recharts) */}
       <section className="space-y-3">
         <h2 className="font-semibold">
           {granularity === "auto"
@@ -430,15 +498,95 @@ function AnalyticsInner() {
         ) : !chartData.items.length ? (
           <div className="text-sm text-ink/70">No data in this range.</div>
         ) : (
-          <RevenueChart data={chartData.items} max={chartData.max} />
+          <RevenueChart
+            data={chartData.items.map((d) => ({
+              label: d.label,
+              value: d.value,
+            }))}
+            max={chartData.max}
+          />
         )}
       </section>
 
-      {/* Revenue by status (stack) */}
+      {/* ⬇️ NEW: Order status breakdown (donut chart – counts, not MAD) */}
+      <section className="space-y-3">
+        <h2 className="font-semibold">Order status breakdown</h2>
+        {!filtered.length ? (
+          <div className="rounded-xl border bg-white p-4 text-sm text-ink/70">
+            No orders in this range.
+          </div>
+        ) : (
+          <div className="rounded-xl border bg-white p-3 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="relative w-full sm:w-1/2 h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={ordersByStatus.chartRows}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius="60%"
+                    outerRadius="80%"
+                    paddingAngle={2}
+                    strokeWidth={2}
+                  >
+                    {ordersByStatus.chartRows.map((row) => (
+                      <Cell
+                        key={row.key}
+                        fill={STATUS_COLORS[row.key as Order["status"]]}
+                      />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    formatter={(value, _name, entry) => [
+                      `${value} orders`,
+                      (entry?.payload as any)?.label ?? "Status",
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* Center label */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <div className="text-[11px] text-ink/60">Total orders</div>
+                <div className="text-lg font-semibold">
+                  {ordersByStatus.total}
+                </div>
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="w-full sm:w-1/2 grid grid-cols-2 gap-2 text-xs">
+              {ordersByStatus.chartRows.map((row) => (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between rounded-lg border bg-neutral-50 px-2 py-1"
+                >
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          STATUS_COLORS[row.key as Order["status"]],
+                      }}
+                    />
+                    <span>{row.label}</span>
+                  </div>
+                  <div className="text-[11px] text-ink/70">
+                    {row.value} ·{" "}
+                    {ordersByStatus.pct[row.key as Order["status"]].toFixed(0)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Revenue by status (stack – MAD) */}
       <section className="space-y-3">
         <h2 className="font-semibold">Revenue by status</h2>
         <div className="rounded-xl border p-3 bg-white">
-          <div className="h-3 w-full bg-neutral-200 rounded overflow-hidden">
+          <div className="h-3 w-full bg-neutral-200 rounded overflow-hidden flex">
             <div
               className="h-3 bg-yellow-300"
               style={{ width: `${byStatus.pct.pending}%` }}
@@ -567,127 +715,62 @@ function AnalyticsInner() {
   );
 }
 
-/* ───────────────── Chart ───────────────── */
+/* ───────────────── Chart (Recharts) ───────────────── */
 function RevenueChart({
   data,
-  max,
 }: {
   data: { label: string; value: number }[];
-  max: number;
+  max: number; // kept for API symmetry, but not needed by Recharts
 }) {
-  // Responsive SVG with simple tooltip (compact)
-  const height = 160;
-  const paddingX = 24;
-  const paddingY = 16;
-  const W = 1000;
-  const H = height;
-
-  const n = data.length;
-  const x = (i: number) => {
-    if (n <= 1) return paddingX;
-    return paddingX + (i * (W - paddingX * 2)) / (n - 1);
-  };
-  const y = (v: number) => {
-    const t = (v / max) * (H - paddingY * 2);
-    return H - paddingY - t;
-  };
-
-  const path = data
-    .map((d, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(d.value)}`)
-    .join(" ");
-
-  const area = `M ${x(0)} ${y(data[0].value)} ${data
-    .map((d, i) => `L ${x(i)} ${y(d.value)}`)
-    .join(" ")} L ${x(n - 1)} ${H - paddingY} L ${x(0)} ${H - paddingY} Z`;
-
-  const [hover, setHover] = useState<{
-    i: number;
-    cx: number;
-    cy: number;
-  } | null>(null);
-  const over = (i: number) => setHover({ i, cx: x(i), cy: y(data[i].value) });
-  const out = () => setHover(null);
+  const chartData = data.map((d) => ({
+    label: d.label,
+    value: d.value,
+  }));
 
   return (
     <div className="rounded-xl border bg-white p-3">
-      <div className="relative w-full">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[160px]">
-          {[0.25, 0.5, 0.75, 1].map((p) => (
-            <line
-              key={p}
-              x1={paddingX}
-              x2={W - paddingX}
-              y1={paddingY + (H - paddingY * 2) * (1 - p)}
-              y2={paddingY + (H - paddingY * 2) * (1 - p)}
-              stroke="rgba(0,0,0,0.06)"
-              strokeWidth={1}
-            />
-          ))}
-
-          <path d={area} fill="rgba(217, 87, 59, 0.15)" />
-          <path
-            d={path}
-            fill="none"
-            stroke="rgb(217, 87, 59)"
-            strokeWidth={2}
-          />
-
-          {data.map((_, i) => (
-            <g key={i}>
-              <circle
-                cx={x(i)}
-                cy={y(data[i].value)}
-                r={3}
-                fill="rgb(217,87,59)"
-                opacity={0.9}
-              />
-              <rect
-                x={x(i) - (W - paddingX * 2) / Math.max(10, n * 2)}
-                y={0}
-                width={(W - paddingX * 2) / Math.max(5, n)}
-                height={H}
-                fill="transparent"
-                onMouseEnter={() => over(i)}
-                onMouseLeave={out}
-              />
-            </g>
-          ))}
-        </svg>
-
-        {hover && (
-          <div
-            className="absolute z-10 -translate-x-1/2 -translate-y-full px-2 py-1 rounded bg-ink text-white text-xs shadow"
-            style={{
-              left: `${(hover.cx / W) * 100}%`,
-              top: `${(hover.cy / H) * 100}%`,
-            }}
+      <div className="h-40 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={chartData}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
           >
-            <div className="font-medium">
-              MAD {Math.round(data[hover.i].value).toLocaleString()}
-            </div>
-            <div className="opacity-80">{data[hover.i].label}</div>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-2 grid grid-cols-6 text-[11px] text-ink/70">
-        {data.length <= 6
-          ? data.map((d, i) => (
-              <div key={i} className="truncate">
-                {d.label}
-              </div>
-            ))
-          : [0, 0.2, 0.4, 0.6, 0.8, 1].map((p, idx) => {
-              const i = Math.min(
-                data.length - 1,
-                Math.round((data.length - 1) * p)
-              );
-              return (
-                <div key={idx} className="truncate">
-                  {data[i].label}
-                </div>
-              );
-            })}
+            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+            />
+            <YAxis
+              tick={{ fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              width={50}
+            />
+            <RechartsTooltip
+              contentStyle={{
+                borderRadius: 10,
+                border: "1px solid rgba(0,0,0,0.06)",
+                boxShadow: "0 8px 24px rgba(15,23,42,0.14)",
+                fontSize: 12,
+              }}
+              formatter={(value) => [
+                `MAD ${Math.round(value as number).toLocaleString()}`,
+                "Revenue",
+              ]}
+              labelFormatter={(label) => String(label)}
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="rgb(217, 87, 59)"
+              strokeWidth={2}
+              fill="rgba(217, 87, 59, 0.18)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

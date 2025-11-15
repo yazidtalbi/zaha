@@ -52,6 +52,7 @@ import ProductCard from "@/components/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProductSeed } from "@/lib/productSeed";
 import FavButton from "@/components/FavButton";
+import { OptionGroupField } from "@/components/product/OptionGroupField";
 
 /* -------------------------------------------------
    Types
@@ -318,19 +319,19 @@ function ProductCarousel({
   const items = media.length ? media : [{ type: "image", src: "" as string }];
 
   return (
-    <div className="  ">
+    <div className="">
       <div className="relative rounded-4xl bg-white">
-        <div ref={emblaRef} className="overflow-hidden rounded-xl">
+        <div ref={emblaRef} className="overflow-hidden rounded-b-xl">
           <div className="flex">
             {items.map((item, i) => (
               <div
                 key={i}
-                className="min-w-0 flex-[0_0_100%] aspect-[7/8] sm:aspect-[4/3] bg-neutral-100"
+                className="relative min-w-0 flex-[0_0_100%] aspect-[7/8] sm:aspect-[4/3] bg-neutral-100"
               >
                 {item.type === "image" ? (
                   item.src ? (
                     <button
-                      className="w-full h-full"
+                      className="absolute inset-0 w-full h-full"
                       onClick={() => onOpen(i)}
                       aria-label={`Open image ${i + 1}`}
                     >
@@ -342,15 +343,15 @@ function ProductCarousel({
                       />
                     </button>
                   ) : (
-                    <div className="w-full h-full grid place-items-center text-neutral-500">
+                    <div className="absolute inset-0 grid place-items-center text-neutral-500">
                       No image
                     </div>
                   )
                 ) : (
-                  <div className="relative w-full h-full">
+                  <>
                     <video
                       ref={videoRef}
-                      className="w-full h-full object-cover"
+                      className="absolute inset-0 w-full h-full object-cover"
                       poster={item.poster}
                       {...(shouldLoadVideo ? { src: item.src } : {})}
                       muted
@@ -371,7 +372,7 @@ function ProductCarousel({
                         <div className="h-6 w-6 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
             ))}
@@ -395,7 +396,7 @@ function ProductCarousel({
                       {isVideoDot && !isActive ? (
                         <svg
                           viewBox="0 0 24 24"
-                          className="h-2.5 w-2.5"
+                          className="h-2 w-2"
                           aria-hidden="true"
                         >
                           <path
@@ -406,7 +407,9 @@ function ProductCarousel({
                         </svg>
                       ) : (
                         <span
-                          className={`block h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : "bg-white/50"}`}
+                          className={`block h-1.5 w-1.5 rounded-full ${
+                            isActive ? "bg-white" : "bg-white/50"
+                          }`}
                         />
                       )}
                     </button>
@@ -440,8 +443,6 @@ export default function ProductPage() {
       const raw = sessionStorage.getItem(`product_cache_${id}`);
       if (!raw) return null;
       const obj = JSON.parse(raw);
-      // optional TTL if you want (e.g., 10 minutes)
-      // if (Date.now() - (obj.__ts ?? 0) > 10 * 60 * 1000) return null;
       delete obj.__ts;
       return obj;
     } catch {
@@ -451,6 +452,19 @@ export default function ProductPage() {
 
   const [p, setP] = useState<any>(seeded ?? cached ?? null);
   const [shop, setShop] = useState<any>(null);
+
+  // availability controlled by parent first (seed/cache), then by DB fetch
+  const [availability, setAvailability] = useState<
+    "loading" | "available" | "unavailable"
+  >(() => {
+    const src: any = seeded ?? cached;
+    if (!src) return "loading";
+    const isUnavailable =
+      Boolean(src.unavailable) ||
+      src.active === false ||
+      Boolean(src.deleted_at);
+    return isUnavailable ? "unavailable" : "available";
+  });
 
   const [similar, setSimilar] = useState<any[]>([]);
   const [moreFromShop, setMoreFromShop] = useState<any[]>([]);
@@ -493,7 +507,7 @@ export default function ProductPage() {
   const [showStickyAdd, setShowStickyAdd] = useState(false);
   const mainCtaRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch: if we already have p, **revalidate in background** without flipping loading=true.
+  // Fetch: if we already have p, revalidate in background without flipping loading=true.
   useEffect(() => {
     const _id = (id ?? "").toString().trim();
     if (!_id) {
@@ -504,7 +518,7 @@ export default function ProductPage() {
 
     let cancelled = false;
     (async () => {
-      if (!p) setLoading(true); // only show skeleton when nothing to show
+      if (!p) setLoading(true);
 
       const prodPromise = supabase
         .from("products")
@@ -525,7 +539,6 @@ export default function ProductPage() {
       if (cancelled) return;
 
       if (prodErr || !prod) {
-        // Keep current p if we had one; just surface error quietly.
         if (!p) setErr(prodErr?.message || "Product not found");
         setLoading(false);
         return;
@@ -534,7 +547,13 @@ export default function ProductPage() {
       setP(prod);
       setShop((prod as any).shops || null);
 
-      // refresh session cache with the latest version
+      // Update availability from DB row
+      const dbUnavailable =
+        Boolean((prod as any).unavailable) ||
+        (prod as any).active === false ||
+        Boolean((prod as any).deleted_at);
+      setAvailability(dbUnavailable ? "unavailable" : "available");
+
       try {
         sessionStorage.setItem(
           `product_cache_${_id}`,
@@ -647,7 +666,6 @@ export default function ProductPage() {
           }
 
           if (!similarSet.length) {
-            // fallback by city
             let q = supabase
               .from("products")
               .select("*")
@@ -672,7 +690,7 @@ export default function ProductPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]); // keep effect tidy
+  }, [id]);
 
   // option groups
   const optionGroups: OptionGroup[] = useMemo(
@@ -788,9 +806,9 @@ export default function ProductPage() {
     : null;
   const showPriceRange = minTotal !== maxTotal && !promoActive;
 
-  const isUnavailable = Boolean(p?.unavailable);
   const isRemoved = Boolean(p?.deleted_at);
-  const isInactive = !Boolean(p?.active);
+  const isInactive = p?.active === false;
+  const isUnavailable = availability === "unavailable";
 
   function selectionsToLabel(): string {
     const parts: string[] = [];
@@ -829,7 +847,7 @@ export default function ProductPage() {
     };
     if (imgs.length >= 1) {
       const arr = [...imgs];
-      arr.splice(1, 0, videoItem); // video at index 1
+      arr.splice(1, 0, videoItem);
       return arr;
     }
     return [videoItem];
@@ -864,10 +882,9 @@ export default function ProductPage() {
 
   return (
     <>
-      {/* overlay nav buttons */}
       <main className="pb-10 bg-neutral-50 min-h-screen">
         {/* Floating overlays */}
-        <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-4">
+        <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
           <button
             onClick={handleBack}
             className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
@@ -875,10 +892,7 @@ export default function ProductPage() {
             <ChevronLeft size={18} />
           </button>
         </div>
-        <div className="fixed z-10 top-3 right-3 flex items-center gap-2 p-4">
-          {/* <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <MessageSquare size={16} />
-          </button> */}
+        <div className="fixed z-10 top-3 right-3 flex items-center gap-2 p-2">
           <button
             onClick={async () => {
               const url = window.location.href;
@@ -1006,17 +1020,9 @@ export default function ProductPage() {
         />
 
         {/* Title + meta */}
-        {/* … the rest of your page remains exactly the same as before … */}
-        {/* (Trimmed for brevity; keep your previous content for sections, details, reviews, CTAs, sticky add-to-cart, sheets, dialog, etc.) */}
-
-        {/* --- KEEP ALL CONTENT FROM THE PREVIOUS WORKING VERSION BELOW THIS POINT --- */}
-        {/* (I didn't change any of the UI/logic below; only the top loading strategy changed.) */}
-
-        {/* === COPY YOUR PREVIOUS BODY HERE (unchanged) === */}
-
-        {/* Title + meta */}
-        <div className="px-4 pt-3 space-y-4">
+        <div className="px-4 pt-2   space-y-4">
           <section className="-space-y-1 mt-4">
+            {/* Top helper line */}
             <div className="text-sm text-emerald-800 font-medium">
               {promoActive ? (
                 <>
@@ -1024,10 +1030,10 @@ export default function ProductPage() {
                 </>
               ) : showPriceRange ? (
                 <>From MAD {minTotal.toLocaleString("en-US")}+</>
-              ) : (
-                <>MAD {currentTotal.toLocaleString("en-US")}</>
-              )}
+              ) : null}
             </div>
+
+            {/* Main price */}
             {promoActive ? (
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="text-xl font-bold text-emerald-800">
@@ -1042,7 +1048,12 @@ export default function ProductPage() {
                 MAD {minTotal.toLocaleString("en-US")} – MAD{" "}
                 {maxTotal.toLocaleString("en-US")}
               </div>
-            ) : null}
+            ) : (
+              // ✅ Regular price (no promo, no range)
+              <div className="mt-1 text-xl font-bold">
+                MAD {currentTotal.toLocaleString("en-US")}
+              </div>
+            )}
           </section>
 
           <section className="-space-y-1">
@@ -1086,12 +1097,18 @@ export default function ProductPage() {
             <div className="text-sm text-neutral-600 mt-2">
               By{" "}
               {p.shop_id ? (
-                <Link
-                  href={`/shop/${p.shop_id}`}
-                  className="inline-flex items-center gap-2 hover:underline"
-                >
-                  <span className="font-semibold">{shop?.title || "Shop"}</span>
-                </Link>
+                shop ? (
+                  <Link
+                    href={`/shop/${p.shop_id}`}
+                    className="inline-flex items-center gap-2 hover:underline"
+                  >
+                    <span className="font-semibold">{shop.title}</span>
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2 align-middle">
+                    <Skeleton className="h-4 w-24 rounded-full" />
+                  </span>
+                )
               ) : (
                 <span className="font-medium">
                   {p.shop_title || "a Moroccan maker"}
@@ -1104,12 +1121,19 @@ export default function ProductPage() {
             <div className="text-xs text-neutral-500">{p.subtitle}</div>
           ) : null}
 
-          {(!p.active || p.deleted_at) && !p.unavailable ? (
+          {(!p.active || p.deleted_at) && availability !== "unavailable" ? (
             <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-700 w-max">
               removed from seller’s store
             </div>
           ) : null}
-          {p.unavailable && (
+
+          {availability === "loading" && (
+            <div className="text-[11px] rounded-full px-2 py-1 bg-neutral-200 text-neutral-600 w-max">
+              Checking availability…
+            </div>
+          )}
+
+          {availability === "unavailable" && (
             <div className="text-[11px] rounded-full px-2 py-1 bg-amber-100 text-amber-800 w-max">
               temporarily unavailable
             </div>
@@ -1158,7 +1182,6 @@ export default function ProductPage() {
             />
           </div>
 
-          {/* Free shipping badge */}
           {p?.free_shipping && (
             <div className="mt-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs">
               Free shipping
@@ -1171,28 +1194,16 @@ export default function ProductPage() {
           const valueId = selected[g.id] ?? "";
           return (
             <Section key={g.id} title={g.name}>
-              <div className="rounded-xl border bg-white px-3 py-2">
-                <select
-                  className="w-full bg-transparent outline-none py-1.5 text-sm"
-                  value={valueId}
-                  onChange={(e) =>
-                    setSelected((s) => ({ ...s, [g.id]: e.target.value }))
-                  }
-                >
-                  {g.values.map((v) => {
-                    const delta = Number(v.price_delta_mad ?? 0);
-                    const label =
-                      delta === 0
-                        ? v.label
-                        : `${v.label}  ${delta > 0 ? `+ MAD${delta}` : `- MAD${Math.abs(delta)}`}`;
-                    return (
-                      <option key={v.id} value={v.id}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+              <OptionGroupField
+                group={g}
+                valueId={selected[g.id]}
+                onChange={(id) =>
+                  setSelected((s) => ({
+                    ...s,
+                    [g.id]: id,
+                  }))
+                }
+              />
             </Section>
           );
         })}
@@ -1287,7 +1298,9 @@ export default function ProductPage() {
                         });
                       }
                     }}
-                    disabled={isUnavailable || isInactive || isRemoved}
+                    disabled={
+                      availability !== "available" || isInactive || isRemoved
+                    }
                     className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
                   >
                     Add new item
@@ -1318,14 +1331,21 @@ export default function ProductPage() {
                         });
                       }
                     }}
-                    disabled={isUnavailable || isInactive || isRemoved}
+                    disabled={
+                      availability !== "available" || isInactive || isRemoved
+                    }
                     className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
                   >
                     Add to cart
                   </button>
                   <button
                     onClick={() => {
-                      if (isOwner || isUnavailable || isInactive || isRemoved)
+                      if (
+                        isOwner ||
+                        availability !== "available" ||
+                        isInactive ||
+                        isRemoved
+                      )
                         return;
                       const variant = selectionsToLabel();
                       const total = promoActive ? promoTotal : currentTotal;
@@ -1340,7 +1360,9 @@ export default function ProductPage() {
                         params.set("personalization", personalization.trim());
                       router.push(`/checkout/${p.id}?${params.toString()}`);
                     }}
-                    disabled={isUnavailable || isInactive || isRemoved}
+                    disabled={
+                      availability !== "available" || isInactive || isRemoved
+                    }
                     className="rounded-full ring-black ring-2 px-4 py-3 font-semibold disabled:opacity-60"
                   >
                     Buy it now
@@ -1350,7 +1372,7 @@ export default function ProductPage() {
             </div>
           </Section>
         ) : (
-          <div className="px-4 pb-4">
+          <div className="px-4 py-4">
             <Link
               href={`/seller/edit/${p.id}`}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-800 text-white px-4 py-3 w-full font-medium"
@@ -1366,12 +1388,14 @@ export default function ProductPage() {
 
         {/* Reviews */}
         <Section title="Reviews" collapsible defaultOpen>
-          <div className="rounded-2xl bg-neutral-100 p-3 border">
+          {/* <div className="rounded-2xl bg-neutral-100 p-3 border">
+          
             <div className="flex items-center">
               <div className="text-2xl font-semibold">
                 {ratingAvg ? Number(ratingAvg).toFixed(2) : "—"}
               </div>
               <Star className="ml-1 h-4 w-4 fill-current text-amber-500" />
+
               <button
                 onClick={() => {
                   const el = document.getElementById("reviews-strip");
@@ -1383,13 +1407,58 @@ export default function ProductPage() {
                 View all reviews
               </button>
             </div>
+ 
             <div className="mt-1 text-sm text-neutral-500">
               {ratingCount >= 1000
                 ? `${Math.floor(ratingCount / 100) / 10}k`
                 : String(ratingCount)}{" "}
               ratings
             </div>
-          </div>
+
+   
+            {Array.isArray(p.reviews_preview) &&
+              p.reviews_preview.length > 0 && (
+                <div className="mt-3 flex flex-col gap-3">
+                  {p.reviews_preview.slice(0, 3).map((r: any, i: number) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 rounded-xl bg-white p-3 border"
+                    >
+                    
+                      <div className="h-9 w-9 rounded-full bg-neutral-200 overflow-hidden shrink-0">
+                        {r.avatar_url ? (
+                          <img
+                            src={r.avatar_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+
+                 
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 text-[13px] text-amber-600">
+                          {Array.from({ length: r.rating }).map((_, idx) => (
+                            <Star
+                              key={idx}
+                              className="h-3.5 w-3.5 fill-current text-amber-600"
+                            />
+                          ))}
+                        </div>
+
+                        <div className="text-sm font-medium text-neutral-900 mt-1">
+                          {r.username || "Anonymous"}
+                        </div>
+
+                        <div className="text-sm text-neutral-600 mt-1 line-clamp-2">
+                          {r.comment}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+          </div> */}
 
           <div id="reviews-strip" className="mt-3">
             <ProductReviewsStrip
@@ -1575,7 +1644,6 @@ export default function ProductPage() {
                   </div>
                 </div>
                 <div className="text-xs text-neutral-500">
-                  {/* {shop?.city ? <span className="mx-1"> | </span> : null} */}
                   {shop?.city ?? ""} <span className="mx-1"> | </span>
                   {shop?.created_at
                     ? `On Zaha since ${new Date(shop.created_at).getFullYear()}`
@@ -1585,7 +1653,6 @@ export default function ProductPage() {
 
               <div className="mt-4 overflow-x-auto no-scrollbar">
                 <div className="flex gap-3 px-5">
-                  {/* Show only 3 items */}
                   {[...moreFromShop]
                     .sort(() => Math.random() - 0.5)
                     .slice(0, 4)
@@ -1598,13 +1665,11 @@ export default function ProductPage() {
                       </div>
                     ))}
 
-                  {/* 4th card = View more */}
                   <Link
                     href={`/shop/${shop?.id ?? ""}`}
                     className="min-w-[60%] xs:min-w-[60%] sm:min-w-[48%] flex flex-col items-center justify-center rounded-2xl  bg-white py-6"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      {/* Circle arrow with lucide icon */}
                       <div className="h-12 w-12 rounded-full border  border-neutral-300 grid place-items-center">
                         <ArrowRight className="h-5 w-5 stroke-[2.5]" />
                       </div>
@@ -1669,12 +1734,16 @@ export default function ProductPage() {
                     });
                   }
                 }}
-                disabled={isUnavailable || isInactive || isRemoved}
+                disabled={
+                  availability !== "available" || isInactive || isRemoved
+                }
                 className="w-full rounded-full bg-amber-900 text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
               >
-                {isUnavailable || isInactive || isRemoved
-                  ? "Unavailable"
-                  : "Add to cart"}
+                {availability === "loading"
+                  ? "Checking availability…"
+                  : isUnavailable || isInactive || isRemoved
+                    ? "Unavailable"
+                    : "Add to cart"}
               </button>
             </div>
           </div>
