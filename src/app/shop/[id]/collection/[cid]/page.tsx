@@ -67,13 +67,17 @@ export default function ShopCollectionPage() {
       }
       setCollection(col as Collection);
 
-      // 2) get product ids linked to this collection
+      // 2) get product ids linked to this collection, with order_index
       const { data: pc } = await supabase
         .from("product_collections")
-        .select("product_id")
-        .eq("collection_id", cid);
+        .select("product_id, order_index")
+        .eq("collection_id", cid)
+        .order("order_index", { ascending: true, nullsLast: true });
 
-      const productIds = (pc ?? []).map((x: any) => x.product_id);
+      const productLinks =
+        (pc as { product_id: string; order_index: number | null }[]) ?? [];
+
+      const productIds = productLinks.map((x) => x.product_id);
       if (!productIds.length) {
         setItems([]);
         setLoading(false);
@@ -89,18 +93,30 @@ export default function ShopCollectionPage() {
         .in("id", productIds)
         .eq("active", true);
 
-      setItems((prods as Product[]) ?? []);
+      const allProducts = (prods as Product[]) ?? [];
+
+      // keep the order from productLinks (order_index)
+      const byId = new Map(allProducts.map((p) => [p.id, p]));
+      const ordered: Product[] = productLinks
+        .map((link) => byId.get(link.product_id))
+        .filter((p): p is Product => Boolean(p));
+
+      // in case some products have no link / order_index for any reason
+      const leftovers = allProducts.filter(
+        (p) => !productLinks.find((l) => l.product_id === p.id)
+      );
+
+      setItems([...ordered, ...leftovers]);
       setLoading(false);
     })();
   }, [shopId, cid]);
 
   const sorted = useMemo(() => {
     const arr = [...items];
+
     if (sort === "new") {
-      arr.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+      // respect saved collection order (order_index)
+      return arr;
     } else if (sort === "price_high") {
       arr.sort(
         (a, b) =>
@@ -114,6 +130,7 @@ export default function ShopCollectionPage() {
           (b.promo_price_mad ?? b.price_mad)
       );
     }
+
     return arr;
   }, [items, sort]);
 

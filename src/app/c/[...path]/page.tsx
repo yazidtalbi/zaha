@@ -130,8 +130,7 @@ export default function CategoryPage() {
           q = q
             .order("promo_price_mad", {
               ascending: false,
-              nullsLast: true,
-              referencedTable: "products",
+              nullsFirst: false, // nullsLast = true
             })
             .order("price_mad", {
               ascending: false,

@@ -864,12 +864,12 @@ export default function SellerOrderDetails() {
       </div>
 
       {/* Item */}
-      <Card className="mt-5 shadow-none border rounded-xl">
+      <Card className="mt-5 shadow-none  p-0">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Item</CardTitle>
+          <CardTitle className="text-base p-0">Item</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 p-0">
             {p?.photos?.[0] ? (
               <img
                 src={p.photos[0]}

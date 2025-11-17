@@ -287,7 +287,7 @@ export default function ProductCard({
       </div>
 
       <div className="pt-2">
-        <div className="line-clamp-2 text-sm font-medium leading-snug text-neutral-900 truncate">
+        <div className="line-clamp-2 text-sm font-semibold leading-snug text-neutral-900 truncate">
           {p.title}
         </div>
       </div>
@@ -355,7 +355,7 @@ export default function ProductCard({
 
       {/* BODY */}
       <div className="pt-3 -space-y-1">
-        <div className="line-clamp-2 text-md font-medium text-neutral-900 leading-snug">
+        <div className="line-clamp-2 text-md font-semibold text-neutral-900 leading-snug">
           {p.title}
         </div>
 

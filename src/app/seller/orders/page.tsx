@@ -133,11 +133,11 @@ function OptionChips({ options }: { options: any }) {
   if (!pairs.length) return null;
 
   return (
-    <div className="mt-1 flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1">
       {pairs.slice(0, 6).map((p, i) => (
         <span
           key={i}
-          className="text-[11px] px-2 py-0.5 rounded-full bg-sand text-ink  "
+          className="text-[11px] px-2 py-0.5 rounded-full bg-sand text-ink"
         >
           {p.label}: <span className="font-medium">{p.value}</span>
         </span>
@@ -735,7 +735,10 @@ Options: ${opts}
           {groupedByProduct.map((g) => {
             const isOpen = openGroups[g.productId] ?? true;
             return (
-              <li key={g.productId} className="rounded-2xl border bg-white">
+              <li
+                key={g.productId}
+                className="rounded-2xl border bg-white overflow-hidden"
+              >
                 {/* Group header (click to toggle) */}
                 <button
                   className="w-full p-3 flex items-center gap-3 text-left"
@@ -757,7 +760,9 @@ Options: ${opts}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold truncate">{g.title}</h3>
+                      <h3 className="font-semibold truncate text-sm">
+                        {g.title}
+                      </h3>
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
                         {g.orders.length} order{g.orders.length > 1 ? "s" : ""}
                       </span>
@@ -767,7 +772,9 @@ Options: ${opts}
                     </div>
                   </div>
                   <ChevronDown
-                    className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 transition-transform ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
                   />
                 </button>
 
@@ -787,7 +794,7 @@ Options: ${opts}
                               <CornerDownRight className="h-4 w-4" />
                             </div>
 
-                            <div className="w-6 h-6 rounded-sm bg-neutral-100 overflow-hidden shrink-0">
+                            <div className="w-10 h-10 rounded-lg bg-neutral-100 overflow-hidden shrink-0">
                               {img ? (
                                 <img
                                   src={img}
@@ -801,32 +808,27 @@ Options: ${opts}
                               <div className="flex items-center justify-between gap-2">
                                 <Link
                                   href={`/seller/orders/${o.id}`}
-                                  className="font-medium truncate underline decoration-ink/30 hover:decoration-ink"
+                                  className="text-xs font-medium truncate underline decoration-ink/30 hover:decoration-ink"
                                 >
                                   #{o.id.slice(0, 6)}
                                 </Link>
                                 <StatusBadge status={o.status} />
                               </div>
 
-                              {/* Options + personalization badge (price removed) */}
                               <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
-                                <OptionChips options={o.options} />
-                                {o.personalization && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
-                                    With personalization
-                                  </span>
-                                )}
+                                <span className="font-medium">
+                                  MAD {o.amount_mad}
+                                </span>
+                                <span>·</span>
+                                <span>Qty {o.qty}</span>
+                                <span>·</span>
+                                <span>
+                                  {new Date(o.created_at).toLocaleString()}
+                                </span>
                               </div>
 
-                              {/* New line: Qty + Date (left) */}
-                              <div className="text-xs text-ink/70 mt-1">
-                                Qty {o.qty} ·{" "}
-                                {new Date(o.created_at).toLocaleString()}
-                              </div>
-
-                              {/* Address under that line (with Copy / Open map) */}
                               {(o.address || o.city) && (
-                                <div className="mt-2 text-xs text-ink/70 flex flex-wrap items-center gap-2">
+                                <div className="mt-1 text-[11px] text-ink/70 flex flex-wrap items-center gap-2">
                                   <span className="inline-flex items-center gap-1 min-w-0">
                                     <MapPin className="h-3.5 w-3.5" />
                                     <span className="truncate">
@@ -837,7 +839,9 @@ Options: ${opts}
                                   <button
                                     onClick={async () => {
                                       await navigator.clipboard.writeText(
-                                        `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
+                                        `${o.address ?? ""}${
+                                          o.city ? ", " + o.city : ""
+                                        }`
                                       );
                                       toast.success("Address copied");
                                     }}
@@ -860,6 +864,17 @@ Options: ${opts}
                                   )}
                                 </div>
                               )}
+
+                              {(o.personalization || o.options) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  {o.personalization && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
+                                      With personalization
+                                    </span>
+                                  )}
+                                  <OptionChips options={o.options} />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </li>
@@ -872,18 +887,18 @@ Options: ${opts}
           })}
         </ul>
       ) : (
-        /* ——— FLAT RENDER ——— */
+        /* ——— FLAT RENDER (unified with Products list style) ——— */
         <ul className="mt-3 space-y-2">
           {paged.map((o) => {
             const img = o.products?.photos?.[0];
+            const hasAddress = o.address || o.city;
+            const hasExtras = o.personalization || o.options;
+
             return (
-              <Link href={`/seller/orders/${o.id}`}>
-                {" "}
-                <li
-                  key={o.id}
-                  className="rounded-xl bg-white p-3 border border-black/5"
-                >
-                  <div className="flex gap-2">
+              <Link key={o.id} href={`/seller/orders/${o.id}`}>
+                <li className="rounded-2xl bg-white p-3 border border-black/5">
+                  <div className="flex gap-3">
+                    {/* Image */}
                     <div className="w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
                       {img ? (
                         <img
@@ -898,124 +913,54 @@ Options: ${opts}
                       )}
                     </div>
 
+                    {/* Main content */}
                     <div className="flex-1 min-w-0">
-                      {/* Row: ID + Status */}
-                      <div className="flex   justify-between gap-2 items-end">
-                        <span className="text-xs text-ink/60 font-medium">
+                      {/* Top row: ID + Status */}
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[11px] text-ink/60 font-medium">
                           #{o.id.slice(0, 6)}
                         </span>
-
                         <StatusBadge status={o.status} />
                       </div>
 
-                      {/* Title below */}
+                      {/* Title */}
                       <h4
-                        className="mt-0.5 font-semibold truncate"
+                        className="mt-0.5 text-[15px] font-semibold truncate"
                         title={o.products?.title ?? "Order"}
                       >
                         {o.products?.title ?? "Order"}
                       </h4>
 
-                      {/* Meta */}
-                      <div className="mt-1 text-xs text-ink/70 flex items-center gap-2">
+                      {/* Meta row (like Products list) */}
+                      <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-1">
                         <span className="font-medium">MAD {o.amount_mad}</span>
                         <span>·</span>
                         <span>Qty {o.qty}</span>
                         <span>·</span>
                         <span>{new Date(o.created_at).toLocaleString()}</span>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="  h-px bg-black/5 my-2 opacity-0 " />
-
-                  <div className="block items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      {/* Top row: ID at left, status + ⋯ at right */}
-
-                      {/* Contact row */}
-                      <div className="text-xs text-ink/70 mt-2 flex flex-wrap items-center gap-2 ">
-                        {/* {o.phone && (
-                        <>
-                          <a
-                            className="inline-flex items-center gap-1 underline"
-                            href={`tel:${o.phone}`}
-                          >
-                            <Phone size={12} /> Call
-                          </a>
-                          <a
-                            className="inline-flex items-center gap-1 underline"
-                            target="_blank"
-                            rel="noreferrer"
-                            href={`https://wa.me/${o.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                              `Salam! Your order for "${o.products?.title}" (MAD ${o.amount_mad}).`
-                            )}`}
-                          >
-                            <MessageSquare size={12} /> WhatsApp
-                          </a>
-                        </>
-                      )} */}
-
-                        {(o.address || o.city) && (
-                          <>
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin size={12} />
-                              {(o.address ?? "") +
-                                (o.city ? `, ${o.city}` : "")}
-                            </span>
-                            {/* <button
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(
-                                `${o.address ?? ""}${o.city ? ", " + o.city : ""}`
-                              );
-                              toast.success("Address copied");
-                            }}
-                            className="inline-flex items-center gap-1 underline"
-                          >
-                            <Copy size={12} /> Copy
-                          </button> */}
-                            {/* {o.address && (
-                            <a
-                              className="underline"
-                              target="_blank"
-                              rel="noreferrer"
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                `${o.address} ${o.city ?? ""}`
-                              )}`}
-                            >
-                              Open map
-                            </a>
-                          )} */}
-                          </>
-                        )}
-                      </div>
-
-                      {/* Separator before personalization/options */}
-                      {(o.personalization || o.options) && (
-                        <div className="  h-px bg-black/5 my-2 opacity-0 " />
+                      {/* Address, if any */}
+                      {hasAddress && (
+                        <div className="mt-1 text-[11px] text-ink/70 flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5" />
+                          <span className="truncate">
+                            {(o.address ?? "") + (o.city ? `, ${o.city}` : "")}
+                          </span>
+                        </div>
                       )}
 
-                      {/* With personalization */}
-                      {o.personalization ? (
-                        <section className="mb-2">
-                          <h5 className="text-xs font-semibold text-ink/70 mb-1">
-                            With personalization
-                          </h5>
-                          <div className="whitespace-pre-wrap text-sm rounded-lg border border-black/5 bg-paper px-3 py-2">
-                            {o.personalization}
-                          </div>
-                        </section>
-                      ) : null}
-
-                      {/* Options */}
-                      {o.options ? (
-                        <section>
-                          <h5 className="text-xs font-semibold text-ink/70 mb-1">
-                            Options
-                          </h5>
-                          <OptionsList options={o.options} />
-                        </section>
-                      ) : null}
+                      {/* Extras: personalization + options as pills */}
+                      {hasExtras && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {o.personalization && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
+                              With personalization
+                            </span>
+                          )}
+                          <OptionChips options={o.options} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -1079,9 +1024,7 @@ function StatusBadge({ status }: { status: Order["status"] }) {
   );
 }
 
-/* ==========================================
-   OptionsList — robust renderer (array/object)
-   ========================================== */
+/* (kept for possible future detailed view – currently unused) */
 function OptionsList({ options }: { options: any }) {
   if (Array.isArray(options)) {
     if (!options.length) return null;

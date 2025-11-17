@@ -60,7 +60,15 @@ type Shop = {
   cover_urls: string[] | null;
   created_at?: string | null;
   custom_commissions?: boolean | null;
-  orders_count?: number | null; // 👈
+  orders_count?: number | null;
+
+  // NEW contact / social fields
+  phone?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  website?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
 };
 
 type Product = {
@@ -80,7 +88,12 @@ type ProductEx = Product & {
   promo_ends_at?: string | null;
 };
 
-type Collection = { id: string; title: string; cover_url: string | null };
+type Collection = {
+  id: string;
+  title: string;
+  cover_url: string | null;
+  order_index?: number | null; // 👈 add this
+};
 
 // ===== Pagination config =====
 const PAGE_SIZE = 16;
@@ -120,6 +133,11 @@ export default function ShopPage() {
   // other shop data
   const [collections, setCollections] = useState<Collection[]>([]);
   const [links, setLinks] = useState<Record<string, string[]>>({}); // product_id -> collection_ids[]
+
+  // 👇 NEW: collection_id -> (product_id -> order_index)
+  const [collectionOrder, setCollectionOrder] = useState<
+    Record<string, Record<string, number | null>>
+  >({});
 
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -252,7 +270,7 @@ export default function ShopPage() {
       const { data: s } = await supabase
         .from("shops")
         .select(
-          "id,title,bio,is_verified,city,owner,avatar_url,cover_urls,created_at,custom_commissions,orders_count"
+          "id,title,bio,is_verified,city,owner,avatar_url,cover_urls,created_at,custom_commissions,orders_count,phone,whatsapp,email,website,instagram,facebook"
         )
         .eq("id", shopId)
         .maybeSingle();
@@ -267,33 +285,49 @@ export default function ShopPage() {
       // 2) collections
       const { data: cols } = await supabase
         .from("collections")
-        .select("id,title,cover_url")
+        .select("id,title,cover_url,order_index") // 👈 include order_index
         .eq("shop_id", shopId)
-        .order("title");
+        .order("order_index", { ascending: true, nullsLast: true }) // 👈 primary order
+        .order("title", { ascending: true }); // 👈 fallback
 
       if (cancelled) return;
       setCollections((cols as any[]) ?? []);
 
-      // 3) product↔collection links (correct join)
+      // 3) product↔collection links (with order_index)
       const { data: pcs } = await supabase
         .from("product_collections")
         .select(
           `
-    product_id,
-    collection_id,
-    products!inner(shop_id)
-  `
+          product_id,
+          collection_id,
+          order_index,
+          products!inner(shop_id)
+        `
         )
         .eq("products.shop_id", shopId);
 
       if (cancelled) return;
 
       const map: Record<string, string[]> = {};
+      const orderMap: Record<string, Record<string, number | null>> = {};
+
       (pcs as any[])?.forEach((l) => {
-        if (!map[l.product_id]) map[l.product_id] = [];
-        map[l.product_id].push(l.collection_id);
+        const pid = l.product_id as string;
+        const cid = l.collection_id as string;
+        const ord =
+          typeof l.order_index === "number" ? (l.order_index as number) : null;
+
+        // product -> collections (used for filtering / grouping)
+        if (!map[pid]) map[pid] = [];
+        map[pid].push(cid);
+
+        // collection -> product -> order_index
+        if (!orderMap[cid]) orderMap[cid] = {};
+        orderMap[cid][pid] = ord;
       });
+
       setLinks(map);
+      setCollectionOrder(orderMap);
 
       // reset pagination, then fetch first page
       setItems([]);
@@ -465,10 +499,10 @@ export default function ShopPage() {
       <div className="inline-block w-full">
         {/* Card */}
         <div className="rounded-lg border border-neutral-200 bg-white p-3">
-          <div className="grid grid-cols-12 gap-3 items-stretch">
+          <div className="grid grid-cols-12 gap-1 items-stretch">
             {/* LEFT SQUARE (real height via aspect-square) */}
             <div className="col-span-8">
-              <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-neutral-100">
+              <div className="relative w-full aspect-square overflow-hidden rounded-l-lg bg-neutral-100">
                 {primary ? (
                   <img
                     src={primary}
@@ -484,8 +518,8 @@ export default function ShopPage() {
             </div>
 
             {/* RIGHT COLUMN – matches height perfectly */}
-            <div className="col-span-4 flex flex-col gap-3">
-              <div className="relative flex-1 overflow-hidden rounded-lg bg-neutral-100">
+            <div className="col-span-4 flex flex-col gap-1">
+              <div className="relative flex-1 overflow-hidden rounded-tr-lg bg-neutral-100 aspect-square ">
                 {secondary && (
                   <img
                     src={secondary}
@@ -494,7 +528,7 @@ export default function ShopPage() {
                   />
                 )}
               </div>
-              <div className="relative flex-1 overflow-hidden rounded-lg bg-neutral-100">
+              <div className="relative flex-1 overflow-hidden rounded-br-lg bg-neutral-100 aspect-square ">
                 {tertiary && (
                   <img
                     src={tertiary}
@@ -509,10 +543,10 @@ export default function ShopPage() {
 
         {/* Text under card */}
         <div className="mt-3">
-          <p className="text-sm font-semibold leading-tight truncate text-ink">
+          <p className="text-md font-semibold leading-tight truncate text-ink">
             {collection.title}
           </p>
-          <p className="text-xs text-neutral-500">
+          <p className="text-sm text-neutral-500">
             {count} item{count !== 1 ? "s" : ""}
           </p>
         </div>
@@ -524,12 +558,40 @@ export default function ShopPage() {
   const collectionSections = useMemo(
     () =>
       collections
-        .map((c) => ({
-          collection: c,
-          products: items.filter((p) => (links[p.id] ?? []).includes(c.id)),
-        }))
+        .map((c) => {
+          const rawProducts = items.filter((p) =>
+            (links[p.id] ?? []).includes(c.id)
+          );
+
+          // sort by saved order_index, fallback to created_at desc
+          const ordered = rawProducts
+            .map((p) => ({
+              product: p,
+              order: collectionOrder[c.id]?.[p.id] ?? null,
+            }))
+            .sort((a, b) => {
+              const ao = a.order;
+              const bo = b.order;
+
+              if (ao != null && bo != null) return ao - bo;
+              if (ao != null) return -1;
+              if (bo != null) return 1;
+
+              // fallback: newest first
+              return (
+                new Date(b.product.created_at).getTime() -
+                new Date(a.product.created_at).getTime()
+              );
+            })
+            .map((x) => x.product);
+
+          return {
+            collection: c,
+            products: ordered,
+          };
+        })
         .filter((section) => section.products.length > 0),
-    [collections, items, links]
+    [collections, items, links, collectionOrder]
   );
 
   if (!shopId) return <main className="p-4">Invalid shop.</main>;
@@ -841,6 +903,17 @@ function ShopHeader({
 }) {
   const cityLabel = shop.city ? `${shop.city}, Morocco` : "Morocco";
 
+  const hasWhatsApp = !!shop.whatsapp && shop.whatsapp.trim().length > 0;
+  const waNumber = shop.whatsapp?.replace(/\D/g, "") ?? "";
+  const waUrl =
+    hasWhatsApp && waNumber.length > 0 ? `https://wa.me/${waNumber}` : null;
+
+  const openWhatsApp = () => {
+    if (waUrl) {
+      window.open(waUrl, "_blank");
+    }
+  };
+
   return (
     <>
       <div className=" ">
@@ -909,22 +982,26 @@ function ShopHeader({
                 <button
                   type="button"
                   onClick={onOpenContact}
-                  className="h-10 p-4 px-5 rounded-full bg-ink text-sand text-md font-medium   hover:brightness-105 active:scale-[0.98] inline-flex items-center gap-1.5"
+                  className="h-10 p-4 px-5 rounded-full bg-ink text-sand text-md font-medium hover:brightness-105 active:scale-[0.98] inline-flex items-center gap-1.5"
                 >
                   <Zap className="h-3.5 w-3.5 fill-current" />
                   <span>Get in touch</span>
                 </button>
-                <button
-                  type="button"
-                  className="h-10   w-10 justify-center rounded-full border border-neutral-200 bg-white text-sm font-medium text-neutral-900 hover:bg-neutral-50 active:scale-[0.98] inline-flex items-center gap-1.5"
-                >
-                  <WhatsAppGlyph className="h-4 w-4" />
-                  {/* <span>Follow shop</span> */}
-                </button>
+
+                {hasWhatsApp && (
+                  <button
+                    type="button"
+                    onClick={openWhatsApp}
+                    className="h-10 w-10 justify-center rounded-full border border-neutral-200 bg-white text-sm font-medium text-neutral-900 hover:bg-neutral-50 active:scale-[0.98] inline-flex items-center gap-1.5"
+                    aria-label="Chat on WhatsApp"
+                  >
+                    <WhatsAppGlyph className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <div>
                 {shop.custom_commissions && (
-                  <div className=" text-xs text-emerald-700 inline-flex items-center gap-1">
+                  <div className="text-xs text-emerald-700 inline-flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     <span>Open for commissions </span>
                   </div>
@@ -953,7 +1030,7 @@ function ShopHeader({
             </div>
 
             {/* Stats */}
-            <div className=" grid grid-cols-3 gap-2 mt-4">
+            <div className="grid grid-cols-3 gap-2 mt-4">
               <div className="flex-1 rounded-lg px-3 py-2 bg-neutral-100/75 text-center content-center">
                 <div className="text-sm font-medium text-neutral-900">
                   {shop.orders_count ? shop.orders_count : "—"}
@@ -986,8 +1063,6 @@ function ShopHeader({
               </div>
             </div>
           </div>
-
-          {/* Secondary CTA icons (just open the drawer for now) */}
         </div>
       </div>
     </>
@@ -1123,44 +1198,111 @@ function ContactSheet({
 }) {
   const title = shop?.title ?? "Shop";
 
-  const supportItems = [
-    {
+  type ContactItem = {
+    id: string;
+    fieldLabel: string;
+    valueLabel: string;
+    Icon: any;
+    href?: string;
+    target?: "_blank" | "_self";
+  };
+
+  const supportItems: ContactItem[] = [];
+
+  if (shop?.phone) {
+    supportItems.push({
       id: "phone",
       fieldLabel: "Phone number",
-      valueLabel: "Call this shop",
+      valueLabel: shop.phone,
       Icon: Phone,
-    },
-    {
+      href: `tel:${shop.phone}`,
+      target: "_self",
+    });
+  }
+
+  if (shop?.whatsapp) {
+    const wa = shop.whatsapp.replace(/\D/g, "");
+    supportItems.push({
       id: "whatsapp",
       fieldLabel: "WhatsApp",
-      valueLabel: "Chat with the seller",
+      valueLabel: shop.whatsapp,
       Icon: WhatsAppGlyph,
-    },
-    {
+      href: wa ? `https://wa.me/${wa}` : undefined,
+      target: "_blank",
+    });
+  }
+
+  if (shop?.email) {
+    supportItems.push({
       id: "email",
       fieldLabel: "Email address",
-      valueLabel: "Send an email",
+      valueLabel: shop.email,
       Icon: Mail,
-    },
-  ];
+      href: `mailto:${shop.email}`,
+      target: "_self",
+    });
+  }
 
-  const socialItems = [
-    {
+  if (shop?.website) {
+    const url = shop.website.startsWith("http")
+      ? shop.website
+      : `https://${shop.website}`;
+    supportItems.push({
+      id: "website",
+      fieldLabel: "Website",
+      valueLabel: shop.website,
+      Icon: Globe,
+      href: url,
+      target: "_blank",
+    });
+  }
+
+  const socialItems: ContactItem[] = [];
+
+  if (shop?.instagram) {
+    const handle = shop.instagram.trim();
+    const url = handle.startsWith("http")
+      ? handle
+      : `https://instagram.com/${handle.replace(/^@/, "")}`;
+    socialItems.push({
       id: "instagram",
       fieldLabel: "Instagram",
-      valueLabel: "Open Instagram profile",
+      valueLabel: handle,
       Icon: Instagram,
-    },
-    {
+      href: url,
+      target: "_blank",
+    });
+  }
+
+  if (shop?.facebook) {
+    const url = shop.facebook.startsWith("http")
+      ? shop.facebook
+      : `https://facebook.com/${shop.facebook.replace(/^@/, "")}`;
+    socialItems.push({
       id: "facebook",
       fieldLabel: "Facebook",
-      valueLabel: "Visit Facebook page",
+      valueLabel: shop.facebook,
       Icon: Facebook,
-    },
-  ];
+      href: url,
+      target: "_blank",
+    });
+  }
 
-  const handleClick = async (id: string) => {
-    // your existing logic (copy link / open URL / etc.)
+  const handleClick = async (item: ContactItem) => {
+    if (item.href) {
+      // phone/email in same tab, others new tab unless specified
+      window.open(item.href, item.target ?? "_blank");
+      return;
+    }
+
+    // Fallback: copy value
+    if (navigator.clipboard && item.valueLabel) {
+      try {
+        await navigator.clipboard.writeText(item.valueLabel);
+      } catch {
+        // ignore
+      }
+    }
     onOpenChange(false);
   };
 
@@ -1172,8 +1314,10 @@ function ContactSheet({
       {/* Header */}
       <SheetHeader className="mb-4">
         <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3 " />
-        <SheetTitle className="text-base">Contact this shop</SheetTitle>
-        <SheetDescription className="text-xs text-neutral-500 px-10 pb-2">
+        <SheetTitle className="text-base text-center">
+          Contact this shop
+        </SheetTitle>
+        <SheetDescription className="text-xs text-neutral-500 px-10 pb-2 text-center">
           You can get in touch with{" "}
           <span className="font-medium text-neutral-800">{title}</span> using
           the options below.
@@ -1182,60 +1326,64 @@ function ContactSheet({
 
       <div className="space-y-4">
         {/* CUSTOMER SUPPORT CARD */}
-        <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
-          <p className="text-xs font-medium text-neutral-500 mb-3">
-            Customer Support
-          </p>
+        {supportItems.length > 0 && (
+          <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
+            <p className="text-xs font-medium text-neutral-500 mb-3">
+              Customer Support
+            </p>
 
-          {supportItems.map(({ id, fieldLabel, valueLabel, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => handleClick(id)}
-              className="w-full flex items-center gap-3 py-2 text-left"
-            >
-              <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
-                <Icon className="h-4 w-4 text-neutral-800" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-medium   tracking-wide text-neutral-500">
-                  {fieldLabel}
+            {supportItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleClick(item)}
+                className="w-full flex items-center gap-3 py-2 text-left"
+              >
+                <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+                  <item.Icon className="h-4 w-4 text-neutral-800" />
                 </div>
-                <div className="text-sm font-medium text-neutral-900 truncate">
-                  {valueLabel}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-medium tracking-wide text-neutral-500">
+                    {item.fieldLabel}
+                  </div>
+                  <div className="text-sm font-medium text-neutral-900 truncate">
+                    {item.valueLabel}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* SOCIAL MEDIA CARD */}
-        <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
-          <p className="text-xs font-medium text-neutral-500 mb-3">
-            Social media
-          </p>
+        {socialItems.length > 0 && (
+          <div className="rounded-3xl bg-neutral-50 border border-neutral-200 px-4 py-3">
+            <p className="text-xs font-medium text-neutral-500 mb-3">
+              Social media
+            </p>
 
-          {socialItems.map(({ id, fieldLabel, valueLabel, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => handleClick(id)}
-              className="w-full flex items-center gap-3 py-2 text-left"
-            >
-              <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
-                <Icon className="h-4 w-4 text-neutral-800" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-medium   tracking-wide text-neutral-500">
-                  {fieldLabel}
+            {socialItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleClick(item)}
+                className="w-full flex items-center gap-3 py-2 text-left"
+              >
+                <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+                  <item.Icon className="h-4 w-4 text-neutral-800" />
                 </div>
-                <div className="text-sm font-medium text-neutral-900 truncate">
-                  {valueLabel}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-medium tracking-wide text-neutral-500">
+                    {item.fieldLabel}
+                  </div>
+                  <div className="text-sm font-medium text-neutral-900 truncate">
+                    {item.valueLabel}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </SheetContent>
   );
