@@ -264,8 +264,8 @@ export default function ProductCard({
       }}
       className={`block overflow-hidden ${className}`}
     >
-      <div className="relative">
-        <div className="relative h-40 rounded-lg overflow-hidden bg-neutral-100 ">
+      <div className="relative ">
+        <div className="relative h-36 rounded-lg overflow-hidden bg-neutral-100 ">
           {imgs[0] ? (
             <img
               src={imgs[0]}

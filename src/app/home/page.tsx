@@ -91,24 +91,36 @@ const __homeStore: HomeStore = {
 /* =========================
    Slides
 ========================= */
-const slides = [
+const slides: Slide[] = [
   {
-    img: "/banners/holiday.jpg",
-    title: "Discover our holiday picks",
-    ctaLabel: "Get gifting",
-    ctaHref: "/home?campaign=holiday",
+    img: "/home/a.png", // your PNG with the woman & star
+    title: "Open your shop on Bazr",
+    ctaLabel: "Become a seller",
+    ctaHref: "/onboarding/seller",
+    bg: "#371836", // deep plum
+    textColor: "#FFFFFF",
+    ctaBg: "#FFFFFF",
+    ctaText: "#050608",
   },
   {
-    img: "/banners/handmade.jpg",
-    title: "Handmade treasures from Morocco",
-    ctaLabel: "Explore handmade",
-    ctaHref: "/home?tag=handmade",
+    img: "/home/b.png", // PNG with the bag visual
+    title: "Handmade bags that feel like home",
+    ctaLabel: "Shop for bags",
+    ctaHref: "/c/bags",
+    bg: "#EED8B6", // warm beige
+    textColor: "#000000",
+    ctaBg: "#FFFFFF",
+    ctaText: "#FFFFFF",
   },
   {
-    img: "/banners/personalized.jpg",
-    title: "Personalized, made just for you",
-    ctaLabel: "Personalize now",
-    ctaHref: "/home?tag=personalized",
+    img: "/home/c.png", // PNG with jewelry visual
+    title: "Jewelry crafted with soul",
+    ctaLabel: "Shop jewelry",
+    ctaHref: "/c/jewelry",
+    bg: "#0E2630", // deep teal/blue
+    textColor: "#FFFFFF",
+    ctaBg: "#FFFFFF",
+    ctaText: "#050608",
   },
 ];
 
@@ -180,7 +192,8 @@ export default function HomePage(): JSX.Element {
   const [items, setItems] = useState<ProductForCard[]>(
     __homeStore.items.length ? __homeStore.items : []
   );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true); // start as true
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [page, setPage] = useState<number>(__homeStore.page);
   const [hasMore, setHasMore] = useState<boolean>(__homeStore.hasMore);
   const [activeTab, setActiveTab] = useState<TabId>(__homeStore.activeTab);
@@ -248,17 +261,12 @@ export default function HomePage(): JSX.Element {
       const from = pageNumber * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      try {
-        const { data, error } = await buildQueryForTab(tab).range(from, to);
-        if (error) {
-          console.error("home:fetchPage error", error);
-          return [];
-        }
-        return normalizeList(data);
-      } catch (e) {
-        console.error("home:fetchPage exception", e);
-        return [];
+      const { data, error } = await buildQueryForTab(tab).range(from, to);
+      if (error) {
+        console.error("home:fetchPage error", error);
+        throw error;
       }
+      return normalizeList(data);
     },
     [buildQueryForTab]
   );
@@ -306,16 +314,24 @@ export default function HomePage(): JSX.Element {
     await fetchCityRail(city);
 
     if (activeTab === "city") {
-      // show skeleton while refetching city tab
       setItems([]);
       setPage(0);
       setHasMore(true);
+      setErrorMsg(null);
       setLoading(true);
 
-      const rows = await fetchPageForTab("city", 0);
-      setItems(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      setLoading(false);
+      try {
+        const rows = await fetchPageForTab("city", 0);
+        setItems(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+      } catch (e: any) {
+        console.error("home:handleApplyCity error", e);
+        setErrorMsg(e?.message ?? "Unable to load products for this city.");
+        setItems([]);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
     }
   }, [city, region, fetchCityRail, activeTab, fetchPageForTab]);
 
@@ -424,16 +440,24 @@ export default function HomePage(): JSX.Element {
   const handleTabChange = useCallback(
     async (tab: TabId) => {
       setActiveTab(tab);
-      // clear previous grid so skeleton appears
       setItems([]);
       setPage(0);
       setHasMore(true);
+      setErrorMsg(null);
       setLoading(true);
 
-      const rows = await fetchPageForTab(tab, 0);
-      setItems(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      setLoading(false);
+      try {
+        const rows = await fetchPageForTab(tab, 0);
+        setItems(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+      } catch (e: any) {
+        console.error("home:handleTabChange error", e);
+        setErrorMsg(e?.message ?? "Unable to load products.");
+        setItems([]);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
     },
     [fetchPageForTab]
   );
@@ -460,6 +484,8 @@ export default function HomePage(): JSX.Element {
       setRecently(__homeStore.recently);
       setBecause(__homeStore.because);
       setActiveTab(__homeStore.activeTab || "new");
+      setLoading(false);
+      setErrorMsg(null);
 
       requestAnimationFrame(() => {
         window.scrollTo(0, __homeStore.scrollY || 0);
@@ -469,11 +495,22 @@ export default function HomePage(): JSX.Element {
     } else {
       (async () => {
         setLoading(true);
-        const rows = await fetchPageForTab("new", 0);
-        setItems(rows);
-        setPage(0);
-        setHasMore(rows.length === PAGE_SIZE);
-        setLoading(false);
+        setErrorMsg(null);
+        try {
+          const rows = await fetchPageForTab("new", 0);
+          setItems(rows);
+          setPage(0);
+          setHasMore(rows.length === PAGE_SIZE);
+        } catch (e: any) {
+          console.error("home:initial fetch error", e);
+          setErrorMsg(
+            e?.message ?? "Unable to load products. Please try again."
+          );
+          setItems([]);
+          setHasMore(false);
+        } finally {
+          setLoading(false);
+        }
       })();
 
       refreshPersonalization();
@@ -501,14 +538,24 @@ export default function HomePage(): JSX.Element {
     if (!hasMore || loading) return;
 
     const nextPage = page + 1;
-    const batch = await fetchPageForTab(activeTab, nextPage);
-    if (!batch.length) {
+    try {
+      const batch = await fetchPageForTab(activeTab, nextPage);
+      if (!batch.length) {
+        setHasMore(false);
+        return;
+      }
+      setItems((prev) => prev.concat(batch));
+      setPage(nextPage);
+      if (batch.length < PAGE_SIZE) setHasMore(false);
+    } catch (e: any) {
+      console.error("home:loadMore error", e);
       setHasMore(false);
-      return;
+      setErrorMsg(
+        (prev) =>
+          prev ??
+          "We couldn't load more items. Please scroll up to refresh or try again later."
+      );
     }
-    setItems((prev) => prev.concat(batch));
-    setPage(nextPage);
-    if (batch.length < PAGE_SIZE) setHasMore(false);
   }, [hasMore, loading, page, fetchPageForTab, activeTab]);
 
   useEffect(() => {
@@ -535,7 +582,6 @@ export default function HomePage(): JSX.Element {
   const tabs: { id: TabId; label: string }[] = [
     { id: "new", label: "New" },
     { id: "popular", label: "Popular" },
-    // city as third tab when it exists
     ...(city ? [{ id: "city", label: `In ${city}` }] : []),
     { id: "sale", label: "On Sale" },
     { id: "under_cap", label: `Under ${PRICE_CAP_MAD} MAD` },
@@ -555,112 +601,29 @@ export default function HomePage(): JSX.Element {
       </header>
 
       {/* Hero */}
-      <div className="pt-2 px-3">
+      <div className="pt-2 px-1">
         <HeroCarousel slides={slides} />
       </div>
 
       {/* Top categories */}
       <div className="mt-2">
-        <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3">
-          Top Categories
+        <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3 capitalize">
+          Top categories
         </h2>
         <div className="mx-3">
           <HeroCategoriesStrip />
         </div>
       </div>
 
-      {/* City / region picker + city rail */}
-      {/* <section className="px-3 pt-4"> */}
-      {/* <div className="rounded-2xl bg-white border border-neutral-200 px-3 py-3 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold">
-              Shop local treasures — choose your city
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="h-9 rounded-full border border-neutral-200 bg-white px-3 text-xs"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            >
-              <option value="">Choose a city</option>
-              {CITIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="h-9 rounded-full border border-neutral-200 bg-white px-3 text-xs"
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-            >
-              <option value="">Region (optional)</option>
-              {REGIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={handleApplyCity}
-              disabled={!city || loadingCityRail}
-              className="h-9 rounded-full bg-ink text-white px-4 text-xs font-medium disabled:opacity-60"
-            >
-              {loadingCityRail ? "Updating…" : "Update"}
-            </button>
-          </div>
-
-          {city && (
-            <p className="text-[11px] text-neutral-500">
-              Showing picks from <span className="font-semibold">{city}</span>
-              {region ? ` · ${region}` : null}
-            </p>
-          )}
-        </div> */}
-
-      {/* {city && (
-          <div className="mt-3">
-            <h2 className="text-sm font-semibold mb-2">Crafted in {city}</h2>
-
-            {loadingCityRail ? (
-              <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-1">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={`city-skel-${i}`}
-                    className="w-40 h-[210px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : cityProducts && cityProducts.length > 0 ? (
-              <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-1">
-                {cityProducts.map((p) => (
-                  <div key={p.id} className="w-40 shrink-0">
-                    <ProductCard p={p} variant="mini" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[11px] text-neutral-500 mt-1">
-                No items in {city} yet. They’re coming soon ✨
-              </p>
-            )}
-          </div>
-        )} */}
-      {/* </section> */}
-
       {/* Recently viewed */}
       {recently && recently.length > 0 && (
         <>
-          <h2 className="mt-6 text-lg font-semibold flex items-center gap-1 px-3">
+          <h2 className="mt-6 text-lg font-semibold flex items-center gap-1 px-3 capitalize">
             Recently viewed
           </h2>
           <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 px-3">
             {recently.map((p) => (
-              <div key={p.id} className="w-[140px]  shrink-0">
+              <div key={p.id} className="w-[140px]  shrink-0 ">
                 <ProductCard p={p} variant="mini" />
               </div>
             ))}
@@ -671,7 +634,7 @@ export default function HomePage(): JSX.Element {
       {/* Because you'll love */}
       {because && because.items.length > 0 && (
         <>
-          <h2 className="text-lg font-semibold flex items-center gap-1 px-3 pt-8">
+          <h2 className="text-lg font-semibold flex items-center gap-1 px-3 pt-8 capitalize">
             {because.title}
           </h2>
           <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 pl-3">
@@ -687,7 +650,7 @@ export default function HomePage(): JSX.Element {
       {/* Main grid + tabs */}
       <section className="space-y-3 px-3 pt-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold flex items-center gap-1">
+          <h2 className="text-lg font-semibold flex items-center gap-1 capitalize">
             Shop by recommendation
           </h2>
         </div>
@@ -720,6 +683,23 @@ export default function HomePage(): JSX.Element {
                 className="h-[220px] rounded-2xl bg-neutral-200/60 animate-pulse"
               />
             ))}
+          </div>
+        ) : errorMsg && items.length === 0 ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center space-y-2">
+            <p className="text-sm font-medium text-red-700">
+              We couldn&apos;t load products right now.
+            </p>
+            <p className="text-xs text-red-600">{errorMsg}</p>
+            <button
+              className="mt-2 inline-flex items-center justify-center rounded-full bg-black px-4 py-1.5 text-xs font-semibold text-white"
+              onClick={() => {
+                setErrorMsg(null);
+                setLoading(true);
+                handleTabChange(activeTab);
+              }}
+            >
+              Try again
+            </button>
           </div>
         ) : items.length > 0 ? (
           <>
