@@ -70,11 +70,11 @@ export default function HeroCategoriesStrip({
             prefetch
             className="group block shrink-0 cursor-pointer"
           >
-            <div className="flex w-[80px] flex-col items-center gap-4">
+            <div className="flex w-20 flex-col items-center gap-4">
               {/* image container (bigger) */}
               <div
                 className="
-              flex h-[80px] w-[80px] items-center justify-center"
+              flex h-20 w-20 items-center justify-center"
               >
                 {item.image ? (
                   <img
@@ -110,7 +110,7 @@ export default function HeroCategoriesStrip({
         
           "
             >
-              <span className="flex h-12 w-12 items-center text-xs justify-center rounded-full border border-neutral-300 text-base">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-neutral-300 text-xs">
                 More
               </span>
             </button>

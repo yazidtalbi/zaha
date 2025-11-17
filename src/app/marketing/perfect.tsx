@@ -118,7 +118,7 @@ export default function MarketingPage() {
             >
               <ImagePlaceholder
                 label="Hero image / phone mockups"
-                className="aspect-[4/5] w-full"
+                className="aspect-4/5 w-full"
               />
             </motion.div>
           </div>
@@ -153,7 +153,7 @@ export default function MarketingPage() {
                   <CardContent className="p-5 sm:p-6 space-y-3">
                     <ImagePlaceholder
                       label="Creator image"
-                      className="mb-3 aspect-[4/3] w-full"
+                      className="mb-3 aspect-4/3 w-full"
                     />
                     <h3 className="text-sm sm:text-base font-semibold">
                       {title}
@@ -210,7 +210,7 @@ export default function MarketingPage() {
             >
               <ImagePlaceholder
                 label="Dashboard UI mockup"
-                className="aspect-[4/3] w-full"
+                className="aspect-4/3 w-full"
               />
             </motion.div>
           </div>

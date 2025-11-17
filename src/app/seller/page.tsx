@@ -609,14 +609,14 @@ function OverviewInner() {
               {shop?.id && (
                 <Link
                   href={`/shop/${shop.slug ?? shop.id}`}
-                  className="rounded-full border px-2 py-1 text-sm bg-white hover: bg-neutral-50  transition inline-flex items-center gap-1"
+                  className="rounded-full border px-2 py-1 text-sm bg-white hover:bg-neutral-50 transition inline-flex items-center gap-1"
                 >
                   <Eye size={16} /> Preview
                 </Link>
               )}
               {/* <Link
               href="/seller/settings"
-              className="rounded-full border px-3 py-1.5 text-sm bg-white hover: bg-neutral-50  transition"
+              className="rounded-full border px-3 py-1.5 text-sm bg-white hover:bg-neutral-50 transition"
             >
               Manage
             </Link> */}
@@ -741,7 +741,7 @@ function OverviewInner() {
       {/* <div className="grid grid-cols-3 gap-3">
         <Link
           href="/sell"
-          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
         >
           <div className="w-9 h-9 rounded-lg grid place-items-center ">
             <Plus size={18} />
@@ -750,7 +750,7 @@ function OverviewInner() {
         </Link>
         <Link
           href="/seller/products"
-          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
         >
           <div className="w-9 h-9 rounded-lg grid place-items-center   ">
             <Package size={18} />
@@ -759,7 +759,7 @@ function OverviewInner() {
         </Link>
         <Link
           href="/seller/orders"
-          className="rounded-xl border bg-white hover: bg-neutral-50  transition p-3 flex items-center gap-2"
+          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
         >
           <div className="w-9 h-9 rounded-lg grid place-items-center   ">
             <ClipboardList size={18} />
@@ -825,7 +825,7 @@ function OverviewInner() {
                     </div>
                     <Link
                       href={`/seller/orders/${o.id}`}
-                      className="rounded-full border px-3 py-1 text-xs hover: bg-neutral-50  transition"
+                      className="rounded-full border px-3 py-1 text-xs hover:bg-neutral-50 transition"
                     >
                       Open
                     </Link>
@@ -889,7 +889,7 @@ function OverviewInner() {
                   "px-3 py-1.5 rounded-full border text-sm transition",
                   active
                     ? "bg-terracotta text-white border-terracotta"
-                    : "bg-white hover: bg-neutral-50 ",
+                    : "bg-white hover:bg-neutral-50 ",
                 ].join(" ")}
               >
                 {f.label}
@@ -948,7 +948,7 @@ function OverviewInner() {
             <div className="mt-3">
               <Link
                 href="/sell"
-                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm bg-white hover: bg-neutral-50  transition"
+                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm bg-white hover:bg-neutral-50 transition"
               >
                 <Plus size={16} />
                 Add your first listing
@@ -987,7 +987,7 @@ function OverviewInner() {
                     </div>
                     <Link
                       href={`/seller/orders/${o.id}`}
-                      className="rounded-full border px-3 py-1 text-xs hover: bg-neutral-50  transition"
+                      className="rounded-full border px-3 py-1 text-xs hover:bg-neutral-50 transition"
                     >
                       Open
                     </Link>
@@ -999,7 +999,7 @@ function OverviewInner() {
               <div className="pt-2">
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  className="w-full rounded-xl border bg-white hover: bg-neutral-50  transition px-4 py-2 text-sm"
+                  className="w-full rounded-xl border bg-white hover:bg-neutral-50 transition px-4 py-2 text-sm"
                 >
                   Load more
                 </button>

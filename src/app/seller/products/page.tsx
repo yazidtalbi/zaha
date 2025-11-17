@@ -145,7 +145,7 @@ function ProductsHeaderCompact({
         />
       </div>
 
-      <FabAddNew navHeight={80} className="animate-appear" />
+      <FabAddNew navHeight={80} />
       {/* Big pill search */}
       <div className=" relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-ink/50" />
@@ -752,7 +752,7 @@ function Inner() {
                       <div className="px-4 pb-3">
                         <div className="flex items-center gap-3">
                           {/* Image */}
-                          <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 flex-shrink-0">
+                          <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 shrink-0">
                             {p.photos?.[0] ? (
                               <img
                                 src={p.photos[0]}

@@ -170,7 +170,9 @@ export default function BottomNav() {
         () => refreshCartCount(uid)
       )
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [mounted, uid, refreshCartCount]);
 
   useEffect(() => {
@@ -240,7 +242,7 @@ export default function BottomNav() {
           >
             <Icon size={20} className={clsx(isActive && "scale-110")} />
             {!!badge && (
-              <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-[16px] h-4 rounded-sm px-1 bg-terracotta text-white">
+              <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-4 h-4 rounded-sm px-1 bg-terracotta text-white">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
@@ -252,7 +254,7 @@ export default function BottomNav() {
   };
 
   const CenterAdd = () => (
-    <Link href="/seller/sell" className="block translate-y-[-12px]">
+    <Link href="/seller/sell" className="block -translate-y-3">
       <div className="mx-auto w-12 h-12 rounded-full bg-terracotta text-white grid place-items-center shadow-lg">
         <PlusCircle size={22} />
       </div>

@@ -246,7 +246,7 @@ export default function MarketingPage() {
   return (
     <main className="bg-white text-[#0B1020] ">
       {/* top nav */}
-      <header className="fixed w-full top-0 z-50   border-black/[0.06]  ">
+      <header className="fixed w-full top-0 z-50   border-black/6  ">
         <Container className="flex h-14 items-center justify-between max-w-4xl">
           <div className="flex items-center gap-3">
             <div className="h-6 w-6 rounded-md bg-[#B9A8FF]" />
@@ -382,7 +382,7 @@ export default function MarketingPage() {
       {/* HERO */}
       {/* <section
         ref={ref}
-        className="relative overflow-hidden border-b border-black/[0.06] bg-[radial-gradient(60%_40%_at_10%_10%,#B9A8FF20,transparent_60%),radial-gradient(60%_40%_at_90%_20%,#D96E4320,transparent_60%),radial-gradient(60%_40%_at_50%_90%,#66785F20,transparent_60%)]"
+        className="relative overflow-hidden border-b border-black/6 bg-[radial-gradient(60%_40%_at_10%_10%,#B9A8FF20,transparent_60%),radial-gradient(60%_40%_at_90%_20%,#D96E4320,transparent_60%),radial-gradient(60%_40%_at_50%_90%,#66785F20,transparent_60%)]"
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/70 via-white/30 to-white/0" />
         <Container className="relative z-10">
@@ -748,7 +748,7 @@ function DemoBlock({ n = 3 }: { n?: number }) {
   return (
     <div className="grid grid-cols-3 gap-2">
       {Array.from({ length: n }).map((_, i) => (
-        <div key={i} className="aspect-[4/3] rounded-lg bg-neutral-100" />
+        <div key={i} className="aspect-4/3 rounded-lg bg-neutral-100" />
       ))}
     </div>
   );
@@ -809,7 +809,7 @@ function AltSection({
               {title}
             </h3>
             <p className="mt-2 text-neutral-600 max-w-sm mb-8">{desc}</p>
-            <Button variant="link" className="mt-2 px-0 m-0 !p-0 text-md">
+            <Button variant="link" className="mt-2 px-0 m-0 p-0! text-md">
               {cta} <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -1028,7 +1028,7 @@ function TestimonialsMasonry() {
         </div>
 
         {/* Masonry: use CSS columns + break-inside to avoid gaps */}
-        <div className="mx-auto mt-12 max-w-6xl columns-1 sm:columns-2 lg:columns-3 gap-6 [column-fill:_balance]">
+        <div className="mx-auto mt-12 max-w-6xl columns-1 sm:columns-2 lg:columns-3 gap-6 [column-fill:balance]">
           {TESTIMONIALS_MASONRY.map((t) => (
             <article
               key={t.name + t.role}
@@ -1243,7 +1243,7 @@ function CTABanner() {
 
 function EnhancedFooter() {
   return (
-    <footer className="border-t border-black/[0.06] bg-white">
+    <footer className="border-t border-black/6 bg-white">
       <Container className="grid grid-cols-1 gap-12 py-12 md:grid-cols-[1.3fr_1fr_1fr_1fr]">
         {/* Brand + newsletter */}
         <div>
@@ -1324,7 +1324,7 @@ function EnhancedFooter() {
         />
       </Container>
 
-      <div className="border-t border-black/[0.06] py-6 text-center text-xs text-neutral-500">
+      <div className="border-t border-black/6 py-6 text-center text-xs text-neutral-500">
         © {new Date().getFullYear()} Zaha. All rights reserved.
       </div>
     </footer>

@@ -53,7 +53,7 @@ export default function BentoGrid() {
                 className="h-64 w-full rounded-2xl object-cover md:h-72"
               />
               {/* fade mask like Webflow .fade-image */}
-              <div className="pointer-events-none -mt-16 h-16 w-full rounded-b-2xl bg-gradient-to-b from-transparent to-white/85" />
+              <div className="pointer-events-none -mt-16 h-16 w-full rounded-b-2xl bg-linear-to-b from-transparent to-white/85" />
             </div>
 
             <div className="mt-4">
@@ -81,7 +81,7 @@ export default function BentoGrid() {
                   className="flex h-[140px] items-end justify-center rounded-2xl bg-neutral-50"
                 >
                   <div
-                    className="w-16 rounded-2xl bg-gradient-to-t from-[#8EA0FF] to-white"
+                    className="w-16 rounded-2xl bg-linear-to-t from-[#8EA0FF] to-white"
                     style={{ height: i === 1 ? "80%" : "45%" }}
                   />
                 </div>
@@ -107,7 +107,7 @@ export default function BentoGrid() {
                 <img
                   src="https://cdn.prod.website-files.com/681cdd34f7d89eea4c341e6c/681ce9aeae141b497270a016_Illustations%202.png"
                   alt=""
-                  className="h-[160px] w-full rounded-2xl object-cover md:h-full"
+                  className="h-40 w-full rounded-2xl object-cover md:h-full"
                 />
                 {/* subtle background dots */}
                 <div className="pointer-events-none absolute inset-0">

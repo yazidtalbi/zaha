@@ -59,7 +59,7 @@ export default function SoulSection() {
         </div>
 
         {/* CONTENT CONTAINER */}
-        <div className="mt-12 rounded-[32px] bg-[#F6F3EC] p-10 md:p-14">
+        <div className="mt-12 rounded-4xl bg-[#F6F3EC] p-10 md:p-14">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
             {/* TEXT AREA */}
             <AnimatePresence mode="wait">
@@ -98,7 +98,7 @@ export default function SoulSection() {
                 exit={{ opacity: 0, y: -30 }}
                 transition={{ duration: 0.35 }}
               >
-                <div className="rounded-[32px] overflow-hidden border border-black/10 bg-white shadow-sm">
+                <div className="rounded-4xl overflow-hidden border border-black/10 bg-white shadow-sm">
                   <Image
                     src={item.image}
                     alt={item.title}

@@ -247,7 +247,7 @@ function CollectionItemsDrawer({
                 <Select
                   onValueChange={(v) => bulkMove(v === "none" ? null : v)}
                 >
-                  <SelectTrigger className="h-9 w-[160px]">
+                  <SelectTrigger className="h-9 w-40">
                     <SelectValue placeholder="Move to…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -831,7 +831,7 @@ function Inner() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="rounded-xl border bg-white p-3">
-              <Skeleton className="w-full aspect-[4/3] rounded-lg" />
+              <Skeleton className="w-full aspect-4/3 rounded-lg" />
               <Skeleton className="h-4 mt-3 w-2/3" />
               <Skeleton className="h-8 mt-3 w-full" />
             </div>
@@ -858,7 +858,7 @@ function Inner() {
                 key={c.id}
                 className="rounded-xl border bg-white p-3 flex flex-col"
               >
-                <div className="w-full aspect-[4/3] rounded-lg overflow-hidden bg-white">
+                <div className="w-full aspect-4/3 rounded-lg overflow-hidden bg-white">
                   {c.cover_url ? (
                     <img
                       src={c.cover_url}

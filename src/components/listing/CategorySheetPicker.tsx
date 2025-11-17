@@ -437,7 +437,7 @@ export default function CategorySheetPicker({
             {/* Sticky header (title + debug) */}
             <div
               ref={headerRef}
-              className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60"
+              className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-backdrop-filter:bg-white/60"
             >
               <SheetHeader className="px-4 pt-1 pb-3">
                 <SheetTitle className="text-[17px] font-semibold">
@@ -455,7 +455,7 @@ export default function CategorySheetPicker({
             <div className="flex-1 overflow-auto">
               {/* Search above recommendations */}
               <div
-                className="z-10 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70"
+                className="z-10 bg-white/90 backdrop-blur supports-backdrop-filter:bg-white/70"
                 style={{ top: headerH }}
               >
                 <div className="px-4 py-3">

@@ -6,7 +6,6 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
@@ -240,7 +239,7 @@ export function CollectionFaceSettings({ products, value, onChange }: Props) {
           </div>
 
           {/* Products list */}
-          <ScrollArea className="max-h-64 rounded-md border bg-white">
+          <div className="max-h-64 rounded-md border bg-white overflow-y-auto">
             <div className="divide-y divide-neutral-100">
               {filteredProducts.length === 0 && (
                 <div className="px-3 py-6 text-center text-xs text-neutral-400">
@@ -303,7 +302,7 @@ export function CollectionFaceSettings({ products, value, onChange }: Props) {
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
 
           {productIds.length >= MAX_FEATURED && (
             <p className="text-[11px] text-emerald-700">

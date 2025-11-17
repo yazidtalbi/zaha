@@ -39,8 +39,8 @@ export default function BecomeSellerCTA() {
         {/* Right: Images / visual stack */}
         <div className="relative flex flex-1 items-center justify-center md:justify-end">
           {/* Center decorative outline star (placeholder shape) */}
-          <div className="pointer-events-none absolute bottom-[-3.5rem] left-1/2 hidden h-48 w-48 -translate-x-1/2 opacity-30 md:block">
-            <div className="h-full w-full rounded-[32px] border border-[#567B6A]" />
+          <div className="pointer-events-none absolute -bottom-14 left-1/2 hidden h-48 w-48 -translate-x-1/2 opacity-30 md:block">
+            <div className="h-full w-full rounded-4xl border border-[#567B6A]" />
           </div>
 
           <div className="relative">

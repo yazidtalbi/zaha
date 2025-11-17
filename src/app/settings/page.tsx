@@ -760,7 +760,7 @@ function SettingsInner() {
 
       {/* Sticky Save Bar when there are unsaved changes */}
       {dirty && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 p-3">
             <div className="flex items-center gap-2 text-sm">
               <span className="inline-flex size-2 rounded-lg bg-amber-500" />

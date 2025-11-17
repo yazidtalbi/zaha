@@ -169,7 +169,7 @@ function InnerCheckout() {
       toast.error("Failed to load cart");
       return;
     }
-    setCart((data ?? []) as CartRow[]);
+    setCart((data ?? []) as unknown as CartRow[]);
   }
 
   // ————————————————————————————

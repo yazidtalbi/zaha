@@ -205,7 +205,7 @@ export default function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-paper/60">
+    <header className="sticky top-0 z-40 backdrop-blur supports-backdrop-filter:bg-paper/60">
       <div className="pt-[env(safe-area-inset-top)]" />
 
       <div className=" py-2 md:py-3">

@@ -122,7 +122,7 @@ export default function ProductAllReviewsPage() {
           }
           defaultValue="all"
         >
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-40">
             <SelectValue placeholder="Rating" />
           </SelectTrigger>
           <SelectContent>

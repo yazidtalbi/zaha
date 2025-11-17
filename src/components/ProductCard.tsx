@@ -224,7 +224,7 @@ export default function ProductCard({
                 </span>
               )}
               {promoOn && (
-                <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px] text-[10px] font-medium">
+                <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[10px] font-medium">
                   Promo
                 </span>
               )}
@@ -233,12 +233,12 @@ export default function ProductCard({
             {/* Meta chips (optional) */}
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {p.free_shipping && (
-                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-0.5 text-[10px] font-medium">
                   Free shipping
                 </span>
               )}
               {p.orders_count ? (
-                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-[2px] text-[10px] font-medium">
+                <span className="rounded-full bg-neutral-100 text-neutral-700 px-2 py-0.5 text-[10px] font-medium">
                   {fmtOrders(p.orders_count)} orders
                 </span>
               ) : null}
@@ -279,7 +279,7 @@ export default function ProductCard({
             </div>
           )}
           {promoOn && (
-            <span className="absolute top-1 left-1 z-10 rounded-full px-2 py-[2px] text-[10px] font-medium bg-emerald-500 text-white">
+            <span className="absolute top-1 left-1 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500 text-white">
               Promo
             </span>
           )}
@@ -436,7 +436,9 @@ function CardCarousel({
     const onSel = () => setIndex(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSel);
     onSel();
-    return () => emblaApi.off("select", onSel);
+    return () => {
+      emblaApi.off("select", onSel);
+    };
   }, [emblaApi]);
 
   const shouldLoadVideo = !!videoSrc && videoIndex >= 0 && index === videoIndex;
@@ -514,7 +516,7 @@ function CardCarousel({
       />
 
       {images.length > 1 && (
-        <div className="pointer-events-none absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-[2px] rounded-full bg-black/40 px-1 py-[1.5px] backdrop-blur-sm">
+        <div className="pointer-events-none absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-0.5 rounded-full bg-black/40 px-1 py-[1.5px] backdrop-blur-sm">
           {images.map((_, i) => (
             <span key={i} className="h-3 w-3 grid place-items-center">
               <span

@@ -199,7 +199,7 @@ export default function CategoryPage() {
           {Array.from({ length: 12 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[3/4] rounded-xl bg-sand animate-pulse"
+              className="aspect-3/4 rounded-xl bg-sand animate-pulse"
             />
           ))}
         </div>

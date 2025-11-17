@@ -406,7 +406,7 @@ function AnalyticsInner() {
   };
 
   return (
-    <main className="space-y-6 p-4 max-w-screen-md mx-auto pb-24">
+    <main className="space-y-6 p-4 max-w-3xl mx-auto pb-24">
       {/* Header */}
       <div className="mb-2">
         <DashboardHeader

@@ -204,7 +204,7 @@ export default function CreateShopPage() {
   return (
     <div className="min-h-[100svh] bg-[#faf7f2] flex flex-col">
       {/* Top bar */}
-      <div className="sticky top-0 z-10 bg-[#faf7f2]/80 backdrop-blur supports-[backdrop-filter]:bg-[#faf7f2]/70 border-b border-black/5">
+      <div className="sticky top-0 z-10 bg-[#faf7f2]/80 backdrop-blur supports-backdrop-filter:bg-[#faf7f2]/70 border-b border-black/5">
         <div className="max-w-screen-sm mx-auto px-4 h-12 flex items-center gap-2">
           <button
             onClick={() => history.back()}

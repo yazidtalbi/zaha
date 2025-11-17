@@ -147,7 +147,6 @@ export default function SellerShopSettings() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const hydrateProfileDrafts = (s: Shop) => {
@@ -169,7 +168,7 @@ export default function SellerShopSettings() {
         .from("collections")
         .select("id,title,order_index")
         .eq("shop_id", shopId)
-        .order("order_index", { ascending: true, nullsLast: true })
+        .order("order_index", { ascending: true, nullsFirst: false })
         .order("title");
       if (error) throw error;
       setCollections(

@@ -163,7 +163,7 @@ function VisibleAreaSkeleton() {
       <div className="pt-4">
         <div className="relative rounded-2xl bg-white">
           <div className="overflow-hidden rounded-xl">
-            <div className="aspect-[7/8] sm:aspect-[4/3]">
+            <div className="aspect-7/8 sm:aspect-4/3">
               <Skeleton className="h-full w-full" />
             </div>
           </div>
@@ -303,7 +303,9 @@ function ProductCarousel({
     const onSelect = () => setIdx(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSelect);
     onSelect();
-    return () => emblaApi.off("select", onSelect);
+    return () => {
+      emblaApi.off("select", onSelect);
+    };
   }, [emblaApi]);
 
   useEffect(() => {
@@ -326,7 +328,7 @@ function ProductCarousel({
             {items.map((item, i) => (
               <div
                 key={i}
-                className="relative min-w-0 flex-[0_0_100%] aspect-[7/8] sm:aspect-[4/3] bg-neutral-100"
+                className="relative min-w-0 flex-[0_0_100%] aspect-7/8 sm:aspect-4/3 bg-neutral-100"
               >
                 {item.type === "image" ? (
                   item.src ? (
@@ -352,7 +354,9 @@ function ProductCarousel({
                     <video
                       ref={videoRef}
                       className="absolute inset-0 w-full h-full object-cover"
-                      poster={item.poster}
+                      poster={
+                        item.type === "video" ? (item as any).poster : undefined
+                      }
                       {...(shouldLoadVideo ? { src: item.src } : {})}
                       muted
                       playsInline
@@ -608,17 +612,18 @@ export default function ProductPage() {
 
       if (prod.shop_id) {
         related.push(
-          supabase
-            .from("products")
-            .select("*")
-            .eq("active", true)
-            .eq("unavailable", false)
-            .eq("shop_id", prod.shop_id)
-            .neq("id", _id)
-            .limit(10)
-            .then(({ data }) =>
-              !cancelled ? setMoreFromShop((data ?? []).filter(Boolean)) : null
-            )
+          (
+            supabase
+              .from("products")
+              .select("*")
+              .eq("active", true)
+              .eq("unavailable", false)
+              .eq("shop_id", prod.shop_id)
+              .neq("id", _id)
+              .limit(10) as unknown as Promise<any>
+          ).then(({ data }) =>
+            !cancelled ? setMoreFromShop((data ?? []).filter(Boolean)) : null
+          )
         );
       }
 
@@ -633,7 +638,8 @@ export default function ProductPage() {
                   (a.categories?.depth ?? 0) - (b.categories?.depth ?? 0)
               )[catRows.length - 1];
 
-            const basePath: string | null = pick?.categories?.path ?? null;
+            const basePath: string | null =
+              (pick?.categories as any)?.[0]?.path ?? null;
             if (basePath) {
               const { data: cats } = await supabase
                 .from("categories")
@@ -732,7 +738,6 @@ export default function ProductPage() {
   const [fsRef, fsApi] = useEmblaCarousel({
     loop: true,
     startIndex,
-    speed: 20,
     align: "start",
   });
   useEffect(() => {
@@ -1069,7 +1074,7 @@ export default function ProductPage() {
                     catLinks.find((c) => c.is_primary) ?? catLinks[0];
                   const segs = primary.path.split("/").filter(Boolean);
                   return (
-                    <span className="break-words">
+                    <span className="wrap-break-word">
                       {segs.map((seg, i) => {
                         const href = `/c/${segs.slice(0, i + 1).join("/")}`;
                         const label = seg
@@ -1227,7 +1232,7 @@ export default function ProductPage() {
                 </div>
                 <div className="px-3 py-3 text-sm">
                   <div className="text-neutral-500 mb-1">Personalization</div>
-                  <div className="break-words">{personalization}</div>
+                  <div className="wrap-break-word">{personalization}</div>
                 </div>
               </div>
             ) : (
@@ -1256,7 +1261,7 @@ export default function ProductPage() {
                 >
                   −
                 </button>
-                <div className="min-w-[2.25rem] text-center">{qty}</div>
+                <div className="min-w-9 text-center">{qty}</div>
                 <button
                   onClick={() => setQty((q) => q + 1)}
                   className="px-3 py-1.5 text-lg"
@@ -1837,10 +1842,7 @@ export default function ProductPage() {
 
         {/* Fullscreen images */}
         <Dialog open={fsOpen} onOpenChange={setFsOpen}>
-          <DialogContent
-            className="p-0 border-0 max-w-none w-screen h-screen"
-            hideClose
-          >
+          <DialogContent className="p-0 border-0 max-w-none w-screen h-screen">
             <div className="fixed inset-0 bg-black/95" />
             <button
               onClick={() => setFsOpen(false)}

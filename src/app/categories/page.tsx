@@ -258,7 +258,7 @@ export default function CategoriesPage({
                 key={i}
                 className="rounded-lg border bg-white overflow-hidden animate-pulse"
               >
-                <div className="aspect-[5/3] bg-neutral-200" />
+                <div className="aspect-5/3 bg-neutral-200" />
                 <div className="p-3">
                   <div className="h-4 w-4/5 bg-neutral-200 rounded" />
                 </div>
@@ -287,7 +287,7 @@ export default function CategoriesPage({
                   className="group flex items-center gap-3 rounded-xl border bg-white overflow-hidden hover:shadow-sm transition"
                 >
                   {/* Visual */}
-                  <div className="w-40 shrink-0 aspect-[5/3] bg-neutral-100 relative">
+                  <div className="w-40 shrink-0 aspect-5/3 bg-neutral-100 relative">
                     {parent.image ? (
                       <img
                         src={parent.image}
@@ -296,7 +296,7 @@ export default function CategoriesPage({
                         loading="lazy"
                       />
                     ) : (
-                      <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-sand to-paper">
+                      <div className="absolute inset-0 grid place-items-center bg-linear-to-br from-sand to-paper">
                         <span className="text-[18px] font-semibold text-ink/80">
                           {getInitials(parent.name)}
                         </span>

@@ -100,7 +100,7 @@ export default function ZahaUseCases() {
               >
                 {useCase.label}
                 {isActive && (
-                  <span className="absolute bottom-[-6px] left-1/2 block h-[3px] w-6 -translate-x-1/2 rounded-full bg-[#D96E43]" />
+                  <span className="absolute -bottom-1.5 left-1/2 block h-[3px] w-6 -translate-x-1/2 rounded-full bg-[#D96E43]" />
                 )}
               </button>
             );
@@ -115,7 +115,7 @@ export default function ZahaUseCases() {
               {/* Optional play button, like mymind */}
               <div className="mb-5 flex items-center">
                 <button className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#F5C9A3]/40 backdrop-blur">
-                  <span className="ml-0.5 inline-block h-0 w-0 border-y-[6px] border-y-transparent border-l-[10px] border-l-[#FFF4E6]" />
+                  <span className="ml-0.5 inline-block h-0 w-0 border-y-[6px] border-y-transparent border-l-10 border-l-[#FFF4E6]" />
                 </button>
               </div>
 

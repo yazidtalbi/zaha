@@ -1100,7 +1100,7 @@ function ActionMenu({
             { key: "delivered", label: "Deliver", icon: Package },
             { key: "cancelled", label: "Cancel", icon: XCircle },
           ].map(({ key, label, icon: Icon }) => {
-            const can = canTransition(status, key);
+            const can = canTransition(status, key as Order["status"]);
             return (
               <button
                 key={key}

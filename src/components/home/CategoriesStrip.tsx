@@ -159,7 +159,7 @@ export default function CategoriesStrip({
                   <div
                     className={clsx(
                       "flex h-[120px] w-[120px] items-center justify-center",
-                      "rounded-[32px] bg-sand shadow-[0_10px_30px_rgba(0,0,0,0.06)]",
+                      "rounded-4xl bg-sand shadow-[0_10px_30px_rgba(0,0,0,0.06)]",
                       showSkeletons && "animate-pulse bg-neutral-100"
                     )}
                   >
@@ -388,7 +388,7 @@ function Card({
       loading="lazy"
     />
   ) : (
-    <div className="h-full w-full bg-gradient-to-br from-sand to-paper flex items-center justify-center">
+    <div className="h-full w-full bg-linear-to-br from-sand to-paper flex items-center justify-center">
       <span className="text-[14px] font-semibold text-ink/80">{initials}</span>
     </div>
   );

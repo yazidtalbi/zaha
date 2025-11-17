@@ -602,7 +602,7 @@ export default function SellPage() {
         promo_ends_at = eISO;
       }
 
-      let personalization_enabled = !!persoEnabled;
+      const personalization_enabled = !!persoEnabled;
       let personalization_instructions: string | null = null;
       let personalization_max_chars: number | null = null;
 

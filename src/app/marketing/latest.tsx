@@ -217,7 +217,7 @@ export function ScreensSection() {
             >
               {/* Phone Card */}
               <div className="rounded-[36px] bg-white shadow-[0_12px_30px_rgba(0,0,0,0.12)] p-5 w-full">
-                <div className="aspect-[9/16]">
+                <div className="aspect-9/16">
                   <PhonePlaceholder />
                 </div>
               </div>
@@ -248,7 +248,7 @@ function GradientCard({
 }) {
   return (
     <div
-      className={`rounded-[32px] p-8 sm:p-10 ${className}`}
+      className={`rounded-4xl p-8 sm:p-10 ${className}`}
       style={{ background: gradient }}
     >
       {children}
@@ -299,7 +299,7 @@ export function GradientShowcaseSection() {
             <div className="flex justify-end">
               <GradientCard
                 gradient="linear-gradient(180deg, #FF8EB8 0%, #FFE3F1 100%)"
-                className="w-[260px] h-[260px] sm:w-[320px] sm:h-[320px] lg:w-[360px] lg:h-[360px] flex items-center justify-center"
+                className="w-[260px] h-[260px] sm:w-[320px] sm:h-80 lg:w-[360px] lg:h-[360px] flex items-center justify-center"
               >
                 <div className="h-[55%] w-[55%] rounded-2xl bg-white flex items-center justify-center text-[10px] text-neutral-500">
                   Image placeholder
@@ -320,7 +320,7 @@ export function GradientShowcaseSection() {
             <div className="flex justify-start order-2 lg:order-1">
               <GradientCard
                 gradient="linear-gradient(180deg, #C8A5FF 0%, #E9E4FF 100%)"
-                className="w-[280px] h-[280px] sm:w-[340px] sm:h-[320px] lg:w-[380px] lg:h-[360px] flex items-center justify-center"
+                className="w-[280px] h-[280px] sm:w-[340px] sm:h-80 lg:w-[380px] lg:h-[360px] flex items-center justify-center"
               >
                 <div className="w-[75%] space-y-6">
                   <div className="h-[60px] rounded-2xl bg-white" />
@@ -526,7 +526,7 @@ export function UseCasesSection() {
           </div>
 
           {/* Content panel */}
-          <div className="mt-10 sm:mt-12 rounded-[32px] bg-white px-5 py-6 sm:px-10 sm:py-10 lg:px-12 lg:py-12">
+          <div className="mt-10 sm:mt-12 rounded-4xl bg-white px-5 py-6 sm:px-10 sm:py-10 lg:px-12 lg:py-12">
             <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-stretch">
               {/* Text side */}
               <div className="flex items-center">
@@ -652,7 +652,7 @@ export function TestimonialsSection() {
               <CarouselContent className="-ml-4">
                 {TESTIMONIALS.map((t) => (
                   <CarouselItem key={t.id} className="pl-4 md:basis-1/2">
-                    <div className="flex h-full flex-col justify-between rounded-[32px] bg-[#F5ECFF] px-8 py-10 sm:px-10 sm:py-12 min-h-[340px]">
+                    <div className="flex h-full flex-col justify-between rounded-4xl bg-[#F5ECFF] px-8 py-10 sm:px-10 sm:py-12 min-h-[340px]">
                       <p className="text-[17px] sm:text-[18px] leading-relaxed font-medium text-[#150424]">
                         {t.quote}
                       </p>

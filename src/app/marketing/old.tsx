@@ -72,7 +72,7 @@ export default function MarketingPage() {
 
 function TopBar() {
   return (
-    <header className="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white border-b">
+    <header className="sticky top-0 z-30 backdrop-blur supports-backdrop-filter:bg-white/70 bg-white border-b">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
         <Link href="/" className="font-bold text-lg tracking-tight">
           Zaha

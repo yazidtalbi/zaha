@@ -149,7 +149,7 @@ export default function ShopPage() {
   // sticky header stuff
   const [showStickyTop, setShowStickyTop] = useState(false);
   const coverSentinelRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null!);
   const [canGoBack, setCanGoBack] = useState(false);
 
   // load-more sentinel
@@ -287,7 +287,7 @@ export default function ShopPage() {
         .from("collections")
         .select("id,title,cover_url,order_index") // 👈 include order_index
         .eq("shop_id", shopId)
-        .order("order_index", { ascending: true, nullsLast: true }) // 👈 primary order
+        .order("order_index", { ascending: true, nullsFirst: false }) // 👈 primary order
         .order("title", { ascending: true }); // 👈 fallback
 
       if (cancelled) return;
@@ -935,7 +935,7 @@ function ShopHeader({
 
         <div className="flex-1 mt-6">
           {/* Name + verified + location + main CTAs */}
-          <div className="flex flex-col gap-3  items-end justify-between align-baseline items-stretch">
+          <div className="flex flex-col gap-3 justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-semibold leading-tight">
@@ -961,7 +961,7 @@ function ShopHeader({
                     <PopoverContent
                       side="top"
                       align="center"
-                      className="max-w-[240px] p-3 text-xs leading-snug bg-neutral-100 rounded-2xl z-100"
+                      className="max-w-60 p-3 text-xs leading-snug bg-neutral-100 rounded-2xl z-100"
                     >
                       <span className="font-medium">Verified store</span> —
                       proven success with many fulfilled orders and a solid

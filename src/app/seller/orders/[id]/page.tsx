@@ -1,6 +1,7 @@
 // app/seller/orders/[id]/page.tsx
 "use client";
 
+import React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
@@ -187,8 +188,8 @@ export default function SellerOrderDetails() {
   const [loading, setLoading] = useState(true);
   const [loadingShown, setLoadingShown] = useState(false);
   const loadSeq = useRef(0); // increments each fetch
-  const showTimer = useRef<number>(); // delay before showing spinner
-  const hideTimer = useRef<number>(); // min visible enforcement
+  const showTimer = useRef<number | undefined>(undefined); // delay before showing spinner
+  const hideTimer = useRef<number | undefined>(undefined); // min visible enforcement
 
   // Payment confirm sheet
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
@@ -582,7 +583,7 @@ export default function SellerOrderDetails() {
     return (
       <div className="flex items-center w-full">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center min-w-[64px] flex-1">
+          <div key={i} className="flex items-center min-w-16 flex-1">
             <div className="flex flex-col items-center">
               <Skeleton className="h-9 w-9 rounded-full" />
               <Skeleton className="mt-1 h-3 w-14 rounded" />
@@ -629,6 +630,7 @@ export default function SellerOrderDetails() {
           : null;
 
   function filePublicURL(name: string) {
+    if (!order) return "";
     const { data } = supabase.storage
       .from("order_proofs")
       .getPublicUrl(`${order.id}/${name}`);
@@ -636,7 +638,7 @@ export default function SellerOrderDetails() {
   }
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || !files.length) return;
+    if (!files || !files.length || !order) return;
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
@@ -666,6 +668,7 @@ export default function SellerOrderDetails() {
   }
 
   async function deleteFile(name: string) {
+    if (!order) return;
     try {
       await supabase.storage
         .from("order_proofs")
@@ -737,13 +740,15 @@ export default function SellerOrderDetails() {
 
       // path: invoices/<orderId>/<timestamp>-<filename>
       const path = `${order.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase
+      const { error: upErr } = await supabase.storage
         .from("invoices")
         .upload(path, file, { cacheControl: "3600", upsert: false });
 
       if (upErr) throw upErr;
 
-      const { data: pub } = await supabase.from("invoices").getPublicUrl(path);
+      const { data: pub } = await supabase.storage
+        .from("invoices")
+        .getPublicUrl(path);
       const publicUrl = pub.publicUrl;
 
       const { error: updErr } = await supabase
@@ -761,6 +766,26 @@ export default function SellerOrderDetails() {
       setInvUploading(false);
       // allow selecting the same file again if needed
       e.currentTarget.value = "";
+    }
+  }
+
+  async function removeInvoice() {
+    if (!order?.invoice_url) return;
+    setInvRemoving(true);
+    try {
+      // Extract the file path from the public URL or use order.id
+      const { error } = await supabase
+        .from("orders")
+        .update({ invoice_url: null })
+        .eq("id", order.id);
+
+      if (error) throw error;
+      setOrder((o) => (o ? { ...o, invoice_url: null } : o));
+      toast.success("Invoice removed");
+    } catch (err: any) {
+      toast.error("Failed to remove invoice", { description: err?.message });
+    } finally {
+      setInvRemoving(false);
     }
   }
 
@@ -1699,7 +1724,7 @@ export default function SellerOrderDetails() {
 
           <div className="px-4 pb-3">
             <div className="flex items-center gap-3">
-              <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 flex-shrink-0">
+              <div className="h-14 w-14 rounded-md overflow-hidden bg-sand/50 shrink-0">
                 {p?.photos?.[0] ? (
                   <img
                     src={p.photos[0]}
@@ -1852,7 +1877,7 @@ function StatusTimeline({
     "delivered",
   ];
 
-  const ICONS: Record<OrderStatus, JSX.Element> = {
+  const ICONS: Record<OrderStatus, React.ReactElement> = {
     pending: <Clock className="h-4 w-4" />,
     confirmed: <CheckCircle2 className="h-4 w-4" />,
     shipped: <Truck className="h-4 w-4" />,
@@ -1903,10 +1928,7 @@ function StatusTimeline({
           return (
             <div
               key={step}
-              className={cn(
-                "flex items-center min-w-[64px]",
-                !isLast && "flex-1"
-              )}
+              className={cn("flex items-center min-w-16", !isLast && "flex-1")}
             >
               <div className="flex flex-col items-center">
                 <div

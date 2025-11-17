@@ -114,7 +114,7 @@ export default function ManageCollectionPage() {
         ])
       );
 
-      let inC: LinkedProduct[] = all
+      const inC: LinkedProduct[] = all
         .filter((p) => linkMap.has(p.id))
         .map((p) => {
           const link = linkMap.get(p.id)!;

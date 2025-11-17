@@ -117,8 +117,8 @@ export default function CTAInvite() {
       {/* Infinite slider (bottom) */}
       <div className="relative mt-16">
         {/* gradient masks */}
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#F6F3EC] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#F6F3EC] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-linear-to-r from-[#F6F3EC] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-linear-to-l from-[#F6F3EC] to-transparent" />
 
         <div className="overflow-hidden">
           <motion.div

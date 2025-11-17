@@ -72,7 +72,7 @@ export default function ShopCollectionPage() {
         .from("product_collections")
         .select("product_id, order_index")
         .eq("collection_id", cid)
-        .order("order_index", { ascending: true, nullsLast: true });
+        .order("order_index", { ascending: true, nullsFirst: false });
 
       const productLinks =
         (pc as { product_id: string; order_index: number | null }[]) ?? [];

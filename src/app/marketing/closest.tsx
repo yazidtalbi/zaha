@@ -158,7 +158,7 @@ export default function MarketingPage() {
               <p className="text-xs font-medium uppercase tracking-[0.28em] text-neutral-700">
                 ISHTAR • ZAHA
               </p>
-              <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-[color:#1C1326] sm:text-4xl">
+              <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-[#1C1326] sm:text-4xl">
                 Discover products{" "}
                 <span className="italic">made with soul.</span>
               </h1>
@@ -166,7 +166,7 @@ export default function MarketingPage() {
                 Connect with real creators across Morocco and beyond. Explore
                 handmade, vintage, and one-of-a-kind pieces that carry a story.
               </p>
-              <button className="mt-6 inline-flex items-center rounded-full bg-[color:#1E1235] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[color:#251545]">
+              <button className="mt-6 inline-flex items-center rounded-full bg-[#1E1235] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#251545]">
                 Get early access
               </button>
             </div>
@@ -174,12 +174,12 @@ export default function MarketingPage() {
             <div className="relative flex justify-center">
               {/* Replace src with your real phone mockup */}
               <div className="relative h-[360px] w-[180px] sm:h-[420px] sm:w-[210px]">
-                <div className="absolute inset-[-18%] -z-10 rounded-[48px] bg-gradient-to-tr from-[#E6BEFF] via-[#FAD4FF] to-[#FFE2C6]" />
+                <div className="absolute inset-[-18%] -z-10 rounded-4xl bg-linear-to-tr from-[#E6BEFF] via-[#FAD4FF] to-[#FFE2C6]" />
                 <Image
                   src="/ishtar-phone.png"
                   alt="Ishtar app preview"
                   fill
-                  className="rounded-[32px] object-cover shadow-xl"
+                  className="rounded-4xl object-cover shadow-xl"
                 />
               </div>
             </div>
@@ -225,7 +225,7 @@ export default function MarketingPage() {
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-500">
                 SAMPLE
               </p>
-              <h2 className="mt-3 text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+              <h2 className="mt-3 text-xl font-semibold text-[#1C1326] sm:text-2xl">
                 Marketplace like never before
               </h2>
             </div>
@@ -234,7 +234,7 @@ export default function MarketingPage() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="rounded-2xl bg-gradient-to-b from-[#F8F4FF] to-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
+                  className="rounded-2xl bg-linear-to-b from-[#F8F4FF] to-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
                 >
                   <div className="relative mb-4 h-40 w-full overflow-hidden rounded-xl bg-neutral-200">
                     {/* Replace with screenshots */}
@@ -266,7 +266,7 @@ export default function MarketingPage() {
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-500">
                 FEATURES
               </p>
-              <h2 className="mt-3 text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+              <h2 className="mt-3 text-xl font-semibold text-[#1C1326] sm:text-2xl">
                 More reasons to love Ishtar
               </h2>
             </div>
@@ -275,7 +275,7 @@ export default function MarketingPage() {
               {/* 1st row */}
               <div className="grid gap-10 md:grid-cols-2 md:items-center">
                 <div className="space-y-3">
-                  <h3 className="text-lg font-semibold text-[color:#1C1326]">
+                  <h3 className="text-lg font-semibold text-[#1C1326]">
                     {features[0].title}
                   </h3>
                   <p className="text-sm text-neutral-700">
@@ -287,7 +287,7 @@ export default function MarketingPage() {
                 </div>
                 <div className="flex justify-center">
                   <div
-                    className={`h-64 w-64 rounded-[32px] bg-gradient-to-b ${features[0].gradient}`}
+                    className={`h-64 w-64 rounded-4xl bg-linear-to-b ${features[0].gradient}`}
                   />
                 </div>
               </div>
@@ -295,7 +295,7 @@ export default function MarketingPage() {
               {/* 2nd row */}
               <div className="grid gap-10 md:grid-cols-2 md:items-center">
                 <div className="order-2 space-y-3 md:order-1">
-                  <h3 className="text-lg font-semibold text-[color:#1C1326]">
+                  <h3 className="text-lg font-semibold text-[#1C1326]">
                     {features[1].title}
                   </h3>
                   <p className="text-sm text-neutral-700">
@@ -307,7 +307,7 @@ export default function MarketingPage() {
                 </div>
                 <div className="order-1 flex justify-center md:order-2">
                   <div
-                    className={`h-64 w-64 rounded-[32px] bg-gradient-to-b ${features[1].gradient}`}
+                    className={`h-64 w-64 rounded-4xl bg-linear-to-b ${features[1].gradient}`}
                   />
                 </div>
               </div>
@@ -315,7 +315,7 @@ export default function MarketingPage() {
               {/* 3rd row */}
               <div className="grid gap-10 md:grid-cols-2 md:items-center">
                 <div className="space-y-3">
-                  <h3 className="text-lg font-semibold text-[color:#1C1326]">
+                  <h3 className="text-lg font-semibold text-[#1C1326]">
                     {features[2].title}
                   </h3>
                   <p className="text-sm text-neutral-700">
@@ -327,7 +327,7 @@ export default function MarketingPage() {
                 </div>
                 <div className="flex justify-center">
                   <div
-                    className={`h-64 w-64 rounded-[32px] bg-gradient-to-b ${features[2].gradient}`}
+                    className={`h-64 w-64 rounded-4xl bg-linear-to-b ${features[2].gradient}`}
                   />
                 </div>
               </div>
@@ -346,7 +346,7 @@ export default function MarketingPage() {
             <div className="relative flex justify-center">
               {/* Replace with your real image */}
               <div className="relative h-52 w-52">
-                <div className="absolute inset-[-18%] -z-10 rotate-6 rounded-[32px] bg-[#E1C3FF]" />
+                <div className="absolute inset-[-18%] -z-10 rotate-6 rounded-4xl bg-[#E1C3FF]" />
                 <Image
                   src="/seller-portrait.png"
                   alt="Ishtar seller"
@@ -359,7 +359,7 @@ export default function MarketingPage() {
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-700">
                 SELLER
               </p>
-              <h2 className="mt-3 text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+              <h2 className="mt-3 text-xl font-semibold text-[#1C1326] sm:text-2xl">
                 Become a seller
               </h2>
               <p className="mt-3 max-w-md text-sm text-neutral-700">
@@ -367,7 +367,7 @@ export default function MarketingPage() {
                 manage products and orders, and meet buyers who value the story
                 behind what you make.
               </p>
-              <button className="mt-5 inline-flex items-center rounded-full bg-[color:#201338] px-5 py-2.5 text-xs font-medium text-white shadow-sm hover:bg-[color:#29194a]">
+              <button className="mt-5 inline-flex items-center rounded-full bg-[#201338] px-5 py-2.5 text-xs font-medium text-white shadow-sm hover:bg-[#29194a]">
                 Start selling on Ishtar
               </button>
             </div>
@@ -383,7 +383,7 @@ export default function MarketingPage() {
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-500">
                 USE CASES
               </p>
-              <h2 className="mt-3 text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+              <h2 className="mt-3 text-xl font-semibold text-[#1C1326] sm:text-2xl">
                 For creative spirits of all kinds.
               </h2>
             </div>
@@ -397,7 +397,7 @@ export default function MarketingPage() {
                     onClick={() => setActiveUseCase(tab)}
                     className={`rounded-full border px-4 py-1.5 transition-colors ${
                       active
-                        ? "border-[color:#1E1235] bg-[color:#1E1235] text-white"
+                        ? "border-[#1E1235] bg-[#1E1235] text-white"
                         : "border-black/5 bg-white text-neutral-700 hover:bg-neutral-50"
                     }`}
                   >
@@ -415,7 +415,7 @@ export default function MarketingPage() {
               </div>
               <div className="flex justify-center">
                 {/* Replace with custom illustration per tab if you want */}
-                <div className="h-52 w-full max-w-sm rounded-3xl bg-gradient-to-br from-[#FFE1C4] via-[#F9D9FF] to-[#E1F0FF]" />
+                <div className="h-52 w-full max-w-sm rounded-3xl bg-linear-to-br from-[#FFE1C4] via-[#F9D9FF] to-[#E1F0FF]" />
               </div>
             </div>
           </Container>
@@ -426,7 +426,7 @@ export default function MarketingPage() {
       <Reveal>
         <section className="bg-white py-16 sm:py-20">
           <Container>
-            <h2 className="text-center text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+            <h2 className="text-center text-xl font-semibold text-[#1C1326] sm:text-2xl">
               Stories from our Community
             </h2>
             <p className="mt-2 text-center text-sm text-neutral-600">
@@ -438,7 +438,7 @@ export default function MarketingPage() {
               {testimonials.map((t) => (
                 <div
                   key={t.name}
-                  className="flex h-full flex-col rounded-3xl bg-gradient-to-b from-[#F5EDFF] to-white p-5 shadow-[0_14px_35px_rgba(15,23,42,0.06)]"
+                  className="flex h-full flex-col rounded-3xl bg-linear-to-b from-[#F5EDFF] to-white p-5 shadow-[0_14px_35px_rgba(15,23,42,0.06)]"
                 >
                   <p className="text-sm leading-relaxed text-neutral-800">
                     “{t.quote}”
@@ -463,7 +463,7 @@ export default function MarketingPage() {
       <Reveal>
         <section className="bg-white py-16 sm:py-20">
           <Container>
-            <h2 className="text-center text-xl font-semibold text-[color:#1C1326] sm:text-2xl">
+            <h2 className="text-center text-xl font-semibold text-[#1C1326] sm:text-2xl">
               Frequently Asked Question
             </h2>
 
@@ -521,7 +521,7 @@ export default function MarketingPage() {
                 Save your favourite pieces, follow your favourite shops, and be
                 the first to know when something special drops.
               </p>
-              <button className="mt-6 inline-flex items-center rounded-full bg-white px-6 py-2.5 text-xs font-medium text-[color:#1E1235] shadow-sm hover:bg-neutral-100">
+              <button className="mt-6 inline-flex items-center rounded-full bg-white px-6 py-2.5 text-xs font-medium text-[#1E1235] shadow-sm hover:bg-neutral-100">
                 Join the early shoppers
               </button>
             </div>
@@ -532,7 +532,7 @@ export default function MarketingPage() {
                   src="/ishtar-phone-cta.png"
                   alt="Ishtar app preview"
                   fill
-                  className="rounded-[32px] object-cover shadow-xl"
+                  className="rounded-4xl object-cover shadow-xl"
                 />
               </div>
             </div>

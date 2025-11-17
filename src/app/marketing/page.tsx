@@ -3,10 +3,10 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, easeInOut } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
-const TRANSITION = { duration: 0.7, ease: "easeInOut" };
+const TRANSITION = { duration: 0.7, ease: easeInOut };
 const SCROLL_COOLDOWN = 900; // ms between section changes
 const SWIPE_THRESHOLD = 40; // px
 
@@ -218,8 +218,8 @@ export default function Page() {
             <div className="flex flex-1 items-center justify-center">
               <div className="relative h-[360px] w-[260px]">
                 <div className="absolute -left-20 top-6 h-40 w-32 rounded-[28px] bg-[#FFB84D]" />
-                <div className="absolute bottom-2 -left-10 h-52 w-40 rounded-[32px] bg-[#F5666E]" />
-                <div className="absolute right-0 top-0 h-56 w-40 rounded-[32px] bg-[#FF8AA0]" />
+                <div className="absolute bottom-2 -left-10 h-52 w-40 rounded-4xl bg-[#F5666E]" />
+                <div className="absolute right-0 top-0 h-56 w-40 rounded-4xl bg-[#FF8AA0]" />
                 <div className="absolute inset-10 rounded-[36px] bg-white shadow-xl">
                   <Image
                     src="/images/zaha-discover-cards.png"
@@ -325,7 +325,7 @@ export default function Page() {
         </section>
 
         {/* ===== 5. FINAL CTA / DOWNLOAD ===== */}
-        <section className="flex h-screen items-center justify-center bg-gradient-to-b from-[#C5A8FF] to-[#FDD9FF] px-6 md:px-16">
+        <section className="flex h-screen items-center justify-center bg-linear-to-b from-[#C5A8FF] to-[#FDD9FF] px-6 md:px-16">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-center mt-18">
             <div className="relative flex w-full flex-col overflow-hidden rounded-[40px] bg-[#14071E] px-8 py-10 text-white md:flex-row md:items-center md:px-12 md:py-16">
               <div className="relative z-10 max-w-xl space-y-4">
@@ -349,7 +349,7 @@ export default function Page() {
 
               <div className="relative mt-10 flex flex-1 justify-center md:mt-0 md:justify-end">
                 <div className="absolute -left-10 -top-10 h-44 w-44 rotate-45 rounded-[40px] border border-white/20" />
-                <div className="relative h-[320px] w-[180px] overflow-hidden rounded-[32px] border border-white/10 bg-black/70 shadow-[0_0_40px_rgba(0,0,0,0.7)]">
+                <div className="relative h-80 w-[180px] overflow-hidden rounded-4xl border border-white/10 bg-black/70 shadow-[0_0_40px_rgba(0,0,0,0.7)]">
                   <Image
                     src="/images/zaha-wallet-phone.png"
                     alt="Zaha wallet preview"

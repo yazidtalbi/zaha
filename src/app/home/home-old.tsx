@@ -761,14 +761,14 @@ export default function HomePage() {
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div
                     key={`city-skel-${i}`}
-                    className="w-[160px] h-[210px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
+                    className="w-40 h-[210px] shrink-0 rounded-2xl bg-neutral-200/60 animate-pulse"
                   />
                 ))}
               </div>
             ) : cityProducts && cityProducts.length > 0 ? (
               <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-1">
                 {cityProducts.map((p) => (
-                  <div key={p.id} className="w-[160px] shrink-0">
+                  <div key={p.id} className="w-40 shrink-0">
                     <ProductCard p={p} variant="mini" />
                   </div>
                 ))}
@@ -790,7 +790,7 @@ export default function HomePage() {
           </h2>
           <div className="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pt-2 px-3">
             {recently.map((p) => (
-              <div key={p.id} className="w-[160px] shrink-0">
+              <div key={p.id} className="w-40 shrink-0">
                 <ProductCard p={p} variant="mini" />
               </div>
             ))}

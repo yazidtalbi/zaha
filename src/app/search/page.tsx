@@ -187,7 +187,7 @@ export default function SearchPage() {
     setPage(0); // reset page when filters change
     setItems([]);
     setTotal(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [paramsKey]);
 
   useEffect(() => {

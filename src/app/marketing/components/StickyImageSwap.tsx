@@ -89,7 +89,7 @@ export default function StickyImageScroll({
           style={{ height: mobileStack ? undefined : stickyHeight }}
         >
           <div
-            className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm md:h-[720px] md:aspect-auto"
+            className="relative aspect-4/5 w-full overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm md:h-[720px] md:aspect-auto"
             style={{ height: mobileStack ? undefined : stickyHeight }}
           >
             <AnimatePresence initial={false} mode="popLayout">

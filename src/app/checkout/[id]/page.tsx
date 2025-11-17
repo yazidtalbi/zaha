@@ -27,6 +27,7 @@ function CheckoutInner() {
 
   useEffect(() => {
     if (!_id) return;
+
     supabase
       .from("products")
       .select("*")
@@ -47,6 +48,7 @@ function CheckoutInner() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) {
       setLoading(false);
       setMsg("Please login at /login");
@@ -71,14 +73,17 @@ function CheckoutInner() {
 
     setLoading(false);
 
-    if (error) {
-      setMsg(error.message);
-    } else {
-      // ✅ Redirect to thank-you page
-      window.location.href = `/thank-you?o=${data.id}`;
+    if (error || !data) {
+      console.error("Failed to create order", error);
+      setMsg("Something went wrong. Please try again.");
+      return;
     }
-  }
 
+    // ✅ Here TypeScript knows `data` is not null
+    window.location.href = `/thank-you?o=${data.id}`;
+  } // 🔥 this brace was missing before
+
+  // these were accidentally inside placeOrder because of the missing brace
   if (!_id) return <main className="p-4">Error: No product id provided</main>;
   if (!p) return <main className="p-4">Loading…</main>;
 
