@@ -119,50 +119,22 @@ export default function CategoryPage() {
             .order("promo_price_mad", {
               ascending: true,
               nullsFirst: true,
-              referencedTable: "products",
             })
             .order("price_mad", {
               ascending: true,
-              referencedTable: "products",
             });
           break;
+
         case "price-desc":
           q = q
             .order("promo_price_mad", {
               ascending: false,
-              nullsFirst: false, // nullsLast = true
+              nullsFirst: false, // nulls last
             })
             .order("price_mad", {
               ascending: false,
-              referencedTable: "products",
             });
           break;
-        case "top-rated":
-          q = q
-            .order("rating_avg", {
-              ascending: false,
-              nullsLast: true,
-              referencedTable: "products",
-            })
-            .order("rating_count", {
-              ascending: false,
-              nullsLast: true,
-              referencedTable: "products",
-            });
-          break;
-        case "most-ordered":
-          q = q.order("orders_count", {
-            ascending: false,
-            nullsLast: true,
-            referencedTable: "products",
-          });
-          break;
-        default:
-          q = q.order("created_at", {
-            ascending: false,
-            nullsLast: true,
-            referencedTable: "products",
-          });
       }
 
       return q.range(from, to);
