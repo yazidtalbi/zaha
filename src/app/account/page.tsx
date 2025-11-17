@@ -1,13 +1,22 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import RequireAuth from "@/components/RequireAuth";
 
 export default function Account() {
   return (
-    <RequireAuth>
-      <Inner />
-    </RequireAuth>
+    <Suspense
+      fallback={
+        <main className="p-6 text-ink/60 animate-pulse">
+          Loading your account…
+        </main>
+      }
+    >
+      <RequireAuth>
+        <Inner />
+      </RequireAuth>
+    </Suspense>
   );
 }
 

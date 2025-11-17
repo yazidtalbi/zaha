@@ -1,9 +1,9 @@
 // app/login/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mail, Lock, LogIn, Chrome } from "lucide-react";
 
@@ -11,18 +11,22 @@ const GUEST_KEY = "zaha_guest";
 
 export default function LoginPage() {
   const router = useRouter();
-  const search = useSearchParams();
+
+  // read ?next=… from URL on the client only
+  const [next, setNext] = useState<string>("/home");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const raw = sp.get("next") || "/home";
+    setNext(raw.startsWith("/") ? raw : "/home");
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const redirecting = useRef(false);
-
-  const next = useMemo(() => {
-    const raw = search?.get("next") || "/home";
-    return raw.startsWith("/") ? raw : "/home";
-  }, [search]);
 
   useEffect(() => {
     // If already signed in, clear guest badge and go where needed
@@ -97,7 +101,6 @@ export default function LoginPage() {
   }
 
   function continueAsGuest() {
-    // Mark this browser as a guest session; features can check this flag.
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(GUEST_KEY, "1");
@@ -183,7 +186,6 @@ export default function LoginPage() {
         </div>
 
         {/* GOOGLE */}
-        {/* GOOGLE */}
         <Button
           type="button"
           onClick={signInWithGoogle}
@@ -219,7 +221,6 @@ async function decideAfterAuth(
   next: string,
   router: ReturnType<typeof useRouter>
 ) {
-  // 1) get user
   const { data: userData } = await supabase.auth.getUser();
   const uid = userData.user?.id;
   if (!uid) {
@@ -227,7 +228,6 @@ async function decideAfterAuth(
     return;
   }
 
-  // 2) ensure profile row exists (create minimal row if missing)
   const { data: profileRows, error: selErr } = await supabase
     .from("profiles")
     .select("id, role")
@@ -235,7 +235,6 @@ async function decideAfterAuth(
     .maybeSingle();
 
   if (selErr) {
-    // safe fallback to onboarding
     router.replace("/onboarding");
     return;
   }
@@ -246,7 +245,6 @@ async function decideAfterAuth(
     return;
   }
 
-  // 3) Route based on role
   if (profileRows.role) {
     router.replace(next || "/home");
   } else {

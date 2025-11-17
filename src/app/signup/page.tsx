@@ -2,18 +2,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserPlus } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
-  const search = useSearchParams();
-  const next =
-    search?.get("next") && search.get("next")!.startsWith("/")
-      ? search.get("next")!
-      : "/home";
+
+  // computed from ?next=... but without useSearchParams
+  const [next, setNext] = useState<string>("/home");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const raw = sp.get("next");
+    if (raw && raw.startsWith("/")) {
+      setNext(raw);
+    } else {
+      setNext("/home");
+    }
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +45,7 @@ export default function SignupPage() {
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      // Depending on email confirm settings, user may need to confirm; after confirm they'll hit onAuthStateChange and redirect.
+      // After email confirmation, onAuthStateChange will fire and redirect.
     } catch (e: any) {
       setErr(e?.message ?? "Sign up failed");
     } finally {

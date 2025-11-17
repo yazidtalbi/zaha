@@ -1,8 +1,8 @@
 // app/auth/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Loader2, Mail, Lock, Chrome, UserPlus, LogIn } from "lucide-react";
 
 export default function AuthPage() {
   const router = useRouter();
-  const search = useSearchParams();
   const [mode, setMode] = useState<"login" | "signup">("login");
 
   const [email, setEmail] = useState("");
@@ -19,10 +18,15 @@ export default function AuthPage() {
   const [err, setErr] = useState<string | null>(null);
   const redirecting = useRef(false);
 
-  const next = useMemo(() => {
-    const raw = search?.get("next") || "/home";
-    return raw.startsWith("/") ? raw : "/home";
-  }, [search]);
+  // 👇 next param, read from window.location instead of useSearchParams
+  const [next, setNext] = useState<string>("/home");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const raw = sp.get("next") || "/home";
+    setNext(raw.startsWith("/") ? raw : "/home");
+  }, []);
 
   /* ———————————————————————————————————————————————————————— */
   // AUTH STATE

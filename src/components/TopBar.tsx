@@ -1,12 +1,18 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { User } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function TopBar() {
   const router = useRouter();
-  const params = useSearchParams();
-  const q0 = params.get("q") ?? "";
+  const [q0, setQ0] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    setQ0(sp.get("q") ?? "");
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 bg-paper/90 backdrop-blur border-b">

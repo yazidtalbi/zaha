@@ -988,8 +988,12 @@ function Inner() {
               productId={pickerOpenFor}
               all={collections}
               value={productMap[pickerOpenFor] || []}
-              onChange={setCollectionsFor}
-              onCreate={createCollectionQuick}
+              onChange={async (productId, nextIds) => {
+                await setCollectionsFor(productId, nextIds);
+              }}
+              onCreate={async (title) => {
+                await createCollectionQuick(title);
+              }}
             />
           )}
         </SheetContent>
@@ -1007,8 +1011,12 @@ function Inner() {
           <div className="mt-3">
             <CollectionsChooser
               all={collections}
-              onConfirm={bulkAddToCollections}
-              onCreate={createCollectionQuick}
+              onConfirm={async (targetIds) => {
+                await bulkAddToCollections(targetIds);
+              }}
+              onCreate={async (title) => {
+                await createCollectionQuick(title);
+              }}
             />
           </div>
         </SheetContent>

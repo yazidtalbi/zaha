@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
 import EmptyState from "@/components/EmptyState";
@@ -57,27 +57,62 @@ type RecentView = {
 
 const PAGE_SIZE = 24;
 
+type CommittedState = {
+  q: string;
+  city: string;
+  max: string;
+  sort: "new" | "price-asc" | "price-desc";
+  chips: Chips;
+};
+
+const EMPTY_CHIPS: Chips = {
+  under250: false,
+  onsale: false,
+  handmade: false,
+  personalized: false,
+};
+
+function getCommittedFromLocation(): CommittedState {
+  if (typeof window === "undefined") {
+    return {
+      q: "",
+      city: "",
+      max: "",
+      sort: "new",
+      chips: { ...EMPTY_CHIPS },
+    };
+  }
+
+  const sp = new URLSearchParams(window.location.search);
+  const chips: Chips = {
+    under250: sp.get("under250") === "1",
+    onsale: sp.get("onsale") === "1",
+    handmade: sp.get("handmade") === "1",
+    personalized: sp.get("personalized") === "1",
+  };
+
+  return {
+    q: sp.get("q") ?? "",
+    city: sp.get("city") ?? "",
+    max: sp.get("max") ?? "",
+    sort: (sp.get("sort") ?? "new") as "new" | "price-asc" | "price-desc",
+    chips,
+  };
+}
+
 export default function SearchPage() {
   const router = useRouter();
-  const sp = useSearchParams();
 
-  /* ==================== URL-COMMITTED STATE ==================== */
-  const committed = useMemo(() => {
-    const chips: Chips = {
-      under250: sp.get("under250") === "1",
-      onsale: sp.get("onsale") === "1",
-      handmade: sp.get("handmade") === "1",
-      personalized: sp.get("personalized") === "1",
-    };
-    return {
-      q: sp.get("q") ?? "",
-      city: sp.get("city") ?? "",
-      max: sp.get("max") ?? "",
-      sort: (sp.get("sort") ?? "new") as "new" | "price-asc" | "price-desc",
-      chips,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp?.toString()]); // re-compute when URL changes
+  // committed state that mirrors the URL
+  const [committed, setCommitted] = useState<CommittedState>(() =>
+    getCommittedFromLocation()
+  );
+
+  // keep committed in sync with URL on first mount (for hard refresh / direct link)
+  useEffect(() => {
+    const next = getCommittedFromLocation();
+    setCommitted(next);
+  }, []);
 
   const hasActiveQuery =
     !!committed.q ||
@@ -140,7 +175,6 @@ export default function SearchPage() {
       let query = supabase
         .from("products")
         .select(
-          // select only what ProductCard needs
           "id,title,photos,price_mad,city,active,created_at,tags,on_sale",
           { count: "exact" }
         )
@@ -187,12 +221,10 @@ export default function SearchPage() {
     setPage(0); // reset page when filters change
     setItems([]);
     setTotal(null);
-     
   }, [paramsKey]);
 
   useEffect(() => {
     if (!hasActiveQuery) return;
-    // when page changes or filters changed (reseted above), load
     load(page === 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, paramsKey, hasActiveQuery]);
@@ -221,7 +253,18 @@ export default function SearchPage() {
     if (sortv !== "new") p.set("sort", sortv);
     Object.entries(chipsv).forEach(([k, v]) => v && p.set(k, "1"));
 
-    router.replace(`/search${p.toString() ? `?${p.toString()}` : ""}`);
+    const qs = p.toString();
+    router.replace(`/search${qs ? `?${qs}` : ""}`);
+
+    // keep committed state in sync with what we just pushed
+    setCommitted({
+      q: qv,
+      city: cityv,
+      max: maxv,
+      sort: sortv,
+      chips: chipsv,
+    });
+
     if (resetPage) setPage(0);
   }
 
@@ -230,16 +273,18 @@ export default function SearchPage() {
     setCity("");
     setMax("");
     setSort("new");
-    setChips({
-      under250: false,
-      onsale: false,
-      handmade: false,
-      personalized: false,
-    });
+    setChips({ ...EMPTY_CHIPS });
     setItems([]);
     setPage(0);
     setTotal(null);
     router.replace("/search");
+    setCommitted({
+      q: "",
+      city: "",
+      max: "",
+      sort: "new",
+      chips: { ...EMPTY_CHIPS },
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -358,7 +403,6 @@ export default function SearchPage() {
               placeholder="Search handmade goods…"
               className="flex-1 outline-none text-sm placeholder:text-neutral-400 bg-transparent"
             />
-            {/* Clear X (only when there is text/filters) */}
             {(q.trim().length > 0 || hasActiveQuery) && (
               <button
                 type="button"
@@ -630,7 +674,6 @@ export default function SearchPage() {
                 : `${items.length} item${items.length !== 1 ? "s" : ""}`}
           </div>
 
-          {/* First-page skeletons */}
           {loading && items.length === 0 ? (
             <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -656,10 +699,8 @@ export default function SearchPage() {
                 ))}
               </div>
 
-              {/* Infinite scroll sentinel */}
               <div ref={sentinelRef} className="h-8" />
 
-              {/* Optional loader at bottom while fetching more */}
               {loading && items.length > 0 && (
                 <div className="py-4 text-center text-sm text-neutral-500">
                   Loading…

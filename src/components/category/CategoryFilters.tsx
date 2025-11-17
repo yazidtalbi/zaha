@@ -1,8 +1,4 @@
-// components/category/CategoryFilters.tsx
 "use client";
-
-import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 
 export type CategoryFilterState = {
   q?: string;

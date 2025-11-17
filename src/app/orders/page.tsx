@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/components/Toast";
+import { Suspense } from "react"; // 👈 NEW
 
 type OrderStatus =
   | "pending"
@@ -45,9 +46,17 @@ const STATUS: OrderStatus[] = [
 
 export default function MyOrdersPage() {
   return (
-    <RequireAuth>
-      <OrdersInner />
-    </RequireAuth>
+    <Suspense
+      fallback={
+        <main className="p-8 text-center text-ink/60 animate-pulse">
+          Loading your orders…
+        </main>
+      }
+    >
+      <RequireAuth>
+        <OrdersInner />
+      </RequireAuth>
+    </Suspense>
   );
 }
 
