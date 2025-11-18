@@ -115,7 +115,7 @@ function CheckoutInner() {
       <button
         onClick={placeOrder}
         disabled={loading}
-        className="w-full rounded-xl px-4 py-3 font-medium bg-terracotta text-white"
+        className="w-full rounded-xl px-4 py-3 font-medium bg-[#371837] text-white"
       >
         {loading ? "Placing…" : `Place COD order · MAD ${p.price_mad}`}
       </button>

@@ -25,7 +25,7 @@ export default function CategoryPills({
           onClick={() => onSelect(c.value)}
           className={`flex-shrink-0 rounded-full border px-4 py-2 text-sm ${
             active === c.value
-              ? "bg-terracotta text-white border-terracotta"
+              ? "bg-[#371837] text-white border-[#371837]"
               : "bg-white hover:bg-neutral-50"
           }`}
         >

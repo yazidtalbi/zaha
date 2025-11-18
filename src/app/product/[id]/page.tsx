@@ -1306,7 +1306,7 @@ export default function ProductPage() {
                     disabled={
                       availability !== "available" || isInactive || isRemoved
                     }
-                    className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
+                    className="rounded-full bg-[#371837] text-white px-4 py-3 font-medium disabled:opacity-60"
                   >
                     Add new item
                   </button>
@@ -1339,7 +1339,7 @@ export default function ProductPage() {
                     disabled={
                       availability !== "available" || isInactive || isRemoved
                     }
-                    className="rounded-full bg-amber-800 text-white px-4 py-3 font-medium disabled:opacity-60"
+                    className="rounded-full bg-[#371837] text-white px-4 py-3 font-medium disabled:opacity-60"
                   >
                     Add to cart
                   </button>
@@ -1380,7 +1380,7 @@ export default function ProductPage() {
           <div className="px-4 py-4">
             <Link
               href={`/seller/edit/${p.id}`}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-800 text-white px-4 py-3 w-full font-medium"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#371837] text-white px-4 py-3 w-full font-medium"
             >
               <Pencil size={16} />
               Edit this product
@@ -1742,7 +1742,7 @@ export default function ProductPage() {
                 disabled={
                   availability !== "available" || isInactive || isRemoved
                 }
-                className="w-full rounded-full bg-amber-900 text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
+                className="w-full rounded-full bg-[#371837] text-white px-4 py-3 font-medium shadow-md disabled:opacity-60"
               >
                 {availability === "loading"
                   ? "Checking availability…"

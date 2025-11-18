@@ -290,7 +290,7 @@ export default function Header() {
           >
             <Search className="h-4 w-4 opacity-60" />
             <span className="text-sm opacity-50 select-none text-left ml-1">
-              Search handmade goods…
+              Search on Zaha..
             </span>
           </button>
 

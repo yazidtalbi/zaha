@@ -283,7 +283,7 @@ function Row({ n, onOpen }: { n: NotificationItem; onOpen: () => void }) {
       <div className="relative mt-0.5">
         <Icon className="h-5 w-5" />
         {unread && (
-          <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-terracotta ring-2 ring-white" />
+          <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-[#371837] ring-2 ring-white" />
         )}
       </div>
 

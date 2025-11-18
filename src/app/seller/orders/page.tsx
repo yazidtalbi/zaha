@@ -207,7 +207,7 @@ function OrdersHeaderCompact({
   const pill = (active: boolean) =>
     [
       "px-4 h-8 rounded-full text-sm inline-flex items-center gap-2 shrink-0",
-      active ? "bg-terracotta text-white" : "bg-white text-ink/90 border",
+      active ? "bg-[#371837] text-white" : "bg-white text-ink/90 border",
     ].join(" ");
 
   return (

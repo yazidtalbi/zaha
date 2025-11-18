@@ -17,12 +17,12 @@ import {
   Bell,
   Store,
   Share2,
-  Copy,
   Search as SearchIcon,
-  AlertTriangle,
   Truck,
-  ChevronDown,
   ArrowLeft,
+  MapPin,
+  Star,
+  Loader2,
 } from "lucide-react";
 import Image from "next/image";
 import {
@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/select";
 import DashboardHeader from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
-import Home from "../page";
 
 /* ---------------- Types (defensive/optional) ---------------- */
 type Order = {
@@ -60,9 +59,15 @@ type Shop = {
   avatar_url?: string | null;
   slug?: string | null;
   banner_url?: string | null;
-  payout_enabled?: boolean | null; // optional, handled defensively
+  cover_urls?: string[] | null;
+  payout_enabled?: boolean | null;
   is_active?: boolean | null;
   owner?: string;
+  city?: string | null;
+  avg_rating?: number | null;
+  rating_count?: number | null;
+  years_on_zaha?: number | null;
+  open_for_commissions?: boolean | null;
 };
 
 type Profile = {
@@ -128,12 +133,14 @@ function KpiCard({
   delta,
   positiveIsGood = true,
   icon: Icon,
+  isLoading,
 }: {
   label: string;
   value: string;
   delta?: number;
   positiveIsGood?: boolean;
   icon: any;
+  isLoading?: boolean;
 }) {
   const isUp = (delta ?? 0) >= 0;
   const tone =
@@ -148,22 +155,30 @@ function KpiCard({
       : isUp === positiveIsGood
         ? "bg-green-50"
         : "bg-red-50";
+
+  const showDelta = delta !== undefined && !isLoading;
+
   return (
-    <div className="rounded-xl    bg-neutral-50  px-3 py-3   items-center gap-3 block">
-      {/* <div className="w-9 h-9 rounded-lg grid place-items-center bg-white border">
-        <Icon size={18} />
-      </div> */}
-      <div className="flex-1 min-w-0">
-        <div className="text-xs text-ink/70">{label}</div>
-        <div className="text-lg font-semibold truncate">{value}</div>
-        {delta !== undefined && (
-          <div
-            className={`mt-0.5 inline-block ${bg} ${tone} text-[11px] px-2 py-0.5 rounded-md`}
-          >
-            {isUp ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}%
-          </div>
-        )}
-      </div>
+    <div className="rounded-xl bg-neutral-100 px-3 py-3 items-center gap-3 block">
+      <div className="text-xs text-ink/70">{label}</div>
+
+      {isLoading ? (
+        <div className="mt-1 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-ink/60" />
+          <span className="text-xs text-ink/60">Loading…</span>
+        </div>
+      ) : (
+        <>
+          <div className="text-lg font-semibold truncate">{value}</div>
+          {showDelta && (
+            <div
+              className={`mt-0.5 inline-block ${bg} ${tone} text-[11px] px-2 py-0.5 rounded-md`}
+            >
+              {isUp ? "▲" : "▼"} {Math.abs(delta!).toFixed(0)}%
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -209,10 +224,11 @@ function SegmentedBar({
 }
 
 /* ---------------- Page ---------------- */
-export default function SellerDashboardPage() {
-  const loading = useRequireShop();
 
-  if (loading) return null; // or a nice loader
+export default function SellerDashboardPage() {
+  // still runs redirects if user has no shop, but we DON'T hide the UI
+  useRequireShop();
+
   return (
     <RequireAuth>
       <div className="pb-24 pt-4 px-4 max-w-screen-sm mx-auto">
@@ -226,6 +242,7 @@ function OverviewInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [prevOrders, setPrevOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [range, setRange] = useState<RangeKey>("30d");
   const [statusFilter, setStatusFilter] = useState<Order["status"] | "all">(
     "all"
@@ -237,6 +254,11 @@ function OverviewInner() {
   const [localQuery, setLocalQuery] = useState("");
 
   const PAGE_SIZE = 12;
+
+  const cover =
+    (Array.isArray(shop?.cover_urls) && shop?.cover_urls?.[0]) ||
+    shop?.banner_url ||
+    null;
 
   /* -------- Ranges -------- */
   const currentRange = useMemo(() => {
@@ -335,7 +357,6 @@ function OverviewInner() {
         (payload: any) => {
           const rec = payload.new as Order;
           setNewOrderBanner(rec);
-          // Refresh lightweight: prepend/patch without re-fetch
           setOrders((prev) => {
             if (!rec?.id) return prev;
             const idx = prev.findIndex((o) => o.id === rec.id);
@@ -344,7 +365,6 @@ function OverviewInner() {
             next[idx] = { ...next[idx], ...rec };
             return next;
           });
-          // Auto-hide banner
           setTimeout(() => setNewOrderBanner(null), 4000);
         }
       )
@@ -447,7 +467,7 @@ function OverviewInner() {
         .filter(Boolean)
         .filter(
           (p) => typeof p!.stock === "number" && (p!.stock as number) <= 2
-        ) // optional field
+        )
         .slice(0, 3) as NonNullable<Order["products"]>[],
     [orders]
   );
@@ -475,31 +495,35 @@ function OverviewInner() {
     }
   }, [orders, range]);
 
-  // put this near the top of the file (below RangeKey type)
-  const RANGE_LABEL: Record<RangeKey, string> = {
-    "7d": "Last 7 days",
-    "30d": "Last 30 days",
-    "90d": "Last 90 days",
-    all: "All time",
-  };
+  const shareShop = useCallback(() => {
+    if (!shop?.id && !shop?.slug) return;
 
-  const shareShop = useCallback(async () => {
-    const url = shop?.slug
-      ? `${location.origin}/shop/${shop.slug}`
-      : `${location.origin}/shop/${shop?.id}`;
-    try {
-      // @ts-ignore
-      if (navigator.share) {
-        // @ts-ignore
-        await navigator.share({ title: shop?.name ?? "My Zaha shop", url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        alert("Shop link copied!");
-      }
-    } catch {}
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+    const url = shop.slug
+      ? `${origin}/shop/${shop.slug}`
+      : `${origin}/shop/${shop.id}`;
+    const title = shop?.title ?? "My Zaha shop";
+
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      (navigator as any).share({ title, url }).catch(() => {});
+      return;
+    }
+
+    if (navigator && "clipboard" in navigator) {
+      (navigator as any).clipboard
+        .writeText(url)
+        .then(() => {
+          alert("Shop link copied to clipboard");
+        })
+        .catch(() => {
+          window.prompt("Copy this shop link:", url);
+        });
+    } else {
+      window.prompt("Copy this shop link:", url);
+    }
   }, [shop]);
 
-  /* -------- Checklist progress -------- */
   const checklist = useMemo(() => {
     const steps = [
       { key: "shop", done: !!shop?.id, label: "Create your shop" },
@@ -519,11 +543,22 @@ function OverviewInner() {
     return { steps, done, total: steps.length };
   }, [shop, orders, profile]);
 
+  const shopSales = delivered;
+  const ratingDisplay =
+    typeof shop?.avg_rating === "number" ? shop.avg_rating.toFixed(1) : "—";
+  const ratingCountDisplay =
+    typeof shop?.rating_count === "number" ? shop.rating_count : undefined;
+  const yearsDisplay =
+    typeof shop?.years_on_zaha === "number" ? shop.years_on_zaha : null;
+
   return (
     <main className="space-y-6">
+      {/* hidden anchor for CSV download */}
+      <a ref={downloadRef} className="hidden" />
+
       {/* Live banner for new/changed orders */}
       {newOrderBanner && (
-        <div className="rounded-xl border bg-terracotta/10 text-ink px-3 py-2 flex items-center justify-between">
+        <div className="rounded-xl border bg-[#371837]/10 text-ink px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Bell size={16} />
             <span className="text-sm">
@@ -552,134 +587,123 @@ function OverviewInner() {
         <Link
           href="/home"
           aria-label="Return to buyer"
-          className="
-    rounded-full border border-ink/15 bg-white
-    hover:bg-sand transition
-    h-9 px-3
-    inline-flex items-center gap-1.5
-    text-sm text-ink/80
-  "
+          className="rounded-full border border-ink/15 bg-white hover:bg-sand transition h-9 px-3 inline-flex items-center gap-1.5 text-sm text-ink/80"
         >
           <ArrowLeft className="h-[15px] w-[15px] opacity-70" /> Switch to buyer
         </Link>
       </div>
 
-      {/* Store card + checklist */}
+      {/* Shop preview card */}
+      <div className="relative rounded-2xl border border-sand/70 bg-white shadow-[0_6px_18px_rgba(11,16,32,0.06)] overflow-hidden">
+        {shop?.id && (
+          <Link
+            href={`/shop/${shop.slug ?? shop.id}`}
+            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-ink text-sand px-3 h-8 text-[11px] font-medium shadow-sm hover:brightness-110 active:scale-[0.98]"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            <span>Preview</span>
+          </Link>
+        )}
 
-      <Link href={`/shop/${shop?.slug ?? shop?.id}`}>
-        <div className="rounded-xl   bg-neutral-50 ring ring-neutral-200   p-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 ">
-              <div className="w-10 h-10 border grid place-items-center  bg-neutral-50 rounded-md overflow-hidden">
-                {shop?.avatar_url ? (
-                  <img
-                    src={shop.avatar_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <Store size={18} />
-                )}
-              </div>
-              <div>
-                <div className="font-medium text-terracotta">
-                  {shop?.title || "Your shop"}
-                </div>
-                <div className="text-xs  font-medium text-ink/70">
-                  {shop?.is_verified ? (
-                    <div className="flex">
-                      {" "}
-                      <Image
-                        src="/icons/verified_zaha.svg"
-                        alt="Verified"
-                        width={14}
-                        height={14}
-                        className="opacity-90"
-                      />{" "}
-                      <span className="ml-1">Verified</span>
-                    </div>
-                  ) : (
-                    "Unverified"
-                  )}{" "}
-                  {/* {shop?.payout_enabled ? "Payouts enabled" : "Payouts disabled"} */}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {shop?.id && (
-                <Link
-                  href={`/shop/${shop.slug ?? shop.id}`}
-                  className="rounded-full border px-2 py-1 text-sm bg-white hover:bg-neutral-50 transition inline-flex items-center gap-1"
-                >
-                  <Eye size={16} /> Preview
-                </Link>
-              )}
-              {/* <Link
-              href="/seller/settings"
-              className="rounded-full border px-3 py-1.5 text-sm bg-white hover:bg-neutral-50 transition"
-            >
-              Manage
-            </Link> */}
-            </div>
-          </div>
+        {/* Top-right actions */}
+        <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+          <button
+            type="button"
+            onClick={shareShop}
+            className="inline-flex items-center gap-1 rounded-full border border-ink/10 bg-white px-3 h-8 text-[11px] text-ink/70 hover:bg-sand/70 shadow-sm"
+          >
+            <Share2 className="h-3 w-3" />
+            <span>Share</span>
+          </button>
 
-          {/* Checklist */}
-          {/* <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <div className="font-medium">Setup checklist</div>
-            <div className="text-ink/70">
-              {checklist.done}/{checklist.total} done
-            </div>
-          </div>
-          <div className="w-full h-2 rounded-full overflow-hidden bg-neutral-200">
-            <div
-              className="h-full bg-terracotta"
-              style={{
-                width: `${(checklist.done / Math.max(1, checklist.total)) * 100}%`,
-              }}
-            />
-          </div>
-          <ul className="text-sm space-y-1">
-            {checklist.steps.map((s) => (
-              <li key={s.key} className="flex items-center justify-between">
-                <span className={s.done ? "text-ink/60 line-through" : ""}>
-                  {s.label}
-                </span>
-                {s.done ? (
-                  <span className="text-xs text-green-700">Done</span>
-                ) : s.key === "listing" ? (
-                  <Link href="/sell" className="text-xs underline">
-                    Add
-                  </Link>
-                ) : s.key === "payout" ? (
-                  <Link
-                    href="/seller/settings#payouts"
-                    className="text-xs underline"
-                  >
-                    Enable
-                  </Link>
-                ) : (
-                  <Link href="/seller/settings" className="text-xs underline">
-                    Open
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div> */}
+          <Link
+            href="/seller/shop"
+            aria-label="Customize shop"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-ink/10 bg-white text-ink/70 hover:bg-sand/70 shadow-sm"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
         </div>
-      </Link>
+
+        {/* Cover */}
+        <div className="relative h-28 w-full overflow-hidden bg-sand/60">
+          {cover && (
+            <img
+              src={cover}
+              alt={shop?.title ?? "Shop banner"}
+              className="h-full w-full object-cover"
+            />
+          )}
+        </div>
+
+        {/* Header row with avatar + name */}
+        <div className="px-4 pb-5">
+          <div className="-mt-7 flex items-end gap-3">
+            <div className="relative h-14 w-14 rounded-lg border-2 border-white bg-sand overflow-hidden shadow-sm">
+              {shop?.avatar_url ? (
+                <img
+                  src={shop.avatar_url}
+                  alt={shop.title ?? "Shop avatar"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full grid place-items-center bg-sand/60">
+                  <Store className="h-5 w-5 text-ink/80" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0 pt-8">
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {shop?.title || "Your shop"}
+                </p>
+                {shop?.is_verified && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-[#371837]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#371837] mt-1">
+                    <Star className="h-3 w-3 fill-terracotta text-[#371837]" />
+                    <span>Verified</span>
+                  </span>
+                )}
+              </div>
+              <div className=" flex items-center gap-1 text-xs text-ink/60">
+                <MapPin className="h-3 w-3" />
+                <span className="truncate">{shop?.city || "Morocco"}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Optional stats row */}
+          {false && (
+            <div className="mt-4 flex items-center justify-between gap-3 text-[11px] text-ink/80">
+              <div className="flex flex-col">
+                <span className="font-medium">
+                  {shopSales.toLocaleString()} sales
+                </span>
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="inline-flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                  <span className="font-medium">{ratingDisplay}</span>
+                  {ratingCountDisplay !== undefined && (
+                    <span className="text-ink/50">({ratingCountDisplay})</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-medium">
+                  {yearsDisplay ? `${yearsDisplay} yr` : "New"}
+                </span>
+                <span className="text-ink/50">on Zaha</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Date range + analytics link */}
       <div className="flex items-center justify-between gap-3">
-        {/* Date range + analytics link */}
-      </div>
-
-      <div className="flex items-center justify-between gap-3">
         <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-          <SelectTrigger
-            className={" w-auto inline-flex shadow-none rounded-full"}
-          >
+          <SelectTrigger className="w-auto inline-flex shadow-none rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
@@ -699,34 +723,38 @@ function OverviewInner() {
       </div>
 
       {/* KPIs + status bar */}
-      <div className="">
+      <div>
         <div className="grid grid-cols-2 gap-3">
           <KpiCard
             label="Gross sales"
             value={`MAD ${gross.toLocaleString()}`}
             delta={range === "all" ? undefined : grossDelta}
             icon={Package}
+            isLoading={loading}
           />
           <KpiCard
             label="Orders"
             value={String(ordersCount)}
             delta={range === "all" ? undefined : ordersDelta}
             icon={ClipboardList}
+            isLoading={loading}
           />
           <KpiCard
             label="Delivered"
             value={String(delivered)}
             delta={range === "all" ? undefined : deliveredDelta}
             icon={ChevronRight}
+            isLoading={loading}
           />
           <KpiCard
             label="Avg order value"
             value={`MAD ${Math.round(aov).toLocaleString()}`}
             delta={range === "all" ? undefined : aovDelta}
             icon={ChevronRight}
+            isLoading={loading}
           />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 mt-3">
           <div className="text-xs text-ink/70">Order status mix</div>
           <SegmentedBar counts={statusCounts} />
           <div className="text-[11px] text-ink/60">
@@ -737,38 +765,7 @@ function OverviewInner() {
         </div>
       </div>
 
-      {/* Quick actions */}
-      {/* <div className="grid grid-cols-3 gap-3">
-        <Link
-          href="/sell"
-          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
-        >
-          <div className="w-9 h-9 rounded-lg grid place-items-center ">
-            <Plus size={18} />
-          </div>
-          <div className="text-sm font-medium">Add listing</div>
-        </Link>
-        <Link
-          href="/seller/products"
-          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
-        >
-          <div className="w-9 h-9 rounded-lg grid place-items-center   ">
-            <Package size={18} />
-          </div>
-          <div className="text-sm font-medium">Products</div>
-        </Link>
-        <Link
-          href="/seller/orders"
-          className="rounded-xl border bg-white hover:bg-neutral-50 transition p-3 flex items-center gap-2"
-        >
-          <div className="w-9 h-9 rounded-lg grid place-items-center   ">
-            <ClipboardList size={18} />
-          </div>
-          <div className="text-sm font-medium">Orders</div>
-        </Link>
-      </div> */}
-
-      {/* Fulfillment queue + Low stock */}
+      {/* Fulfillment queue */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-xl border bg-white p-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -779,7 +776,11 @@ function OverviewInner() {
               Open queue
             </Link>
           </div>
-          {!fulfillmentQueue.length ? (
+          {loading ? (
+            <div className="py-4 flex justify-center">
+              <Loader2 className="h-4 w-4 animate-spin text-ink/60" />
+            </div>
+          ) : !fulfillmentQueue.length ? (
             <div className="text-sm text-ink/70">
               No orders waiting for action.
             </div>
@@ -836,34 +837,7 @@ function OverviewInner() {
           )}
         </div>
 
-        {/* <div className="rounded-xl border bg-white p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="font-medium flex items-center gap-2">
-              <AlertTriangle size={16} /> Low stock
-            </div>
-            <Link
-              href="/seller/products?filter=low"
-              className="text-sm underline"
-            >
-              View all
-            </Link>
-          </div>
-          {!lowStock.length ? (
-            <div className="text-sm text-ink/70">All good for now.</div>
-          ) : (
-            <ul className="space-y-2">
-              {lowStock.map((p) => (
-                <li
-                  key={p.id}
-                  className="rounded-lg border p-2 flex items-center justify-between"
-                >
-                  <div className="truncate text-sm">{p.title}</div>
-                  <div className="text-xs text-red-700">Stock: {p.stock}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div> */}
+        {/* Low stock block left commented-out for now */}
       </div>
 
       {/* Filters + search */}
@@ -888,8 +862,8 @@ function OverviewInner() {
                 className={[
                   "px-3 py-1.5 rounded-full border text-sm transition",
                   active
-                    ? "bg-terracotta text-white border-terracotta"
-                    : "bg-white hover:bg-neutral-50 ",
+                    ? "bg-[#371837] text-white border-[#371837]"
+                    : "bg-white hover:bg-neutral-50",
                 ].join(" ")}
               >
                 {f.label}
@@ -915,26 +889,23 @@ function OverviewInner() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Recent orders</h2>
-          <Link href="/seller/orders" className="text-sm underline">
-            View all
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={exportCSV}
+              className="hidden sm:inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs bg-white hover:bg-neutral-50"
+            >
+              <Download className="h-3 w-3" />
+              Export CSV
+            </button>
+            <Link href="/seller/orders" className="text-sm underline">
+              View all
+            </Link>
+          </div>
         </div>
 
         {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-xl border p-3 bg-white animate-pulse flex items-center gap-3"
-              >
-                <div className="w-12 h-12 rounded-md bg-neutral-200" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-neutral-200 rounded w-2/3" />
-                  <div className="h-3 bg-neutral-200 rounded w-1/3" />
-                </div>
-                <div className="w-16 h-6 bg-neutral-200 rounded" />
-              </div>
-            ))}
+          <div className="py-4 flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-ink/60" />
           </div>
         ) : !paged.length ? (
           <div className="rounded-xl border bg-white p-6 text-center">

@@ -400,7 +400,7 @@ export default function SearchPage() {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search handmade goods…"
+              placeholder="Search on Zaha.."
               className="flex-1 outline-none text-sm placeholder:text-neutral-400 bg-transparent"
             />
             {(q.trim().length > 0 || hasActiveQuery) && (

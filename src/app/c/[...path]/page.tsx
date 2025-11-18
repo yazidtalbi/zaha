@@ -192,7 +192,7 @@ export default function CategoryPage() {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full pb-22">
       {/* Grid with skeleton */}
       {items === null ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -211,7 +211,7 @@ export default function CategoryPage() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {items.map((p) => (
-              <ProductCard key={p.id} p={p as any} />
+              <ProductCard key={p.id} p={p as any} variant="carousel" />
             ))}
           </div>
 
@@ -220,14 +220,14 @@ export default function CategoryPage() {
               <button
                 onClick={loadMore}
                 disabled={more}
-                className="px-4 py-2 rounded-xl bg-terracotta text-white font-medium disabled:opacity-60"
+                className="px-4 py-2 rounded-xl bg-[#371837] text-white font-medium disabled:opacity-60"
               >
                 {more ? "Loading…" : "Load more"}
               </button>
             </div>
           )}
 
-          <div className="text-center text-sm text-neutral-600 mt-3">
+          <div className="text-center text-sm text-neutral-400 mt-3">
             Showing {items.length} of {total}
           </div>
         </>

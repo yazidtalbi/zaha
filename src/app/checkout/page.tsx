@@ -358,7 +358,7 @@ function InnerCheckout() {
                   key={a.id}
                   className={`rounded-2xl border p-5 transition-all cursor-pointer hover:bg-sand ${
                     isSelected
-                      ? "border-terracotta bg-sand/50"
+                      ? "border-[#371837] bg-sand/50"
                       : "border-neutral-200"
                   }`}
                   onClick={() => setSelectedId(a.id)}

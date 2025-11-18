@@ -1121,7 +1121,7 @@ function FilterBar({
           onClick={() => setSort("new")}
           className={`h-8 px-3 rounded-full border text-sm whitespace-nowrap ${
             sort === "new"
-              ? "bg-terracotta text-white"
+              ? "bg-[#371837] text-white"
               : "bg-white border-neutral-200 border"
           }`}
         >
@@ -1132,7 +1132,7 @@ function FilterBar({
           onClick={() => setSort("price_asc")}
           className={`h-8 px-3 rounded-full text-sm whitespace-nowrap ${
             sort === "price_asc"
-              ? "bg-terracotta text-white"
+              ? "bg-[#371837] text-white"
               : "bg-white border-neutral-200 border"
           }`}
         >
@@ -1143,7 +1143,7 @@ function FilterBar({
           onClick={() => setSort("price_desc")}
           className={`h-8 px-3 rounded-full text-sm whitespace-nowrap ${
             sort === "price_desc"
-              ? "bg-terracotta text-white"
+              ? "bg-[#371837] text-white"
               : "bg-white border-neutral-200 border"
           }`}
         >
@@ -1156,7 +1156,7 @@ function FilterBar({
           onClick={() => setOnSaleOnly((v) => !v)}
           className={`h-8 px-3 rounded-full text-sm whitespace-nowrap ${
             onSaleOnly
-              ? "bg-terracotta text-white"
+              ? "bg-[#371837] text-white"
               : "bg-white border-neutral-200 border"
           }`}
         >

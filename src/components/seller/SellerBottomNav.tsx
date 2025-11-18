@@ -44,14 +44,14 @@ export default function SellerBottomNav() {
           className={clsx(
             "flex flex-col items-center justify-center gap-1 py-2 text-[11px] transition-all duration-200",
             isActive
-              ? "text-terracotta font-semibold"
+              ? "text-[#371837] font-semibold"
               : "text-gray-500 hover:text-ink"
           )}
         >
           <div
             className={clsx(
               "grid place-items-center w-10 h-9 rounded-lg transition-colors",
-              isActive ? "bg-terracotta/15" : "bg-transparent"
+              isActive ? "bg-[#371837]/15" : "bg-transparent"
             )}
           >
             <Icon size={20} className={clsx(isActive && "scale-110")} />
@@ -69,7 +69,7 @@ export default function SellerBottomNav() {
       {/* Floating Add button */}
       <Link
         href="/sell"
-        className="fixed bottom-16 right-4 z-[60] rounded-full shadow-lg bg-terracotta text-white px-4 py-2 flex items-center gap-2"
+        className="fixed bottom-16 right-4 z-[60] rounded-full shadow-lg bg-[#371837] text-white px-4 py-2 flex items-center gap-2"
       >
         <PlusCircle size={18} />
         <span className="text-sm font-medium">Add listing</span>

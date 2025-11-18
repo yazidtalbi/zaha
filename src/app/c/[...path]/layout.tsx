@@ -2,12 +2,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { ChevronLeft, Search } from "lucide-react";
-
-import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 
 type Category = {
   id: string;
@@ -29,10 +27,13 @@ function prettify(s: string) {
 
 function TabsSkeleton() {
   return (
-    <div className="mb-3 border-b overflow-x-auto no-scrollbar">
-      <div className="flex gap-6 py-2">
+    <div className="mb-3 overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 py-1 px-1">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-6 w-24 rounded bg-sand animate-pulse" />
+          <div
+            key={i}
+            className="h-8 w-20 rounded-full bg-neutral-200 animate-pulse"
+          />
         ))}
       </div>
     </div>
@@ -41,7 +42,6 @@ function TabsSkeleton() {
 
 export default function CLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-
   const pathname = usePathname(); // e.g. /c/home-living/decor
   const pathAfterC = useMemo(() => pathname.replace(/^\/c\/?/, ""), [pathname]);
 
@@ -110,7 +110,7 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
   }, [topPath]);
 
   return (
-    <div className="max-w-6xl mx-auto  pt-4">
+    <div className="max-w-6xl mx-auto px-3 pt-4">
       <div className="flex items-center gap-2 rounded-full border bg-white h-11 px-3">
         {/* Back icon */}
         <button
@@ -129,9 +129,7 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
           onClick={() => router.push("/search")}
           className="flex-1 flex items-center gap-2 h-full -ml-1 active:scale-[0.98] transition text-left"
         >
-          <span className="text-sm text-neutral-400">
-            Search handmade goods…
-          </span>
+          <span className="text-sm text-neutral-400">Search on Zaha..</span>
         </button>
       </div>
 
@@ -140,10 +138,10 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
         {prettify(topPath || "Category")}
       </h1>
 
-      {/* Tabs — rendered from cache; only active underline changes */}
+      {/* Tabs — now as pills */}
       {ready ? (
-        <div className="mb-3 border-b overflow-x-auto no-scrollbar">
-          <div className="flex gap-6">
+        <div className="mb-3 overflow-x-auto no-scrollbar">
+          <div className="flex gap-2 py-1 px-1">
             {[
               { label: "All", slug: "all" },
               ...childrenCats.map((c) => ({
@@ -162,10 +160,10 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
                   key={`${topPath}-${t.slug}`}
                   href={href}
                   prefetch
-                  className={`pb-3 whitespace-nowrap font-medium ${
+                  className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border transition ${
                     active
-                      ? "text-ink border-b-2 border-terracotta"
-                      : "text-neutral-500 hover:text-ink"
+                      ? "bg-[#371837] text-white border-[#371837] shadow-sm"
+                      : "bg-neutral-100 text-neutral-700 border-transparent hover:bg-sand/80"
                   }`}
                 >
                   {t.label}
@@ -179,7 +177,6 @@ export default function CLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Page content (product grid, filters, etc.) */}
-
       <div className="pb-6">{children}</div>
     </div>
   );

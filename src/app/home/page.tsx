@@ -13,6 +13,7 @@ import HeroCategoriesStrip from "@/components/home/HeroCategoriesStrip";
 ========================= */
 const PAGE_SIZE = 24;
 const PRICE_CAP_MAD = 200;
+const FETCH_TIMEOUT_MS = 10000; // 10s max per request
 
 // Cities / regions for picker
 const CITIES = [
@@ -65,6 +66,18 @@ type PersonalizedRail = {
 type AnyRow = Record<string, any>;
 type TabId = "new" | "popular" | "sale" | "under_cap" | "city";
 
+// If you have this type already in HeroCarousel you can import it instead
+type Slide = {
+  img: string;
+  title: string;
+  ctaLabel: string;
+  ctaHref: string;
+  bg: string;
+  textColor: string;
+  ctaBg: string;
+  ctaText: string;
+};
+
 /* =========================
    In-memory store
 ========================= */
@@ -93,31 +106,31 @@ const __homeStore: HomeStore = {
 ========================= */
 const slides: Slide[] = [
   {
-    img: "/home/a.png", // your PNG with the woman & star
+    img: "/home/a.png",
     title: "Open your shop on Bazr",
     ctaLabel: "Become a seller",
     ctaHref: "/onboarding/seller",
-    bg: "#371836", // deep plum
+    bg: "#371836",
     textColor: "#FFFFFF",
     ctaBg: "#FFFFFF",
     ctaText: "#050608",
   },
   {
-    img: "/home/b.png", // PNG with the bag visual
+    img: "/home/b.png",
     title: "Handmade bags that feel like home",
     ctaLabel: "Shop for bags",
     ctaHref: "/c/bags",
-    bg: "#EED8B6", // warm beige
+    bg: "#EED8B6",
     textColor: "#000000",
     ctaBg: "#FFFFFF",
     ctaText: "#FFFFFF",
   },
   {
-    img: "/home/c.png", // PNG with jewelry visual
+    img: "/home/c.png",
     title: "Jewelry crafted with soul",
     ctaLabel: "Shop jewelry",
     ctaHref: "/c/jewelry",
-    bg: "#0E2630", // deep teal/blue
+    bg: "#0E2630",
     textColor: "#FFFFFF",
     ctaBg: "#FFFFFF",
     ctaText: "#050608",
@@ -127,6 +140,28 @@ const slides: Slide[] = [
 /* =========================
    Helpers
 ========================= */
+
+// Add a timeout around any Supabase call
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(
+      () =>
+        reject(new Error("Request timed out. Please check your connection.")),
+      ms
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(id);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(id);
+        reject(err);
+      }
+    );
+  });
+}
+
 function normalizeProduct(row: AnyRow): ProductForCard {
   const photosArr: string[] | null =
     row.photos ??
@@ -192,7 +227,7 @@ export default function HomePage(): JSX.Element {
   const [items, setItems] = useState<ProductForCard[]>(
     __homeStore.items.length ? __homeStore.items : []
   );
-  const [loading, setLoading] = useState<boolean>(true); // start as true
+  const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [page, setPage] = useState<number>(__homeStore.page);
   const [hasMore, setHasMore] = useState<boolean>(__homeStore.hasMore);
@@ -261,7 +296,11 @@ export default function HomePage(): JSX.Element {
       const from = pageNumber * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, error } = await buildQueryForTab(tab).range(from, to);
+      const { data, error } = await withTimeout(
+        buildQueryForTab(tab).range(from, to),
+        FETCH_TIMEOUT_MS
+      );
+
       if (error) {
         console.error("home:fetchPage error", error);
         throw error;
@@ -276,14 +315,17 @@ export default function HomePage(): JSX.Element {
     if (!selectedCity) return;
     setLoadingCityRail(true);
     try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("active", true)
-        .eq("unavailable", false)
-        .eq("city", selectedCity)
-        .order("created_at", { ascending: false })
-        .limit(24);
+      const { data, error } = await withTimeout(
+        supabase
+          .from("products")
+          .select("*")
+          .eq("active", true)
+          .eq("unavailable", false)
+          .eq("city", selectedCity)
+          .order("created_at", { ascending: false })
+          .limit(24),
+        FETCH_TIMEOUT_MS
+      );
 
       if (error) {
         console.error("home:cityRail error", error);
@@ -341,13 +383,16 @@ export default function HomePage(): JSX.Element {
       const viewed = getRecentlyViewed();
       if (viewed.length) {
         const idsOrdered = viewed.map((v) => v.id);
-        const { data: prods } = await supabase
-          .from("products")
-          .select("*")
-          .in("id", idsOrdered)
-          .eq("active", true)
-          .eq("unavailable", false)
-          .limit(12);
+        const { data: prods } = await withTimeout(
+          supabase
+            .from("products")
+            .select("*")
+            .in("id", idsOrdered)
+            .eq("active", true)
+            .eq("unavailable", false)
+            .limit(12),
+          FETCH_TIMEOUT_MS
+        );
 
         const byId = new Map<string, AnyRow>();
         (prods ?? []).forEach((p: AnyRow) => byId.set(String(p.id), p));
@@ -368,17 +413,20 @@ export default function HomePage(): JSX.Element {
       const mostRecent = viewed[0].id;
       const ids = Array.from(new Set(viewed.map((v) => v.id)));
 
-      const { data: pcRows } = await supabase
-        .from("product_categories")
-        .select(
-          `
+      const { data: pcRows } = await withTimeout(
+        supabase
+          .from("product_categories")
+          .select(
+            `
           product_id,
           is_primary,
           categories:categories!inner(id, path, name_en, slug)
         `
-        )
-        .in("product_id", ids)
-        .eq("is_primary", true);
+          )
+          .in("product_id", ids)
+          .eq("is_primary", true),
+        FETCH_TIMEOUT_MS
+      );
 
       const primaries =
         (pcRows ?? []).map((r: any) => ({
@@ -392,32 +440,38 @@ export default function HomePage(): JSX.Element {
       const recentPrimary = primaries.find((p) => p.product_id === mostRecent);
       if (recentPrimary?.path) {
         const basePath = recentPrimary.path;
-        const { data: catIdsData } = await supabase
-          .from("categories")
-          .select("id")
-          .like("path", `${basePath}%`);
+        const { data: catIdsData } = await withTimeout(
+          supabase.from("categories").select("id").like("path", `${basePath}%`),
+          FETCH_TIMEOUT_MS
+        );
         const catIds = (catIdsData ?? []).map((c: any) => c.id);
 
         if (catIds.length) {
-          const { data: pc2 } = await supabase
-            .from("product_categories")
-            .select("product_id")
-            .in("category_id", catIds)
-            .neq("product_id", mostRecent)
-            .limit(220);
+          const { data: pc2 } = await withTimeout(
+            supabase
+              .from("product_categories")
+              .select("product_id")
+              .in("category_id", catIds)
+              .neq("product_id", mostRecent)
+              .limit(220),
+            FETCH_TIMEOUT_MS
+          );
 
           const productIds = Array.from(
             new Set((pc2 ?? []).map((x: any) => x.product_id))
           ).slice(0, 24);
 
           if (productIds.length) {
-            const { data: prods2 } = await supabase
-              .from("products")
-              .select("*")
-              .in("id", productIds)
-              .eq("active", true)
-              .eq("unavailable", false)
-              .limit(24);
+            const { data: prods2 } = await withTimeout(
+              supabase
+                .from("products")
+                .select("*")
+                .in("id", productIds)
+                .eq("active", true)
+                .eq("unavailable", false)
+                .limit(24),
+              FETCH_TIMEOUT_MS
+            );
 
             const items = normalizeList(prods2);
             if (items.length) {
@@ -594,7 +648,7 @@ export default function HomePage(): JSX.Element {
         <Header />
       </div>
 
-      <header className="fixed inset-x-0 top-0 z-40  border-neutral-200 bg-neutral-50 ">
+      <header className="fixed inset-x-0 top-0 z-40 border-neutral-200 bg-neutral-50 ">
         <div className="px-3 pt-2 pb-2">
           <Header />
         </div>
@@ -676,14 +730,21 @@ export default function HomePage(): JSX.Element {
         </div>
 
         {loading && items.length === 0 ? (
-          <div className="grid grid-cols-2 gap-3 gap-y-8">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={`grid-skel-${i}`}
-                className="h-[220px] rounded-2xl bg-neutral-200/60 animate-pulse"
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3 gap-y-8">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={`grid-skel-${i}`}
+                  className="h-[220px] rounded-2xl bg-neutral-200/60 animate-pulse"
+                />
+              ))}
+            </div>
+            {/* Tiny debug line so you can see state on mobile */}
+            <p className="mt-2 text-[10px] text-neutral-400 text-center">
+              loading={String(loading)} · items={items.length} · error=
+              {errorMsg || "none"}
+            </p>
+          </>
         ) : errorMsg && items.length === 0 ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center space-y-2">
             <p className="text-sm font-medium text-red-700">

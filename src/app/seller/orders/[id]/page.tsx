@@ -574,7 +574,7 @@ export default function SellerOrderDetails() {
   function OrderDetailsSkeleton() {
     return (
       <main className="p-4 mx-auto max-w-3xl h-[80vh] flex items-center justify-center">
-        <Spinner className="h-10 w-10 text-terracotta" />
+        <Spinner className="h-10 w-10 text-[#371837]" />
       </main>
     );
   }

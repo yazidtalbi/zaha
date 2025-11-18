@@ -8,7 +8,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        sand: "#F3E9E1",
+        // sand: "#F3E9E1",
+        sand: "#371837",
         paper: "#FAF7F4",
         terracotta: "#C97E4E",
         olive: "#BBAA77",

@@ -667,7 +667,7 @@ function AnalyticsInner() {
                 </div>
                 <div className="h-1.5 bg-neutral-200 rounded mt-2">
                   <div
-                    className="h-1.5 bg-terracotta rounded"
+                    className="h-1.5 bg-[#371837] rounded"
                     style={{
                       width: `${
                         topProducts.byCount[0]?.count

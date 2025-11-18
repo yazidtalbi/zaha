@@ -11,12 +11,9 @@ import {
   Search,
   Package,
   PlusCircle,
-  MoreHorizontal,
   Store,
-  BarChart3,
   Settings,
   MessageSquareText,
-  ChartNoAxesColumnIncreasing,
   ScrollText,
   Bell,
   User2,
@@ -24,13 +21,17 @@ import {
   LogOut,
   LogIn,
   ShoppingBag,
+  LayoutGrid,
+  Eye,
+  Share2,
+  ChartNoAxesColumnIncreasing,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { toast } from "sonner";
 
 function clsx(...xs: (string | boolean | undefined | null)[]) {
   return xs.filter(Boolean).join(" ");
@@ -57,70 +58,15 @@ export default function BottomNav() {
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopSlug, setShopSlug] = useState<string | null>(null);
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false); // seller "More" sheet
+  const [userSheetOpen, setUserSheetOpen] = useState(false); // buyer "You" sheet
+
   useEffect(() => {
     if (menuOpen) setMenuOpen(false);
   }, [pathname]);
 
   // unread notifications (for the avatar dot)
   const unread = useUnreadNotifications();
-
-  useEffect(() => {
-    if (!mounted) return;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const u = data.user;
-      setUid(u?.id ?? null);
-      setEmail(u?.email ?? null);
-
-      if (u?.id) {
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("full_name, username, avatar_url")
-          .eq("id", u.id)
-          .maybeSingle();
-
-        const display =
-          (p?.full_name as string) || (p?.username as string) || "Account";
-        setProfileName(display);
-        setAvatarUrl((p?.avatar_url as string) ?? null);
-
-        // shop presence (used on buyer sheet)
-        const { data: shop } = await supabase
-          .from("shops")
-          .select("id, slug")
-          .eq("owner", u.id)
-          .maybeSingle();
-
-        if (shop?.id) {
-          setHasShop(true);
-          setShopId(shop.id);
-          setShopSlug((shop as any).slug ?? null);
-        }
-      }
-      await refreshCartCount(u?.id ?? null);
-    })();
-  }, [mounted]); // eslint-disable-line
-
-  // if we’re on seller surface, ensure shop id/slug are loaded (for “View my shop”)
-  useEffect(() => {
-    if (!mounted || !isSeller) return;
-    (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) return;
-      const { data } = await supabase
-        .from("shops")
-        .select("id, slug")
-        .eq("owner", userId)
-        .maybeSingle();
-      if (data) {
-        setShopId(data.id);
-        setShopSlug((data as any).slug ?? null);
-        setHasShop(true);
-      }
-    })();
-  }, [mounted, isSeller]);
 
   const refreshCartCount = useCallback(
     async (nextUid = uid) => {
@@ -143,13 +89,105 @@ export default function BottomNav() {
     [mounted, uid]
   );
 
+  // initial load: profile + shop + cart
+  useEffect(() => {
+    if (!mounted) return;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data.user;
+      setUid(u?.id ?? null);
+      setEmail(u?.email ?? null);
+
+      if (u?.id) {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("full_name, username, avatar_url")
+          .eq("id", u.id)
+          .maybeSingle();
+
+        const display =
+          (p?.full_name as string) || (p?.username as string) || "Account";
+        setProfileName(display);
+        setAvatarUrl((p?.avatar_url as string) ?? null);
+
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id, slug")
+          .eq("owner", u.id)
+          .maybeSingle();
+
+        if (shop?.id) {
+          setHasShop(true);
+          setShopId(shop.id);
+          setShopSlug((shop as any).slug ?? null);
+        } else {
+          setHasShop(false);
+          setShopId(null);
+          setShopSlug(null);
+        }
+      } else {
+        setHasShop(false);
+        setShopId(null);
+        setShopSlug(null);
+      }
+
+      await refreshCartCount(u?.id ?? null);
+    })();
+  }, [mounted, refreshCartCount]);
+
+  // if we’re on seller surface, ensure shop id/slug are loaded (for “Preview my shop”)
+  useEffect(() => {
+    if (!mounted || !isSeller) return;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      if (!userId) return;
+      const { data } = await supabase
+        .from("shops")
+        .select("id, slug")
+        .eq("owner", userId)
+        .maybeSingle();
+      if (data) {
+        setShopId(data.id);
+        setShopSlug((data as any).slug ?? null);
+        setHasShop(true);
+      } else {
+        setHasShop(false);
+        setShopId(null);
+        setShopSlug(null);
+      }
+    })();
+  }, [mounted, isSeller]);
+
+  // auth change: keep cart + shop in sync (fix for "Become a seller" after login)
   useEffect(() => {
     if (!mounted) return;
     const { data: sub } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         const nextUid = session?.user?.id ?? null;
         setUid(nextUid);
-        refreshCartCount(nextUid);
+        await refreshCartCount(nextUid);
+
+        if (nextUid) {
+          const { data: shop } = await supabase
+            .from("shops")
+            .select("id, slug")
+            .eq("owner", nextUid)
+            .maybeSingle();
+          if (shop?.id) {
+            setHasShop(true);
+            setShopId(shop.id);
+            setShopSlug((shop as any).slug ?? null);
+          } else {
+            setHasShop(false);
+            setShopId(null);
+            setShopSlug(null);
+          }
+        } else {
+          setHasShop(false);
+          setShopId(null);
+          setShopSlug(null);
+        }
       }
     );
     return () => sub.subscription.unsubscribe();
@@ -200,7 +238,7 @@ export default function BottomNav() {
     icon: Icon,
     match,
     badge,
-    highlightOnActiveBg = false,
+    highlightOnActiveBg = true, // <- default ON for all items
     exact = false,
   }: {
     href: string;
@@ -228,7 +266,7 @@ export default function BottomNav() {
           className={clsx(
             "flex flex-col items-center justify-center gap-1 py-2 text-xs transition-all duration-200",
             isActive
-              ? "text-terracotta font-semibold"
+              ? "text-[#371837] font-semibold"
               : "text-gray-500 hover:text-ink"
           )}
         >
@@ -236,13 +274,17 @@ export default function BottomNav() {
             className={clsx(
               "relative grid place-items-center w-10 h-9 rounded-lg transition-colors",
               isActive && highlightOnActiveBg
-                ? "bg-terracotta/15"
+                ? "bg-[#371837]/15"
                 : "bg-transparent"
             )}
           >
-            <Icon size={20} className={clsx(isActive && "scale-110")} />
+            <Icon
+              size={20}
+              strokeWidth={1.75}
+              className={clsx(isActive && "scale-110")}
+            />
             {!!badge && (
-              <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-4 h-4 rounded-sm px-1 bg-terracotta text-white">
+              <span className="absolute -top-1.5 -right-2 grid place-items-center text-[10px] min-w-4 h-4 rounded-sm px-1 bg-[#371837] text-white">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
@@ -255,18 +297,20 @@ export default function BottomNav() {
 
   const CenterAdd = () => (
     <Link href="/seller/sell" className="block -translate-y-3">
-      <div className="mx-auto w-12 h-12 rounded-full bg-terracotta text-white grid place-items-center shadow-lg">
+      <div className="mx-auto w-12 h-12 rounded-full bg-[#371837] text-white grid place-items-center shadow-lg">
         <PlusCircle size={22} />
       </div>
-      <div className="mt-1 text-center text-xs font-medium text-terracotta">
+      <div className="mt-1 text-center text-xs font-medium text-[#371837]">
         Add
       </div>
     </Link>
   );
 
-  if (!mounted) return null;
+  const onLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/login");
+  };
 
-  // 👇 ADD THIS
   if (!mounted) return null;
   if (path.startsWith("/marketing")) return null;
 
@@ -292,7 +336,6 @@ export default function BottomNav() {
                 match="/seller"
                 icon={Home}
                 exact
-                highlightOnActiveBg
               />
             </li>
             <li>
@@ -301,7 +344,6 @@ export default function BottomNav() {
                 label="Orders"
                 match="/seller/orders"
                 icon={ScrollText}
-                highlightOnActiveBg
               />
             </li>
             <li>
@@ -310,7 +352,6 @@ export default function BottomNav() {
                 label="Products"
                 match="/seller/products"
                 icon={Package}
-                highlightOnActiveBg
               />
             </li>
             <li>
@@ -319,7 +360,6 @@ export default function BottomNav() {
                 label="Analytics"
                 match="/seller/analytics"
                 icon={ChartNoAxesColumnIncreasing}
-                highlightOnActiveBg
               />
             </li>
             <li>
@@ -328,7 +368,7 @@ export default function BottomNav() {
                   <button className="block w-full">
                     <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink">
                       <div className="grid place-items-center w-10 h-9">
-                        <MoreHorizontal size={20} />
+                        <LayoutGrid size={20} strokeWidth={1.5} />
                       </div>
                       <span>More</span>
                     </div>
@@ -340,65 +380,170 @@ export default function BottomNav() {
                   className="max-w-screen-sm mx-auto rounded-t-2xl bg-white shadow-2xl border-ink/10 px-0 pt-2 pb-[env(safe-area-inset-bottom)]"
                 >
                   <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
-                  <div className="px-4 pb-2 flex justify-end">
-                    <Link href="/home" onClick={() => setMenuOpen(false)}>
-                      <Button className="h-9 px-3 rounded-full bg-terracotta text-white hover:bg-terracotta/90">
-                        Switch to buyer
-                      </Button>
-                    </Link>
-                  </div>
-                  <div className="px-1">
-                    <ul>
-                      <li>
-                        <Link
-                          href={shopPath ?? "/seller"}
-                          onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                        >
-                          <Store size={20} />
-                          <span className="text-[15px] font-medium">
-                            View my shop
-                          </span>
-                        </Link>
-                      </li>
+
+                  <div className="px-1 space-y-2">
+                    {/* Primary action */}
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        router.push("/home");
+                      }}
+                      className="w-full h-12 px-4 rounded-2xl flex items-center gap-3 bg-[#371837]/8 hover:bg-[#371837]/12 active:bg-[#371837]/16 text-[#371837]"
+                    >
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#371837]/15">
+                        <Home size={18} />
+                      </span>
+                      <span className="text-[15px] font-semibold">
+                        Switch to buyer mode
+                      </span>
+                    </button>
+
+                    <ul className="space-y-1">
+                      {shopPath && (
+                        <li>
+                          <Link
+                            href={shopPath}
+                            onClick={() => setMenuOpen(false)}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand"
+                          >
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                              <Eye size={18} />
+                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-[15px] font-medium">
+                                Preview my shop
+                              </span>
+                              <span className="text-xs text-ink/60">
+                                See your shop as buyers do
+                              </span>
+                            </div>
+                          </Link>
+                        </li>
+                      )}
+
+                      {shopPath && (
+                        <li>
+                          <button
+                            onClick={() => {
+                              if (!shopPath) return;
+                              const url =
+                                typeof window !== "undefined"
+                                  ? `${window.location.origin}${shopPath}`
+                                  : shopPath;
+
+                              if (navigator.share) {
+                                navigator
+                                  .share({
+                                    title: "My Zaha shop",
+                                    url,
+                                  })
+                                  .catch(() => {});
+                              } else if (navigator.clipboard) {
+                                navigator.clipboard
+                                  .writeText(url)
+                                  .then(() => {
+                                    toast("Shop link copied", {
+                                      description:
+                                        "Share it with your customers.",
+                                    });
+                                  })
+                                  .catch(() => {});
+                              }
+                            }}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand text-left"
+                          >
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                              <Share2 size={18} />
+                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-[15px] font-medium">
+                                Share my shop
+                              </span>
+                              <span className="text-xs text-ink/60">
+                                Copy or share your shop link
+                              </span>
+                            </div>
+                          </button>
+                        </li>
+                      )}
+
                       <li>
                         <Link
                           href="/seller/reviews"
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand"
                         >
-                          <MessageSquareText size={20} />
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                            <MessageSquareText size={18} />
+                          </span>
                           <span className="text-[15px] font-medium">
                             Reviews
                           </span>
                         </Link>
                       </li>
-                      <li>
-                        <Link
-                          href="/seller/analytics"
-                          onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                        >
-                          <BarChart3 size={20} />
-                          <span className="text-[15px] font-medium">
-                            Analytics
-                          </span>
-                        </Link>
-                      </li>
                     </ul>
+
                     <div className="my-2 h-px bg-ink/10" />
-                    <ul>
+
+                    <ul className="space-y-1">
                       <li>
                         <Link
                           href="/seller/settings"
                           onClick={() => setMenuOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand"
                         >
-                          <Settings size={20} />
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                            <Settings size={18} />
+                          </span>
                           <span className="text-[15px] font-medium">
                             Shop settings
                           </span>
                         </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/help"
+                          onClick={() => setMenuOpen(false)}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand"
+                        >
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                            <LifeBuoy size={18} />
+                          </span>
+                          <span className="text-[15px] font-medium">
+                            Help &amp; Support
+                          </span>
+                        </Link>
+                      </li>
+                      <li>
+                        {uid ? (
+                          <button
+                            onClick={async () => {
+                              setMenuOpen(false);
+                              await onLogout();
+                            }}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand text-left"
+                          >
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                              <LogOut size={18} />
+                            </span>
+                            <span className="text-[15px] font-medium">
+                              Logout
+                            </span>
+                          </button>
+                        ) : (
+                          <Link
+                            href="/login"
+                            onClick={() => setMenuOpen(false)}
+                            className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/60 active:bg-sand"
+                          >
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sand/80">
+                              <LogIn size={18} />
+                            </span>
+                            <span className="text-[15px] font-medium">
+                              Sign in
+                            </span>
+                          </Link>
+                        )}
                       </li>
                     </ul>
                   </div>
@@ -414,7 +559,7 @@ export default function BottomNav() {
   // ---------- BUYER NAV ----------
   const initials = (profileName || "U").slice(0, 2).toUpperCase();
   const manageStoreLabel = hasShop
-    ? "Manage your store"
+    ? "Go to seller mode"
     : "Become a Zaha seller";
   const manageStoreHref = uid
     ? hasShop
@@ -422,18 +567,16 @@ export default function BottomNav() {
       : "/become-seller"
     : "/login?next=%2Fbecome-seller";
 
+  const manageStoreClasses = hasShop
+    ? "bg-[#371837]/10 text-[#371837]"
+    : "bg-emerald-50 text-emerald-800";
+
   const ordersHref = uid ? "/orders" : "/login";
   const youHref = uid ? "/you" : "/login";
-
-  const onLogout = async () => {
-    await supabase.auth.signOut();
-    router.replace("/login");
-  };
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
-        {/* Replace Deals with Avatar/More */}
         <ul className="grid grid-cols-5 px-2 pb-[env(safe-area-inset-bottom)]">
           <li>
             <Item href="/home" label="Home" match="/home" icon={Home} />
@@ -442,9 +585,27 @@ export default function BottomNav() {
             <Item href="/search" label="Shop" match="/search" icon={Search} />
           </li>
 
+          <li>
+            <Item
+              href="/favorites"
+              label="Favorites"
+              match="/favorites"
+              icon={Heart}
+            />
+          </li>
+          <li>
+            <Item
+              href="/cart"
+              label="Cart"
+              match="/cart"
+              icon={ShoppingCart}
+              badge={cartCount || undefined}
+            />
+          </li>
+
           {/* Avatar / More sheet */}
           <li>
-            <Sheet>
+            <Sheet open={userSheetOpen} onOpenChange={setUserSheetOpen}>
               <SheetTrigger asChild>
                 <button className="block w-full">
                   <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink">
@@ -483,6 +644,7 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href={youHref}
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <User2 size={20} />
@@ -493,6 +655,7 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href="/notifications"
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <div className="relative">
@@ -515,6 +678,7 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href={ordersHref}
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <ShoppingBag size={20} />
@@ -527,6 +691,7 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href="/deals"
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <Tag size={20} />
@@ -537,7 +702,11 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href={manageStoreHref}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                        onClick={() => setUserSheetOpen(false)}
+                        className={clsx(
+                          "w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand",
+                          manageStoreClasses
+                        )}
                       >
                         <Store size={20} />
                         <span className="text-[15px] font-medium">
@@ -553,6 +722,7 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href="/settings"
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <Settings size={20} />
@@ -564,19 +734,23 @@ export default function BottomNav() {
                     <li>
                       <Link
                         href="/help"
+                        onClick={() => setUserSheetOpen(false)}
                         className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                       >
                         <LifeBuoy size={20} />
                         <span className="text-[15px] font-medium">
-                          Help & Support
+                          Help &amp; Support
                         </span>
                       </Link>
                     </li>
                     <li>
                       {uid ? (
                         <button
-                          onClick={onLogout}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
+                          onClick={async () => {
+                            setUserSheetOpen(false);
+                            await onLogout();
+                          }}
+                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand text-left"
                         >
                           <LogOut size={20} />
                           <span className="text-[15px] font-medium">
@@ -586,6 +760,7 @@ export default function BottomNav() {
                       ) : (
                         <Link
                           href="/login"
+                          onClick={() => setUserSheetOpen(false)}
                           className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
                         >
                           <LogIn size={20} />
@@ -599,24 +774,6 @@ export default function BottomNav() {
                 </div>
               </SheetContent>
             </Sheet>
-          </li>
-
-          <li>
-            <Item
-              href="/favorites"
-              label="Favorites"
-              match="/favorites"
-              icon={Heart}
-            />
-          </li>
-          <li>
-            <Item
-              href="/cart"
-              label="Cart"
-              match="/cart"
-              icon={ShoppingCart}
-              badge={cartCount || undefined}
-            />
           </li>
         </ul>
       </div>

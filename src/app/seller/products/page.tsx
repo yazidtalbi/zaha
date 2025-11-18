@@ -106,7 +106,7 @@ function ProductsHeaderCompact({
   const pill = (active: boolean) =>
     [
       "px-4 h-8 rounded-full border text-sm inline-flex items-center gap-2 shrink-0",
-      active ? "bg-terracotta text-white  " : "bg-white text-ink/90 ",
+      active ? "bg-[#371837] text-white  " : "bg-white text-ink/90 ",
     ].join(" ");
 
   /** Floating “Add” button that clears the bottom nav + safe area */
@@ -122,7 +122,7 @@ function ProductsHeaderCompact({
         }}
       >
         <button
-          className="h-12 w-12 rounded-full bg-terracotta text-white shadow-lg shadow-black/20
+          className="h-12 w-12 rounded-full bg-[#371837] text-white shadow-lg shadow-black/20
                    grid place-items-center border border-black/5
                    active:scale-95 transition"
         >
