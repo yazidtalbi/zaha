@@ -1368,7 +1368,7 @@ export default function ProductPage() {
                     disabled={
                       availability !== "available" || isInactive || isRemoved
                     }
-                    className="rounded-full ring-black ring-2 px-4 py-3 font-semibold disabled:opacity-60"
+                    className="rounded-full border-black border-2 px-4 py-3 font-semibold disabled:opacity-60"
                   >
                     Buy it now
                   </button>

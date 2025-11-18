@@ -61,8 +61,8 @@ export default function HeroCategoriesStrip({
   moreHref?: string;
 }) {
   return (
-    <section className=" ">
-      <div className="flex items-center overflow-x-auto no-scrollbar px-1 space-x-4 -ml-4 pl-4">
+    <section className="mr-2">
+      <div className="flex items-center overflow-x-auto no-scrollbar px-1 ">
         {HERO_CATEGORIES.map((item) => (
           <Link
             key={item.id}
@@ -70,7 +70,7 @@ export default function HeroCategoriesStrip({
             prefetch
             className="group block shrink-0 cursor-pointer"
           >
-            <div className="flex w-20 flex-col items-center gap-4">
+            <div className="flex w-20 flex-col items-center gap-4 ml-4">
               {/* image container (bigger) */}
               <div
                 className="

@@ -643,7 +643,7 @@ export default function HomePage(): JSX.Element {
 
   /* ---------- render ---------- */
   return (
-    <main className="pb-14 bg-neutral-50 min-h-screen">
+    <main className="pb-20 bg-neutral-50 min-h-screen">
       <div className="pt-4 opacity-0">
         <Header />
       </div>
@@ -664,7 +664,7 @@ export default function HomePage(): JSX.Element {
         <h2 className="mt-4 text-lg font-semibold flex items-center gap-1 px-3 capitalize">
           Top categories
         </h2>
-        <div className="mx-3">
+        <div className="-mx-6 px-4">
           <HeroCategoriesStrip />
         </div>
       </div>
@@ -702,10 +702,11 @@ export default function HomePage(): JSX.Element {
       )}
 
       {/* Main grid + tabs */}
+      {/* Main grid + tabs */}
       <section className="space-y-3 px-3 pt-8">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-1 capitalize">
-            Shop by recommendation
+            Discover finds from real people
           </h2>
         </div>
 
@@ -731,7 +732,8 @@ export default function HomePage(): JSX.Element {
 
         {loading && items.length === 0 ? (
           <>
-            <div className="grid grid-cols-2 gap-3 gap-y-8">
+            {/* keep a simple skeleton grid */}
+            <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div
                   key={`grid-skel-${i}`}
@@ -739,7 +741,6 @@ export default function HomePage(): JSX.Element {
                 />
               ))}
             </div>
-            {/* Tiny debug line so you can see state on mobile */}
             <p className="mt-2 text-[10px] text-neutral-400 text-center">
               loading={String(loading)} · items={items.length} · error=
               {errorMsg || "none"}
@@ -764,9 +765,12 @@ export default function HomePage(): JSX.Element {
           </div>
         ) : items.length > 0 ? (
           <>
-            <div className="grid grid-cols-2 gap-3 gap-y-8">
+            {/* Masonry-style feed using CSS columns (like Etsy) */}
+            <div className="columns-2 gap-3  [column-fill:balance]">
               {items.map((p) => (
-                <ProductCard key={p.id} p={p} variant="carousel" />
+                <div key={p.id} className="mb-6 break-inside-avoid">
+                  <ProductCard p={p} variant="carouselAuto" />
+                </div>
               ))}
             </div>
 

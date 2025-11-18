@@ -27,7 +27,7 @@ export default function HeroCarousel({ slides }: { slides: Slide[] }) {
     { loop: true, align: "start", dragFree: false },
     [
       Autoplay({
-        delay: 7000, // smoother + premium feel
+        delay: 5500, // smoother + premium feel
         stopOnInteraction: false,
       }),
     ]

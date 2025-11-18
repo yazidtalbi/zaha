@@ -42,7 +42,7 @@ type Product = {
 
 type Props = {
   p: Product;
-  variant?: "default" | "carousel" | "mini" | "love";
+  variant?: "default" | "carousel" | "carouselAuto" | "mini" | "love";
   className?: string;
   onUnfavorite?: (id: string) => void;
   fromshop?: boolean;
@@ -87,7 +87,7 @@ function fmtOrders(n?: number | null) {
   if (!n || n <= 0) return null;
   if (n >= 10000)
     return `${(Math.round(n / 100) / 10).toLocaleString("en-US")}k+`;
-  return `${n.toLocaleString("en-US")}+`;
+  return `${n.toLocaleString("en-US")}+ `;
 }
 
 /* -------------------------------------------
@@ -120,6 +120,58 @@ export default function ProductCard({
   const videoIndex = hasVideo ? (imgs.length >= 1 ? 1 : 0) : -1;
   const { current, compareAt, promoOn } = getDisplayPrice(p);
   const useCarousel = !fromshop && variant === "carousel";
+  const useCarouselAuto = !fromshop && variant === "carouselAuto";
+
+  function plural(n: number, singular: string, plural: string) {
+    return n === 1 ? singular : plural;
+  }
+
+  function Stars({
+    rating,
+    size = "text-md",
+    box = "w-2xl",
+  }: {
+    rating: number;
+    size?: string;
+    box?: string;
+  }) {
+    const stars = [];
+
+    for (let i = 1; i <= 5; i++) {
+      const diff = rating - i + 1;
+
+      if (diff >= 1) {
+        // full star
+        stars.push(
+          <span key={i} className={`${size} text-amber-600`}>
+            ★
+          </span>
+        );
+      } else if (diff > 0) {
+        // half star
+        stars.push(
+          <span key={i} className={`relative inline-block ${box} ${size}`}>
+            {/* Filled left half */}
+            <span className="absolute inset-0 overflow-hidden w-1/2 text-amber-600">
+              ★
+            </span>
+
+            {/* Empty star underneath */}
+            <span className="text-neutral-300">★</span>
+          </span>
+        );
+      } else {
+        // empty star
+        stars.push(
+          <span key={i} className={`${size} text-neutral-300`}>
+            ★
+          </span>
+        );
+      }
+    }
+
+    return <div className="flex items-center gap-[1px]">{stars}</div>;
+  }
 
   // Slim seed snapshot for instant hydrate + cache
   const slim: SlimProduct = {
@@ -215,9 +267,14 @@ export default function ProductCard({
 
             {/* Price row */}
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[13px] sm:text-[14px] font-medium text-emerald-700">
+              <span
+                className={`text-[13px] sm:text-[14px] font-medium ${
+                  promoOn ? "text-emerald-700" : "text-neutral-900"
+                }`}
+              >
                 {formatMAD(current)}
               </span>
+
               {compareAt && (
                 <span className="text-[12px] line-through text-neutral-400">
                   {compareAt.toLocaleString("en-US")}
@@ -309,7 +366,7 @@ export default function ProductCard({
       }}
       className={`block overflow-hidden ${className}`}
     >
-      {useCarousel ? (
+      {useCarousel || useCarouselAuto ? (
         <CardCarousel
           images={imagesForCard}
           title={p.title}
@@ -319,6 +376,7 @@ export default function ProductCard({
           onUnfavorite={onUnfavorite}
           videoSrc={p.video_url ?? undefined}
           videoIndex={videoIndex}
+          autoHeight={useCarouselAuto}
         />
       ) : (
         <div className="relative">
@@ -354,27 +412,30 @@ export default function ProductCard({
       )}
 
       {/* BODY */}
-      <div className="pt-3 -space-y-1">
-        <div className="line-clamp-2 text-md font-semibold text-neutral-900 leading-snug">
+      <div className="pt-1.5 -space-y-1">
+        <div className="line-clamp-2 text-sm font-normal text-neutral-900 leading-snug">
           {p.title}
         </div>
 
-        <div className="mt-1 flex items-baseline gap-2">
-          <span className="text-md font-medium text-emerald-700">
+        <div className="mt-1 flex items-baseline gap-1">
+          <span
+            className={`text-sm font-semibold ${
+              promoOn ? "text-emerald-700" : "text-neutral-900"
+            }`}
+          >
             {formatMAD(current)}
           </span>
           {compareAt && (
-            <span className="text-[14px] line-through text-neutral-400">
-              {compareAt.toLocaleString("en-US")}
+            <span className="text-sm line-through text-neutral-500">
+              MAD {compareAt.toLocaleString("en-US")}
             </span>
           )}
         </div>
 
         {/* Rating + reviews */}
         {!fromshop && p.rating_avg != null && p.rating_avg > 0 && (
-          <div className="mt-1 flex items-center gap-1.5 text-md text-neutral-900">
-            <span className="font-medium">{p.rating_avg.toFixed(1)}</span>
-            <span className="text-amber-600">★</span>
+          <div className="mt-1 flex items-center gap-1.5 text-sm text-neutral-900">
+            <Stars rating={p.rating_avg} />
 
             {p.reviews_count != null && p.reviews_count > 0 && (
               <span className="opacity-75">
@@ -386,9 +447,11 @@ export default function ProductCard({
 
         {/* Orders count */}
         {!fromshop && p.orders_count != null && p.orders_count > 0 && (
-          <div className="mt-1 text-[16px] font-medium text-neutral-900">
-            {fmtOrders(p.orders_count)}{" "}
-            <span className="font-medium">Orders</span>
+          <div className="mt-1 text-sm font-medium text-neutral-900">
+            {fmtOrders(p.orders_count)}
+            <span className="font-normal">
+              {plural(p.orders_count, "Order", "Orders")}
+            </span>
           </div>
         )}
 
@@ -406,6 +469,7 @@ export default function ProductCard({
 
 /* -------------------------------------------
    Carousel with lazy video + spinner + tight dots
+   + autoHeight (based on first media, clamped to max-h-64)
 ------------------------------------------- */
 function CardCarousel({
   images,
@@ -416,6 +480,8 @@ function CardCarousel({
   onUnfavorite,
   videoSrc,
   videoIndex = -1,
+  autoHeight = false,
+  maxHeightClass = "max-h-64",
 }: {
   images: string[];
   title: string;
@@ -425,11 +491,15 @@ function CardCarousel({
   onUnfavorite?: (id: string) => void;
   videoSrc?: string;
   videoIndex?: number;
+  autoHeight?: boolean;
+  maxHeightClass?: string;
 }) {
+  const MAX_AUTO_HEIGHT_PX = 256; // Tailwind max-h-64
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [index, setIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [autoHeightPx, setAutoHeightPx] = useState<number | null>(null);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -453,20 +523,51 @@ function CardCarousel({
     }
   }, [shouldLoadVideo]);
 
+  // Measure the first slide (image or video) to determine height, then clamp
+  function measureFirstMediaHeight(
+    w: number,
+    naturalW: number,
+    naturalH: number
+  ) {
+    if (!autoHeight || autoHeightPx != null) return;
+    if (!w || !naturalW || !naturalH) return;
+    const ratio = naturalH / naturalW;
+    const h = Math.min(w * ratio, MAX_AUTO_HEIGHT_PX);
+    if (Number.isFinite(h) && h > 0) {
+      setAutoHeightPx(h);
+    }
+  }
+
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-lg" ref={emblaRef}>
         <div className="flex">
           {images.map((src, i) => {
             const isVideo = videoSrc && i === videoIndex;
+
             return (
               <div className="min-w-0 flex-[0_0_100%]" key={i}>
-                <div className="relative h-60 bg-neutral-100">
+                <div
+                  className={
+                    autoHeight
+                      ? `relative w-full bg-neutral-100 overflow-hidden ${maxHeightClass}`
+                      : "relative h-60 bg-neutral-100"
+                  }
+                  style={
+                    autoHeight && autoHeightPx != null
+                      ? { height: autoHeightPx }
+                      : undefined
+                  }
+                >
                   {isVideo ? (
                     <div className="relative w-full h-full">
                       <video
                         ref={videoRef}
-                        className="w-full h-full object-cover"
+                        className={
+                          autoHeight
+                            ? "w-full h-full object-cover"
+                            : "w-full h-full object-cover"
+                        }
                         poster={src}
                         {...(shouldLoadVideo ? { src: videoSrc } : {})}
                         muted
@@ -477,7 +578,17 @@ function CardCarousel({
                         controls={false}
                         onLoadStart={() => setVideoLoading(true)}
                         onLoadedData={() => setVideoLoading(false)}
-                        onCanPlay={() => setVideoLoading(false)}
+                        onCanPlay={(e) => {
+                          setVideoLoading(false);
+                          if (autoHeight && i === 0) {
+                            const v = e.currentTarget;
+                            measureFirstMediaHeight(
+                              v.clientWidth,
+                              v.videoWidth,
+                              v.videoHeight
+                            );
+                          }
+                        }}
                         onPlaying={() => setVideoLoading(false)}
                         onWaiting={() => setVideoLoading(true)}
                         onError={() => setVideoLoading(false)}
@@ -492,8 +603,34 @@ function CardCarousel({
                     <img
                       src={src}
                       alt={title}
-                      className="w-full h-full object-cover"
+                      className={
+                        autoHeight
+                          ? "w-full h-full object-cover"
+                          : "w-full h-full object-cover"
+                      }
                       loading={i === 0 ? "eager" : "lazy"}
+                      ref={
+                        autoHeight && i === 0
+                          ? (el) => {
+                              if (!el) return;
+                              if (el.complete) {
+                                measureFirstMediaHeight(
+                                  el.clientWidth,
+                                  el.naturalWidth,
+                                  el.naturalHeight
+                                );
+                              } else {
+                                el.onload = () => {
+                                  measureFirstMediaHeight(
+                                    el.clientWidth,
+                                    el.naturalWidth,
+                                    el.naturalHeight
+                                  );
+                                };
+                              }
+                            }
+                          : undefined
+                      }
                     />
                   )}
                 </div>

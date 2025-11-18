@@ -1,367 +1,446 @@
+// app/marketing/page.tsx
 "use client";
 
-import * as React from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { motion, easeInOut } from "framer-motion";
-import { Button } from "@/components/ui/button";
+import {
+  ArrowRight,
+  Download,
+  Instagram,
+  Facebook,
+  Twitter,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import Lenis from "lenis";
+import { motion } from "framer-motion";
 
-const TRANSITION = { duration: 0.7, ease: easeInOut };
-const SCROLL_COOLDOWN = 900; // ms between section changes
-const SWIPE_THRESHOLD = 40; // px
+/* ========= Auto-scrolling label rows ========= */
 
-export default function Page() {
-  const [index, setIndex] = React.useState(0);
-  const [isAnimating, setIsAnimating] = React.useState(false);
-  const touchStartY = React.useRef<number | null>(null);
+const ROW_1 = [
+  "Artisans",
+  "Vintage Collectors",
+  "Jewelry Designers",
+  "Artists & Illustrators",
+  "Photography Artists",
+  "Weavers",
+];
 
-  const sectionsCount = 5;
+const ROW_2 = [
+  "Bag Makers",
+  "Creative Entrepreneurs",
+  "Small Businesses",
+  "Fashion Designers",
+  "Boutique Owners",
+];
 
-  const goTo = React.useCallback(
-    (next: number) => {
-      if (next < 0 || next >= sectionsCount) return;
-      setIsAnimating(true);
-      setIndex(next);
-      // cooldown so wheel doesn’t spam
-      setTimeout(() => setIsAnimating(false), SCROLL_COOLDOWN);
-    },
-    [sectionsCount]
-  );
+const ROW_3 = [
+  "Independent Sellers",
+  "Tailors",
+  "Ceramic Artists",
+  "Home Decor Makers",
+  "Calligraphers",
+];
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (isAnimating) return;
-    if (e.deltaY > 40) {
-      goTo(index + 1);
-    } else if (e.deltaY < -40) {
-      goTo(index - 1);
-    }
-  };
+type AutoRowProps = {
+  labels: string[];
+  reverse?: boolean;
+  duration?: number;
+};
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isAnimating) return;
-    if (e.key === "ArrowDown" || e.key === "PageDown") goTo(index + 1);
-    if (e.key === "ArrowUp" || e.key === "PageUp") goTo(index - 1);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    touchStartY.current = e.touches[0]?.clientY ?? null;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (touchStartY.current == null || isAnimating) return;
-    const endY = e.changedTouches[0]?.clientY ?? touchStartY.current;
-    const delta = endY - touchStartY.current;
-
-    if (delta > SWIPE_THRESHOLD) {
-      // swipe down -> previous
-      goTo(index - 1);
-    } else if (delta < -SWIPE_THRESHOLD) {
-      // swipe up -> next
-      goTo(index + 1);
-    }
-    touchStartY.current = null;
-  };
-
-  const navItems = [
-    // { label: "Overview", to: 0 },
-    { label: "Discover", to: 1 },
-    { label: "Stories", to: 2 },
-    { label: "Sell", to: 3 },
-  ];
-
-  const handleNavClick =
-    (targetIndex: number) => (e: React.MouseEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      if (isAnimating) return;
-      goTo(targetIndex);
-    };
-
-  const handleDownloadClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (isAnimating) return;
-    goTo(4);
-  };
+function AutoScrollRow({ labels, reverse, duration = 26 }: AutoRowProps) {
+  const items = [...labels, ...labels];
 
   return (
-    <div
-      className="h-screen w-screen overflow-hidden bg-[#0B1020] text-white"
-      onWheel={handleWheel}
-      onKeyDown={handleKeyDown}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      tabIndex={0} // so keyboard works
-    >
-      {/* TOP NAVBAR */}
-      {/* TOP NAVBAR */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-white   ">
-        <div className="mx-auto flex h-18 w-full px-5 items-center justify-between ">
-          {/* Left: Logo */}
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full bg-[#0B1020] grid place-items-center text-[11px] font-bold text-white">
-              Z
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-[#0B1020]">
-              Zaha
-            </span>
-          </div>
-
-          {/* Center links (desktop only) */}
-
-          {/* Right: CTA */}
-          <div className="flex items-center gap-2">
-            {/* <button
-              onClick={() => goTo(1)}
-              className="hidden md:inline-flex h-8 rounded-full bg-white border border-black/10 px-4 text-xs font-medium text-[#0B1020] hover:bg-black/5 transition"
-            >
-              Start exploring
-            </button> */}
-
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#0B1020]/70 mr-5">
-              {/* <button
-              onClick={() => goTo(0)}
-              className={`hover:text-[#0B1020] transition ${
-                index === 0 ? "text-[#0B1020] font-semibold" : ""
-              }`}
-            >
-              Overview
-            </button> */}
-              <button
-                onClick={() => goTo(1)}
-                className={`hover:text-[#0B1020] transition ${
-                  index === 1 ? "text-[#0B1020] font-semibold" : ""
-                }`}
-              >
-                Discover
-              </button>
-              <button
-                onClick={() => goTo(2)}
-                className={`hover:text-[#0B1020] transition ${
-                  index === 2 ? "text-[#0B1020] font-semibold" : ""
-                }`}
-              >
-                Buy
-              </button>
-              <button
-                onClick={() => goTo(3)}
-                className={`hover:text-[#0B1020] transition ${
-                  index === 3 ? "text-[#0B1020] font-semibold" : ""
-                }`}
-              >
-                Sell
-              </button>
-            </nav>
-
-            <button
-              onClick={() => goTo(4)}
-              className="h-8 rounded-full bg-[#0B1020] px-4 text-xs font-semibold text-white hover:bg-black transition"
-            >
-              Download app
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Vertical carousel */}
+    <div className="relative overflow-hidden">
       <motion.div
-        className="h-full w-full"
-        animate={{ y: `-${index * 100}vh` }}
-        transition={TRANSITION}
+        className="flex gap-3 py-2"
+        animate={{ x: reverse ? ["0%", "-50%"] : ["-50%", "0%"] }}
+        transition={{
+          duration,
+          repeat: Infinity,
+          ease: "linear",
+        }}
       >
-        {/* ===== 1. HERO ===== */}
-        <section className="relative flex h-screen items-center justify-center bg-[#0B1020] px-6 md:px-16">
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-12 md:flex-row md:items-center mt-18">
-            <div className="max-w-xl space-y-6 mt-20 md:mt-0">
-              <p className="text-sm font-medium uppercase tracking-[0.2em] text-[#F6F3EC]/70">
-                Zaha · Morocco
-              </p>
-              <h1 className="text-4xl font-bold leading-tighter md:text-5xl lg:text-6xl">
-                Discover
-                <br />
-                Products Made
-                <br />
-                with <span className="text-white italic">Soul</span>
-              </h1>
-              <p className="max-w-md text-base leading-relaxed text-[#F6F3EC]/80">
-                Connect with Morocco&apos;s most talented artisans and discover
-                pieces you won&apos;t find anywhere else.
-              </p>
+        {items.map((label, i) => (
+          <span
+            key={`${label}-${i}`}
+            className="whitespace-nowrap rounded-full border border-[#f1d9c7]   px-4 py-1.5 text-lg font-normal text-neutral-800"
+          >
+            {label}
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
 
-              <Button
-                asChild
-                className="mt-4 rounded-full bg-[#F6A3D6] px-6 py-5 text-sm font-bold text-[#0B1020] hover:bg-[#f893cd]"
-              >
-                <Link href="#download">Download on the App Store</Link>
-              </Button>
-            </div>
+/* ========= Page ========= */
 
-            <div className="relative flex flex-1 justify-center md:justify-end">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-64 w-64 rotate-45 rounded-[40px] bg-[#241133]" />
-              </div>
+export default function MarketingPage() {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
 
-              <div className="relative z-10 h-[420px] w-[220px] overflow-hidden rounded-[40px] border border-white/10 bg-black/80 shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+  const [windowHeight, setWindowHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
+
+  /* Measure layout */
+  useEffect(() => {
+    const measure = () => {
+      setWindowHeight(window.innerHeight);
+      setContentHeight(contentRef.current?.offsetHeight ?? 0);
+      setFooterHeight(footerRef.current?.offsetHeight ?? 0);
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  /* Lenis smooth scroll */
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.3,
+      easing: (x) => 1 - Math.pow(1 - x, 3),
+      smoothWheel: true,
+      smoothTouch: false,
+    });
+
+    lenis.on("scroll", (e: any) => {
+      setScrollY(e.scroll);
+    });
+
+    function raf(time: number) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    return () => lenis.destroy();
+  }, []);
+
+  /* Derived values */
+
+  // Footer is fixed, so it should NOT add to scroll height
+  const heightDocument = (windowHeight || 0) + (contentHeight || 0);
+
+  const bgPosY = 50 - (scrollY * 100) / (heightDocument || 1);
+
+  const footerBottom = scrollY >= footerHeight ? 0 : -(footerHeight || 300);
+
+  const heroProgress = Math.min(scrollY / ((windowHeight || 1) * 0.8), 1);
+  const heroScale = 1 - heroProgress * 0.15;
+  const heroOpacity = Math.max(1 - heroProgress * 1.2, 0);
+
+  return (
+    <main className="bg-[#f6f3ec]  tracking-tight">
+      <div
+        id="scroll-animate"
+        style={{
+          overflow: "hidden",
+          height: heightDocument || windowHeight || 0,
+          position: "relative",
+        }}
+      >
+        <div
+          id="scroll-animate-main"
+          style={{
+            position: "relative",
+            width: "100%",
+            height: heightDocument || windowHeight || 0,
+          }}
+        >
+          <div
+            className="wrapper-parallax shadow-[0_0_20px_rgba(0,0,0,0.5)]"
+            style={{
+              marginTop: windowHeight,
+              marginBottom: footerHeight,
+            }}
+          >
+            {/* ================= HERO ================= */}
+            <header
+              style={{
+                width: "100%",
+                height: windowHeight || 0,
+                position: "fixed",
+                top: 0,
+                zIndex: 0,
+                backgroundImage:
+                  "linear-gradient(to bottom, #fbe8cf, #f4dff5, #f6f3ec)",
+                backgroundPosition: `50% ${bgPosY}%`,
+                backgroundSize: "cover",
+              }}
+            >
+              {/* Soft texture image */}
+              <div className="pointer-events-none absolute inset-0 opacity-[0.18]">
                 <Image
-                  src="/images/zaha-hero-phone.png"
-                  alt="Zaha app preview"
+                  src="/landing/hero-amzy.png"
+                  alt="Amzy hero background"
                   fill
                   className="object-cover"
                   priority
                 />
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* ===== 2. DISCOVER (BUYER) ===== */}
-        <section className="flex h-screen items-center justify-center bg-[#FFD6E3] px-6 md:px-16">
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 md:flex-row mt-18">
-            <div className="flex flex-1 items-center justify-center">
-              <div className="relative h-[360px] w-[260px]">
-                <div className="absolute -left-20 top-6 h-40 w-32 rounded-[28px] bg-[#FFB84D]" />
-                <div className="absolute bottom-2 -left-10 h-52 w-40 rounded-4xl bg-[#F5666E]" />
-                <div className="absolute right-0 top-0 h-56 w-40 rounded-4xl bg-[#FF8AA0]" />
-                <div className="absolute inset-10 rounded-[36px] bg-white shadow-xl">
-                  <Image
-                    src="/images/zaha-discover-cards.png"
-                    alt="Discover handmade goods on Zaha"
-                    fill
-                    className="rounded-[36px] object-cover"
-                  />
+              {/* Hero content */}
+              <div
+                className="relative z-10 flex h-full items-center"
+                style={{
+                  transform: `scale(${heroScale})`,
+                  opacity: heroOpacity,
+                  transformOrigin: "center center",
+                }}
+              >
+                <section className="relative w-full">
+                  {/* Huge AMZY in back */}
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="select-none text-[18vw] font-semibold tracking-[0.3em] text-[#e6d4c6]/60 leading-none">
+                      AMZY.MA
+                    </span>
+                  </div>
+
+                  <div className="relative mx-auto flex min-h-[70vh] max-w-6xl flex-col items-center gap-10 px-4 py-16 md:min-h-[80vh] md:flex-row md:gap-8 lg:gap-12">
+                    {/* Left heading */}
+                    <div className="w-full max-w-sm md:flex-1">
+                      <p className="mb-4 h-2 w-2 rounded-full bg-[#c89b72]" />
+                      <h1 className="text-3xl font-semibold leading-tight text-neutral-900 sm:text-4xl">
+                        Discover
+                        <br />
+                        products made
+                        <br />
+                        with <span className="font-serif italic">Soul</span>
+                      </h1>
+                    </div>
+
+                    {/* Phone mock placeholder */}
+                    <div className="relative flex min-h-[260px] items-center justify-center md:flex-[1.2]">
+                      <div className="relative h-[320px] w-[180px] sm:h-[380px] sm:w-[210px] lg:h-[430px] lg:w-[240px]">
+                        <Image
+                          src="/placeholder-phone.png"
+                          alt="Amzy app preview"
+                          fill
+                          className="object-contain drop-shadow-[0_32px_60px_rgba(0,0,0,0.35)]"
+                          priority
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right content */}
+                    <div className="w-full max-w-sm md:flex-1">
+                      <p className="text-sm leading-relaxed text-neutral-800 sm:text-base">
+                        Connect with Morocco&apos;s most talented artisans and
+                        discover pieces you won&apos;t find anywhere else.
+                      </p>
+
+                      <div className="mt-6 flex flex-wrap items-center gap-3">
+                        <button className="inline-flex items-center gap-2 rounded-full bg-[#23102f] px-5 py-2.5 text-sm font-medium text-white shadow-[0_14px_30px_rgba(0,0,0,0.35)] hover:bg-[#2d183b] transition-colors">
+                          <Download className="h-4 w-4" />
+                          <span>Install the App</span>
+                        </button>
+
+                        <button className="inline-flex items-center gap-1 text-sm font-medium text-neutral-900 hover:underline">
+                          <span>Learn more</span>
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </header>
+
+            {/* ================= WHITE SECTION ================= */}
+            <section className="content relative z-1" ref={contentRef}>
+              <div className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-4   pb-32">
+                {/* Manifesto card */}
+                <div className="mx-auto w-full max-w-4xl rounded-xl bg-white border border-[#eee7de] py-10 shadow-[0_18px_60px_rgba(0,0,0,0.12)]">
+                  <div className="flex justify-center mb-6">
+                    <span className="inline-flex items-center rounded-full border border-neutral-200   px-5 py-1.5 text-sm font-normal  tracking-tight text-neutral-700">
+                      Our Manifesto
+                    </span>
+                  </div>
+                  <div className=" max-w-xl mx-auto">
+                    {" "}
+                    <p className="font-normal text-2xl leading-relaxed text-center">
+                      In a time when everything is mass-produced, when speed
+                      replaces care, when creators are hidden behind algorithms
+                      and noise, our craft has little space to live.
+                    </p>
+                    <p className="font-normal text-2xl leading-relaxed tracking-tight text-center mt-8 ">
+                      Our stories are scattered across marketplaces, stripped of
+                      meaning. What should have never been lost is now yours
+                      again.
+                    </p>
+                    <p className="mt-8 text-lg font-semibold text-center text-neutral-900 sm:text-xl">
+                      Welcome to amzy.
+                    </p>
+                  </div>
+
+                  {/* Creator avatars row (placeholders) */}
+                  <div className="mt-10 flex items-center justify-center gap-6">
+                    <div className="relative h-16 w-16 overflow-hidden rounded-2xl bg-[#ffe6d7]" />
+                    <div className="relative h-16 w-16 overflow-hidden rounded-full bg-[#f3d4ff]" />
+                    <div className="relative h-16 w-16 overflow-hidden rounded-2xl bg-[#ffe6d7]" />
+                  </div>
+
+                  {/* 4 feature cards */}
+                  <div className="grid gap-6 md:grid-cols-2 px-12">
+                    {/* Explore the market */}
+                    <div className="rounded-[24px] bg-[#fff6ec] p-5">
+                      <div className="mb-4 overflow-hidden rounded-[18px] bg-neutral-200">
+                        <div className="aspect-[4/3] w-full bg-neutral-200" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-neutral-900 sm:text-base">
+                        Explore the market
+                      </h3>
+                      <p className="mt-1 text-xs text-neutral-700 sm:text-sm">
+                        Discover unique handmade pieces crafted with heart.
+                      </p>
+                    </div>
+
+                    {/* Connect with makers */}
+                    <div className="rounded-[24px] bg-[#f7f1ff] p-5">
+                      <div className="mb-4 overflow-hidden rounded-[18px] bg-neutral-200">
+                        <div className="aspect-[4/3] w-full bg-neutral-200" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-neutral-900 sm:text-base">
+                        Connect with makers
+                      </h3>
+                      <p className="mt-1 text-xs text-neutral-700 sm:text-sm">
+                        Talk directly with the people who create what you love.
+                      </p>
+                    </div>
+
+                    {/* Manage your shop */}
+                    <div className="rounded-[24px] bg-[#fff6ec] p-5">
+                      <div className="mb-4 overflow-hidden rounded-[18px] bg-neutral-200">
+                        <div className="aspect-[4/3] w-full bg-neutral-200" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-neutral-900 sm:text-base">
+                        Manage your shop
+                      </h3>
+                      <p className="mt-1 text-xs text-neutral-700 sm:text-sm">
+                        Keep your products and orders running smoothly.
+                      </p>
+                    </div>
+
+                    {/* Grow your reputation */}
+                    <div className="rounded-[24px] bg-[#f7f1ff] p-5">
+                      <div className="mb-4 overflow-hidden rounded-[18px] bg-neutral-200">
+                        <div className="aspect-[4/3] w-full bg-neutral-200" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-neutral-900 sm:text-base">
+                        Grow your reputation
+                      </h3>
+                      <p className="mt-1 text-xs text-neutral-700 sm:text-sm">
+                        Earn trust with great service and real reviews.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Marketplace + scrolling labels */}
+                  <section className="flex flex-col gap-8">
+                    <div className="text-center">
+                      <h2 className="text-2xl font-semibold text-neutral-900 sm:text-3xl pt-16">
+                        A marketplace built for makers &amp; buyers
+                      </h2>
+                    </div>
+
+                    <div className="space-y-2">
+                      <AutoScrollRow
+                        labels={ROW_1}
+                        reverse={false}
+                        duration={26}
+                      />
+                      <AutoScrollRow
+                        labels={ROW_2}
+                        reverse={true}
+                        duration={30}
+                      />
+                      <AutoScrollRow
+                        labels={ROW_3}
+                        reverse={false}
+                        duration={24}
+                      />
+                    </div>
+                  </section>
+
+                  {/* CTA Banner */}
+                  <section className="mt-6 rounded-xl bg-gradient-to-r from-[#f4dff5] via-[#fbe8cf] to-[#f6f3ec]  mx-3">
+                    <div className="flex flex-col gap-6 rounded-xl   px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-7">
+                      {/* Text side */}
+                      <div className="max-w-md">
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8d4d7a]">
+                          Explore handmade treasures
+                        </p>
+                        <h3 className="mt-2 text-xl font-semibold text-neutral-900 sm:text-2xl">
+                          Turn your craft into income.
+                        </h3>
+                        <p className="mt-2 text-xs text-neutral-700 sm:text-sm">
+                          Create your shop, add your products, and start selling
+                          to buyers across Morocco.
+                        </p>
+
+                        <button className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#23102f] px-5 py-2.5 text-xs font-medium text-white shadow-[0_10px_24px_rgba(0,0,0,0.35)] hover:bg-[#2d183b] transition-colors">
+                          <Download className="h-4 w-4" />
+                          <span>Install the App now</span>
+                        </button>
+                      </div>
+
+                      {/* Image placeholder side */}
+                      <div className="relative flex justify-end sm:flex-1">
+                        <div className="relative h-40 w-40 sm:h-48 sm:w-48 lg:h-56 lg:w-56 overflow-hidden rounded-[24px] bg-neutral-200">
+                          {/* placeholder phone/person image */}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Footer mini */}
+                  <section className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-[#eee] pt-4 text-xs text-neutral-600 sm:flex-row">
+                    <p>© 2026 Amzy</p>
+                    <div className="flex items-center gap-4">
+                      <button className="inline-flex items-center gap-1 text-xs text-neutral-700 hover:text-neutral-900">
+                        <Facebook className="h-4 w-4" />
+                      </button>
+                      <button className="inline-flex items-center gap-1 text-xs text-neutral-700 hover:text-neutral-900">
+                        <Twitter className="h-4 w-4" />
+                      </button>
+                      <button className="inline-flex items-center gap-1 text-xs text-neutral-700 hover:text-neutral-900">
+                        <Instagram className="h-4 w-4" />
+                      </button>
+                      <span className="text-[10px] text-neutral-400">
+                        TikTok
+                      </span>
+                    </div>
+                  </section>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="flex-1 max-w-xl">
-              <h2 className="text-5xl font-bold leading-tight text-red-700/80 md:text-5xl">
-                Discover handmade crafts &amp; goods.
-              </h2>
-              <p className="mt-4 text-xl leading-normal text-red-700/80 max-w-sm font-medium py-6">
-                What would you like to explore next? Think of something you love
-                — for example “handmade jewelry” — and see what Zaha brings you.
-              </p>
-
-              <Button
-                asChild
-                className="mt-4 rounded-full bg-red-700/80 px-6 py-5 text-sm font-bold text-white hover:bg-[#d21342]"
-              >
-                <Link href="/explore">Explore</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== 3. BUY PIECES THAT TELL A STORY ===== */}
-        <section className="flex h-screen items-center justify-center bg-[#E9DBFF] px-6 md:px-16">
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 md:flex-row mt-18">
-            <div className="flex-1 max-w-xl">
-              <h2 className="text-4xl font-bold leading-tight text-[#2B1034] md:text-5xl">
-                Buy pieces
-                <br />
-                that tell a story.
-              </h2>
-              <p className="mt-4 text-xl leading-normal  font-medium py-6 text-[#3D2249] max-w-sm">
-                The best part about Zaha is finding creations made by real
-                people — makers who pour their time, care, and passion into
-                every detail.
-              </p>
-
-              <Button
-                asChild
-                className=" mt-4 rounded-full bg-[#2B1034] px-6 py-5 text-sm font-bold text-white hover:bg-[#220c29]"
-              >
-                <Link href="/browse">Explore</Link>
-              </Button>
-            </div>
-
-            <div className="relative flex flex-1 items-center justify-center">
-              <div className="h-64 w-64 rotate-45 rounded-[48px] bg-[#C2A4FF]" />
-              <div className="absolute h-64 w-64 overflow-hidden rounded-[48px]">
-                <Image
-                  src="/images/zaha-maker-woman.png"
-                  alt="Moroccan artisan on Zaha"
-                  fill
-                  className="-rotate-45 object-cover"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== 4. SELL WHAT YOU CREATE ===== */}
-        <section className="flex h-screen items-center justify-center bg-[#F6E5CC] px-6 md:px-16">
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 md:flex-row mt-18">
-            <div className="relative flex flex-1 items-center justify-center">
-              <div className="h-64 w-64 rounded-[40px] bg-[#2F1308]" />
-              <div className="absolute -bottom-10 left-6 h-40 w-40 rounded-[40px] bg-[#FF8F4E]" />
-              <div className="absolute inset-6 overflow-hidden rounded-[40px] shadow-xl">
-                <Image
-                  src="/images/zaha-seller-preview.png"
-                  alt="Zaha seller dashboard"
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 max-w-xl text-[#2A1607] ">
-              <h2 className="text-4xl font-bold leading-tight md:text-5xl">
-                Sell what you create.
-                <br />
-                Your way.
-              </h2>
-              <p className="mt-4 text-xl leading-normal   font-medium py-6  text-[#4D2D13] max-w-sm">
-                Turn your craft into income. Create your shop, add your
-                products, and start selling to buyers across Morocco.
-              </p>
-
-              <Button
-                asChild
-                className=" mt-4 rounded-full bg-[#F26E2A] px-6 py-5 text-sm font-bold text-white hover:bg-[#e06525]"
-              >
-                <Link href="/sell">Become a seller</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== 5. FINAL CTA / DOWNLOAD ===== */}
-        <section className="flex h-screen items-center justify-center bg-linear-to-b from-[#C5A8FF] to-[#FDD9FF] px-6 md:px-16">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-center mt-18">
-            <div className="relative flex w-full flex-col overflow-hidden rounded-[40px] bg-[#14071E] px-8 py-10 text-white md:flex-row md:items-center md:px-12 md:py-16">
-              <div className="relative z-10 max-w-xl space-y-4">
-                <h2 className="text-3xl font-bold leading-tight md:text-4xl lg:text-5xl">
-                  Dive into the world
-                  <br />
-                  of Shopping
+            {/* ================= FOOTER (parallax reveal) ================= */}
+            {/* <footer
+              ref={footerRef}
+              style={{
+                width: "100%",
+                height: 300,
+                background: "#e5e5e5",
+                position: "fixed",
+                bottom: footerBottom,
+                left: 0,
+                zIndex: -1,
+              }}
+            >
+              <div className="flex h-full items-center justify-center">
+                <h2 className="text-xl font-semibold text-neutral-800">
+                  Footer / next sections go here
                 </h2>
-                <p className="text-base leading-relaxed text-white/80">
-                  Turn your craft into income. Create your shop, add your
-                  products, and start selling to buyers across Morocco.
-                </p>
-
-                <Button
-                  asChild
-                  className="mt-6 rounded-full bg-[#C5A8FF] px-6 py-5 text-sm font-bold text-[#14071E] hover:bg-[#b89bff]"
-                >
-                  <Link href="#">Download on the App Store now</Link>
-                </Button>
               </div>
-
-              <div className="relative mt-10 flex flex-1 justify-center md:mt-0 md:justify-end">
-                <div className="absolute -left-10 -top-10 h-44 w-44 rotate-45 rounded-[40px] border border-white/20" />
-                <div className="relative h-80 w-[180px] overflow-hidden rounded-4xl border border-white/10 bg-black/70 shadow-[0_0_40px_rgba(0,0,0,0.7)]">
-                  <Image
-                    src="/images/zaha-wallet-phone.png"
-                    alt="Zaha wallet preview"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              </div>
-            </div>
+            </footer> */}
           </div>
-        </section>
-      </motion.div>
-    </div>
+        </div>
+      </div>
+    </main>
   );
 }

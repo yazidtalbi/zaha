@@ -266,15 +266,15 @@ export default function BottomNav() {
           className={clsx(
             "flex flex-col items-center justify-center gap-1 py-2 text-xs transition-all duration-200",
             isActive
-              ? "text-[#371837] font-semibold"
-              : "text-gray-500 hover:text-ink"
+              ? "text-neutral-700 font-medium"
+              : "text-neutral-500 hover:text-ink"
           )}
         >
           <div
             className={clsx(
-              "relative grid place-items-center w-10 h-9 rounded-lg transition-colors",
+              "relative grid place-items-center w-10 h-9 rounded-full transition-colors",
               isActive && highlightOnActiveBg
-                ? "bg-[#371837]/15"
+                ? "bg-neutral-100"
                 : "bg-transparent"
             )}
           >
@@ -300,7 +300,7 @@ export default function BottomNav() {
       <div className="mx-auto w-12 h-12 rounded-full bg-[#371837] text-white grid place-items-center shadow-lg">
         <PlusCircle size={22} />
       </div>
-      <div className="mt-1 text-center text-xs font-medium text-[#371837]">
+      <div className="mt-1 text-center text-xs font-medium text-gray-700">
         Add
       </div>
     </Link>
@@ -388,7 +388,7 @@ export default function BottomNav() {
                         setMenuOpen(false);
                         router.push("/home");
                       }}
-                      className="w-full h-12 px-4 rounded-2xl flex items-center gap-3 bg-[#371837]/8 hover:bg-[#371837]/12 active:bg-[#371837]/16 text-[#371837]"
+                      className="w-full h-12 px-4 rounded-2xl flex items-center gap-3 bg-[#371837]/8 hover:bg-[#371837]/12 active:bg-[#371837]/16 text-gray-700"
                     >
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#371837]/15">
                         <Home size={18} />
@@ -568,7 +568,7 @@ export default function BottomNav() {
     : "/login?next=%2Fbecome-seller";
 
   const manageStoreClasses = hasShop
-    ? "bg-[#371837]/10 text-[#371837]"
+    ? "bg-[#371837]/10 text-gray-700"
     : "bg-emerald-50 text-emerald-800";
 
   const ordersHref = uid ? "/orders" : "/login";
