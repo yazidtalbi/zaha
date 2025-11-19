@@ -272,7 +272,7 @@ export default function BottomNav() {
         >
           <div
             className={clsx(
-              "relative grid place-items-center w-10 h-9 rounded-full transition-colors",
+              "relative grid place-items-center w-14 h-9 rounded-full transition-colors",
               isActive && highlightOnActiveBg
                 ? "bg-neutral-100"
                 : "bg-transparent"
@@ -326,7 +326,7 @@ export default function BottomNav() {
         : null;
 
     return (
-      <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
+      <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none ">
         <div className="max-w-screen-sm mx-auto rounded-t-2xl">
           <ul className="grid grid-cols-5 items-end px-2 pb-[env(safe-area-inset-bottom)]">
             <li>
@@ -575,7 +575,7 @@ export default function BottomNav() {
   const youHref = uid ? "/you" : "/login";
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-none">
+    <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-xl  ">
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
         <ul className="grid grid-cols-5 px-2 pb-[env(safe-area-inset-bottom)]">
           <li>

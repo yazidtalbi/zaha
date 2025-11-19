@@ -5,6 +5,13 @@ import type { Metadata } from "next";
 import { Instrument_Sans } from "next/font/google";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"; // 👈 add this
 
+import { Playfair_Display } from "next/font/google";
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["600"], // or ["500","600","700"] if you want more options
+});
+
 export const metadata: Metadata = {
   title: "Zaha",
   description: "Crafted in Morocco",
