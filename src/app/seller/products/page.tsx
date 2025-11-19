@@ -648,9 +648,12 @@ function Inner() {
             const extra = Math.max(0, selectedCollections.length - maxChips);
 
             return (
-              <li key={p.id} className="flex items-center gap-3 space-y-2">
+              <li
+                key={p.id}
+                className="flex items-center gap-3 space-y-2 border border-black/10 rounded-2xl bg-white p-3"
+              >
                 {/* Thumb */}
-                <div className="w-16 h-16 rounded-md bg-white overflow-hidden shrink-0">
+                <div className="w-16 h-16 rounded-md bg-white overflow-hidden mb-0 ">
                   {img ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

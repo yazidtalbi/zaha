@@ -217,33 +217,45 @@ function Section({
 }) {
   const panelId = useId();
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
+
   useEffect(
     () => setOpen(collapsible ? defaultOpen : true),
     [collapsible, defaultOpen]
   );
+
+  const handleToggle = () => {
+    if (!collapsible) return;
+    setOpen((v) => !v);
+  };
+
   return (
     <section className="px-4 py-4">
-      <div className="flex items-center justify-between">
+      {/* ⬇️ Whole header is now clickable when collapsible === true */}
+      <div
+        className={`flex items-center justify-between ${
+          collapsible ? "cursor-pointer select-none" : ""
+        }`}
+        onClick={handleToggle}
+        role={collapsible ? "button" : undefined}
+        aria-expanded={collapsible ? open : undefined}
+        aria-controls={collapsible ? panelId : undefined}
+      >
         <h3 className="text-base font-semibold">{title}</h3>
+
         <div className="flex items-center gap-2">
           {right}
           {collapsible && (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              className="p-1 text-neutral-600 hover:text-neutral-900 transition"
-              aria-expanded={open}
-              aria-controls={panelId}
-            >
+            <span className="p-1 text-neutral-600">
               {open ? (
                 <ChevronUp className="h-5 w-5" />
               ) : (
                 <ChevronDown className="h-5 w-5" />
               )}
-            </button>
+            </span>
           )}
         </div>
       </div>
+
       {(!collapsible || open) && (
         <div id={panelId} className="mt-3">
           {children}
@@ -252,6 +264,7 @@ function Section({
     </section>
   );
 }
+
 function DetailRow({
   icon,
   label,

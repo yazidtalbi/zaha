@@ -120,6 +120,7 @@ function WhatsAppGlyph(props: React.SVGProps<SVGSVGElement>) {
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+
   const shopId = (id ?? "").toString().trim();
 
   const [shop, setShop] = useState<Shop | null>(null);
@@ -152,6 +153,11 @@ export default function ShopPage() {
   const searchInputRef = useRef<HTMLInputElement>(null!);
   const [canGoBack, setCanGoBack] = useState(false);
 
+  const goBack = useCallback(() => {
+    if (canGoBack) router.back();
+    else router.push("/home");
+  }, [canGoBack, router]);
+
   // load-more sentinel
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -161,19 +167,26 @@ export default function ShopPage() {
   const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     try {
-      const hasHistory = window.history.length > 1;
-      const ref = document.referrer ? new URL(document.referrer) : null;
-      const sameOriginRef = ref && ref.origin === window.location.origin;
-      setCanGoBack(Boolean(hasHistory || sameOriginRef));
+      const isStandalone =
+        (window.matchMedia &&
+          window.matchMedia("(display-mode: standalone)").matches) ||
+        // @ts-ignore
+        window.navigator.standalone === true;
+
+      const historyLength = window.history.length;
+
+      if (isStandalone) {
+        setCanGoBack(historyLength > 2);
+      } else {
+        setCanGoBack(historyLength > 1);
+      }
     } catch {
       setCanGoBack(false);
     }
   }, []);
-  const goBack = useCallback(() => {
-    if (canGoBack) router.back();
-    else router.push("/home");
-  }, [canGoBack, router]);
 
   // observe the cover to toggle sticky header
   useEffect(() => {
@@ -716,6 +729,14 @@ export default function ShopPage() {
 
         {/* ——— COVER ——— */}
         <div ref={coverSentinelRef}>
+          <div className="absolute z-10 top-3 left-3 flex items-center gap-2 p-2">
+            <button
+              onClick={goBack}
+              className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>{" "}
           {loading ? <CoverSkeleton /> : <Cover cover={cover} />}
         </div>
 
@@ -733,14 +754,17 @@ export default function ShopPage() {
           {loading ? (
             <ShopHeaderSkeleton />
           ) : (
-            <ShopHeader
-              shop={shop!}
-              avg={avg}
-              count={count}
-              stats={stats}
-              onOpenContact={openContact}
-              onOpenAbout={() => setAboutOpen(true)}
-            />
+            <>
+              {" "}
+              <ShopHeader
+                shop={shop!}
+                avg={avg}
+                count={count}
+                stats={stats}
+                onOpenContact={openContact}
+                onOpenAbout={() => setAboutOpen(true)}
+              />
+            </>
           )}
         </section>
         {/* ——— SHOP CATEGORIES (collection cards) ——— */}

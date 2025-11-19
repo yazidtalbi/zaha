@@ -654,6 +654,35 @@ export default function HomePage(): JSX.Element {
         </div>
       </header>
 
+      {/* To be implemented on update */}
+      {/* <section className="px-3 mt-3">
+        <div>
+      
+          <div className="relative w-full h-72 overflow-hidden rounded-xl bg-white">
+            <img
+              src="/landing/hero4.jpg"
+              alt="Zaha Hero"
+              className="w-full h-full object-cover object-center"
+            />
+          </div>
+
+   
+          <div className=" pt-5 pb-7 text-center">
+            <p className="text-xl font-semibold text-neutral-900 leading-snug">
+              Explore pieces shaped <br />
+              by real hands
+            </p>
+
+            <button
+              className="mt-5 w-full rounded-full bg-[#371837] text-white py-3 text-md font-semibold"
+              onClick={() => router.push("/login")}
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </section> */}
+
       {/* Hero */}
       <div className="pt-2 px-1">
         <HeroCarousel slides={slides} />

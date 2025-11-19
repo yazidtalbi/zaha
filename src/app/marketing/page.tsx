@@ -244,7 +244,7 @@ export default function MarketingPage() {
                   transformOrigin: "center top",
                 }}
               >
-                <span className="select-none text-[26vw] sm:text-[20vw] md:text-[16vw] font-bold leading-none text-[#F2E4D9]">
+                <span className="select-none text-[26vw] sm:text-[20vw] md:text-[20vw] font-bold leading-none text-[#F2E4D9]">
                   AMZY.MA
                 </span>
               </div>
@@ -297,14 +297,14 @@ export default function MarketingPage() {
 
                   {/* Foreground text + CTA (stays above, like Klarna) */}
                   <div
-                    className="relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center gap-10 px-4 pt-24 pb-[34vh] sm:pt-28 sm:pb-[36vh] md:flex-row md:items-center md:justify-end md:gap-12 md:px-8 lg:px-12 md:pb-24"
+                    className="mt-24 relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center gap-10 px-4 pt-24 pb-[34vh] sm:pt-28 sm:pb-[36vh] md:flex-row md:items-center md:justify-end md:gap-12 md:px-8 lg:px-12 md:pb-24"
                     style={{
                       transform: `translateY(${contentOffset}px)`,
                       transformOrigin: "center center",
                     }}
                   >
                     {/* Left block */}
-                    <div className="w-full max-w-sm text-center md:flex-1">
+                    <div className="w-full max-w-sm text-center md:flex-1 ">
                       <motion.div
                         className="mx-auto mb-4 flex items-center justify-center sm:mb-6"
                         initial={{ opacity: 0, y: 20 }}

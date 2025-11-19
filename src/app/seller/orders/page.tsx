@@ -733,7 +733,7 @@ Options: ${opts}
         /* ——— GROUPED RENDER (collapsible) ——— */
         <ul className="mt-3 space-y-3">
           {groupedByProduct.map((g) => {
-            const isOpen = openGroups[g.productId] ?? true;
+            const isOpen = openGroups[g.productId] ?? false;
             return (
               <li
                 key={g.productId}
@@ -749,7 +749,7 @@ Options: ${opts}
                     }))
                   }
                 >
-                  <div className="w-12 h-12 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
+                  <div className="w-16 h-16 rounded-md bg-neutral-100 overflow-hidden shrink-0">
                     {g.thumb ? (
                       <img
                         src={g.thumb}
@@ -768,7 +768,7 @@ Options: ${opts}
                       </span>
                     </div>
                     <div className="text-xs text-ink/70 mt-0.5">
-                      Total qty {g.totalQty} · MAD {g.totalAmount}
+                      {/* Total qty {g.totalQty} ·*/} MAD {g.totalAmount}
                     </div>
                   </div>
                   <ChevronDown
@@ -784,100 +784,101 @@ Options: ${opts}
                     {g.orders.map((o) => {
                       const img = o.products?.photos?.[0];
                       return (
-                        <li
-                          key={o.id}
-                          className="rounded-xl bg-white p-3 border border-black/5"
+                        <Link
+                          href={`/seller/orders/${o.id}`}
+                          className="text-xs font-medium truncate underline decoration-ink/30 hover:decoration-ink"
                         >
-                          <div className="flex items-start gap-3">
-                            {/* Corner icon instead of checkbox */}
-                            <div className="pt-1 text-ink/50 shrink-0">
-                              <CornerDownRight className="h-4 w-4" />
-                            </div>
+                          {" "}
+                          <li
+                            key={o.id}
+                            className="rounded-xl bg-white p-3 border border-black/5"
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Corner icon instead of checkbox */}
+                              <div className="pt-1 text-ink/50 shrink-0">
+                                <CornerDownRight className="h-4 w-4" />
+                              </div>
 
-                            <div className="w-10 h-10 rounded-lg bg-neutral-100 overflow-hidden shrink-0">
-                              {img ? (
-                                <img
-                                  src={img}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : null}
-                            </div>
+                              <div className="w-10 h-10 rounded-md bg-neutral-100 overflow-hidden shrink-0">
+                                {img ? (
+                                  <img
+                                    src={img}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : null}
+                              </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <Link
-                                  href={`/seller/orders/${o.id}`}
-                                  className="text-xs font-medium truncate underline decoration-ink/30 hover:decoration-ink"
-                                >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
                                   #{o.id.slice(0, 6)}
-                                </Link>
-                                <StatusBadge status={o.status} />
-                              </div>
+                                  <StatusBadge status={o.status} />
+                                </div>
 
-                              <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
-                                <span className="font-medium">
-                                  MAD {o.amount_mad}
-                                </span>
-                                <span>·</span>
-                                <span>Qty {o.qty}</span>
-                                <span>·</span>
-                                <span>
-                                  {new Date(o.created_at).toLocaleString()}
-                                </span>
-                              </div>
-
-                              {(o.address || o.city) && (
-                                <div className="mt-1 text-[11px] text-ink/70 flex flex-wrap items-center gap-2">
-                                  <span className="inline-flex items-center gap-1 min-w-0">
-                                    <MapPin className="h-3.5 w-3.5" />
-                                    <span className="truncate">
-                                      {(o.address ?? "") +
-                                        (o.city ? `, ${o.city}` : "")}
-                                    </span>
+                                <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">
+                                    MAD {o.amount_mad}
                                   </span>
-                                  <button
-                                    onClick={async () => {
-                                      await navigator.clipboard.writeText(
-                                        `${o.address ?? ""}${
-                                          o.city ? ", " + o.city : ""
-                                        }`
-                                      );
-                                      toast.success("Address copied");
-                                    }}
-                                    className="underline shrink-0 inline-flex items-center gap-1"
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                    Copy
-                                  </button>
-                                  {o.address && (
-                                    <a
-                                      className="underline shrink-0"
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                        `${o.address} ${o.city ?? ""}`
-                                      )}`}
-                                    >
-                                      Open map
-                                    </a>
-                                  )}
+                                  <span>·</span>
+                                  <span>Qty {o.qty}</span>
+                                  <span>·</span>
+                                  <span>
+                                    {new Date(o.created_at).toLocaleString()}
+                                  </span>
                                 </div>
-                              )}
 
-                              {(o.personalization || o.options) && (
-                                <div className="mt-1 flex flex-wrap items-center gap-1">
-                                  {o.personalization && (
-                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
-                                      With personalization
+                                {(o.address || o.city) && (
+                                  <div className="mt-1 text-[11px] text-ink/70 flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 min-w-0">
+                                      <MapPin className="h-3.5 w-3.5" />
+                                      <span className="truncate">
+                                        {(o.address ?? "") +
+                                          (o.city ? `, ${o.city}` : "")}
+                                      </span>
                                     </span>
-                                  )}
-                                  <OptionChips options={o.options} />
-                                </div>
-                              )}
+                                    <button
+                                      onClick={async () => {
+                                        await navigator.clipboard.writeText(
+                                          `${o.address ?? ""}${
+                                            o.city ? ", " + o.city : ""
+                                          }`
+                                        );
+                                        toast.success("Address copied");
+                                      }}
+                                      className="underline shrink-0 inline-flex items-center gap-1"
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                      Copy
+                                    </button>
+                                    {o.address && (
+                                      <a
+                                        className="underline shrink-0"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                          `${o.address} ${o.city ?? ""}`
+                                        )}`}
+                                      >
+                                        Open map
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+
+                                {(o.personalization || o.options) && (
+                                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                                    {o.personalization && (
+                                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
+                                        With personalization
+                                      </span>
+                                    )}
+                                    <OptionChips options={o.options} />
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </li>
+                          </li>
+                        </Link>
                       );
                     })}
                   </ul>
@@ -888,83 +889,84 @@ Options: ${opts}
         </ul>
       ) : (
         /* ——— FLAT RENDER (unified with Products list style) ——— */
-        <ul className="mt-3 space-y-2">
+        <ul className="mt-3 space-y-3">
           {paged.map((o) => {
             const img = o.products?.photos?.[0];
             const hasAddress = o.address || o.city;
             const hasExtras = o.personalization || o.options;
 
             return (
-              <Link key={o.id} href={`/seller/orders/${o.id}`}>
-                <li className="rounded-2xl bg-white p-3 border border-black/5">
-                  <div className="flex gap-3">
-                    {/* Image */}
-                    <div className="w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
-                      {img ? (
-                        <img
-                          src={img}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
-                          No image
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Main content */}
-                    <div className="flex-1 min-w-0">
-                      {/* Top row: ID + Status */}
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[11px] text-ink/60 font-medium">
-                          #{o.id.slice(0, 6)}
-                        </span>
-                        <StatusBadge status={o.status} />
+              <li
+                key={o.id}
+                className="rounded-2xl bg-white p-3 border border-black/10"
+              >
+                <Link href={`/seller/orders/${o.id}`} className="flex gap-3">
+                  {/* Image */}
+                  <div className="w-16 h-16 rounded-md bg-white overflow-hidden mb-0  ">
+                    {img ? (
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full grid place-items-center text-[10px] text-ink/40">
+                        No image
                       </div>
-
-                      {/* Title */}
-                      <h4
-                        className="mt-0.5 text-[15px] font-semibold truncate"
-                        title={o.products?.title ?? "Order"}
-                      >
-                        {o.products?.title ?? "Order"}
-                      </h4>
-
-                      {/* Meta row (like Products list) */}
-                      <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-1">
-                        <span className="font-medium">MAD {o.amount_mad}</span>
-                        <span>·</span>
-                        <span>Qty {o.qty}</span>
-                        <span>·</span>
-                        <span>{new Date(o.created_at).toLocaleString()}</span>
-                      </div>
-
-                      {/* Address, if any */}
-                      {hasAddress && (
-                        <div className="mt-1 text-[11px] text-ink/70 flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span className="truncate">
-                            {(o.address ?? "") + (o.city ? `, ${o.city}` : "")}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Extras: personalization + options as pills */}
-                      {hasExtras && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                          {o.personalization && (
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
-                              With personalization
-                            </span>
-                          )}
-                          <OptionChips options={o.options} />
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                </li>
-              </Link>
+
+                  {/* Main content */}
+                  <div className="flex-1 min-w-0">
+                    {/* Top row: ID + Status */}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[11px] text-ink/60 font-medium">
+                        #{o.id.slice(0, 6)}
+                      </span>
+                      <StatusBadge status={o.status} />
+                    </div>
+
+                    {/* Title */}
+                    <h4
+                      className="mt-0.5 text-[15px] font-semibold truncate"
+                      title={o.products?.title ?? "Order"}
+                    >
+                      {o.products?.title ?? "Order"}
+                    </h4>
+
+                    {/* Meta row */}
+                    <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-1">
+                      <span className="font-medium">MAD {o.amount_mad}</span>
+                      <span>·</span>
+                      <span>Qty {o.qty}</span>
+                      <span>·</span>
+                      <span>{new Date(o.created_at).toLocaleString()}</span>
+                    </div>
+
+                    {/* Address, if any */}
+                    {hasAddress && (
+                      <div className="mt-1 text-[11px] text-ink/70 flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5" />
+                        <span className="truncate">
+                          {(o.address ?? "") + (o.city ? `, ${o.city}` : "")}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Extras: personalization + options as pills */}
+                    {hasExtras && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {o.personalization && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
+                            With personalization
+                          </span>
+                        )}
+                        <OptionChips options={o.options} />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              </li>
             );
           })}
         </ul>

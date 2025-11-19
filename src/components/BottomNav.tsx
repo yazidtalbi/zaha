@@ -316,6 +316,7 @@ export default function BottomNav() {
 
   // hide bottom nav on the sell flow
   if (path.startsWith("/seller/sell")) return null;
+  if (path.startsWith("/shop")) return null;
 
   // ---------- SELLER NAV ----------
   if (isSeller) {

@@ -78,17 +78,27 @@ export default function FavButton({
   }
 
   return (
-    <button
-      type="button"
-      disabled={busy}
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={on}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
         toggle();
       }}
-      className={`grid place-items-center active:scale-[0.98] disabled:opacity-60 ${className}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          toggle();
+        }
+      }}
+      className={`grid place-items-center active:scale-[0.98] disabled:opacity-60 ${className} ${
+        busy ? "opacity-60 pointer-events-none" : ""
+      }`}
     >
       <Heart size={size} className={on ? "fill-current" : ""} />
-    </button>
+    </div>
   );
 }
