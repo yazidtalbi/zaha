@@ -319,6 +319,7 @@ export default function BottomNav() {
   if (path.startsWith("/shop")) return null;
 
   if (path.startsWith("/seller/edit/")) return null;
+  if (path.startsWith("/admin")) return null;
 
   // ---------- SELLER NAV ----------
   if (isSeller) {
