@@ -10,6 +10,7 @@ import {
   Store,
   ReceiptText,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 
 const navItems = [
@@ -32,6 +33,11 @@ const navItems = [
     href: "/admin/orders",
     label: "Orders",
     icon: ReceiptText,
+  },
+  {
+    href: "/admin/users",
+    label: "Users",
+    icon: Users,
   },
 ];
 

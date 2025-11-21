@@ -3,31 +3,29 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import Link from "next/link";
-
-type ShopRow = {
-  id: string;
-  title: string | null;
-  city: string | null;
-  created_at: string;
-  is_verified: boolean | null;
-  owner: string | null;
-  owner_name?: string | null;
-  email: string | null;
-  orders_count: number | null;
-  products_count?: number;
-};
+import { DataTable } from "@/components/admin/data-table";
+import { getShopColumns, ShopRow } from "./columns";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 export default function AdminShopsPage() {
   const [rows, setRows] = useState<ShopRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
+
   useEffect(() => {
-    let mounted = true;
+    let ignore = false;
 
     async function load() {
       setLoading(true);
@@ -40,7 +38,9 @@ export default function AdminShopsPage() {
           .order("created_at", { ascending: false })
           .limit(200);
 
-        if (error || !shops || !mounted) {
+        if (ignore) return;
+
+        if (error || !shops) {
           setRows([]);
           return;
         }
@@ -56,7 +56,7 @@ export default function AdminShopsPage() {
             .select("id, name")
             .in("id", ownerIds);
 
-          if (profiles) {
+          if (!ignore && profiles) {
             ownersMap = profiles.reduce((acc: any, p: any) => {
               acc[p.id] = p.name;
               return acc;
@@ -64,23 +64,25 @@ export default function AdminShopsPage() {
           }
         }
 
-        const shopIds = shops.map((s: any) => s.id);
+        const shopIds = (shops as any[]).map((s) => s.id);
         let productsCountMap: Record<string, number> = {};
         if (shopIds.length > 0) {
-          const { data: productsAgg } = await supabase
+          const { data: products } = await supabase
             .from("products")
-            .select("shop_id, id", { count: "exact", head: false })
+            .select("shop_id, id")
             .in("shop_id", shopIds);
 
-          if (productsAgg) {
-            productsAgg.forEach((p: any) => {
+          if (!ignore && products) {
+            (products as any[]).forEach((p) => {
               const sid = p.shop_id;
               productsCountMap[sid] = (productsCountMap[sid] ?? 0) + 1;
             });
           }
         }
 
-        const mapped: ShopRow[] = shops.map((s: any) => ({
+        if (ignore) return;
+
+        const mapped: ShopRow[] = (shops as any[]).map((s) => ({
           id: s.id,
           title: s.title,
           city: s.city,
@@ -93,114 +95,85 @@ export default function AdminShopsPage() {
           products_count: productsCountMap[s.id] ?? 0,
         }));
 
-        if (mounted) setRows(mapped);
+        setRows(mapped);
       } finally {
-        if (mounted) setLoading(false);
+        if (!ignore) setLoading(false);
       }
     }
 
     load();
-
     return () => {
-      mounted = false;
+      ignore = true;
     };
   }, []);
 
-  async function toggleActive(id: string, current: boolean | null) {
-    const next = !current;
+  async function handleToggleActive(id: string, current: boolean) {
     setUpdatingId(id);
     const { error } = await supabase
       .from("shops")
-      .update({ is_verified: next })
+      .update({ is_verified: !current })
       .eq("id", id);
 
     if (!error) {
       setRows((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, is_verified: next } : s))
+        prev.map((s) => (s.id === id ? { ...s, is_verified: !current } : s))
       );
     }
     setUpdatingId(null);
   }
 
+  const columns = getShopColumns({
+    onToggleActive: handleToggleActive,
+    updatingId,
+  });
+
+  const q = search.toLowerCase();
+
+  const filteredRows = rows.filter((s) => {
+    const active = !!s.is_verified;
+    if (statusFilter === "active" && !active) return false;
+    if (statusFilter === "inactive" && active) return false;
+
+    if (!q) return true;
+    const hay =
+      `${s.title ?? ""} ${s.owner_name ?? ""} ${s.city ?? ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold tracking-tight">Shops</h2>
         <p className="text-xs text-neutral-500">
           Control shops and ban low-quality sellers.
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-        <div className="grid grid-cols-[2fr,1.5fr,1.2fr,0.8fr,0.8fr,auto] bg-neutral-50 px-4 py-2 text-xs font-medium text-neutral-600">
-          <div>Shop</div>
-          <div>Owner</div>
-          <div>City</div>
-          <div>Products</div>
-          <div>Orders</div>
-          <div className="text-right">Actions</div>
-        </div>
-
-        {loading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="p-4 text-sm text-neutral-500">No shops found.</div>
-        ) : (
-          <div className="divide-y divide-neutral-100">
-            {rows.map((s) => (
-              <div
-                key={s.id}
-                className="grid grid-cols-[2fr,1.5fr,1.2fr,0.8fr,0.8fr,auto] items-center px-4 py-2 text-sm"
-              >
-                <div className="truncate">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate">{s.title ?? "—"}</span>
-                    <Badge
-                      variant={s.is_verified ? "default" : "outline"}
-                      className={s.is_verified ? "bg-emerald-600" : ""}
-                    >
-                      {s.is_verified ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-neutral-500">{s.id}</div>
-                </div>
-                <div className="truncate text-xs">
-                  {s.owner_name ?? "—"}
-                  {s.email ? (
-                    <span className="block text-[11px] text-neutral-500">
-                      {s.email}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="truncate text-xs">{s.city ?? "—"}</div>
-                <div className="text-xs">{s.products_count ?? 0}</div>
-                <div className="text-xs">{s.orders_count ?? 0}</div>
-                <div className="flex justify-end gap-2">
-                  <Link
-                    href={`/shop/${s.id}`}
-                    className="text-xs text-neutral-700 underline"
-                  >
-                    View
-                  </Link>
-                  <Button
-                    size="xs"
-                    variant={s.is_verified ? "outline" : "default"}
-                    disabled={updatingId === s.id}
-                    onClick={() => toggleActive(s.id, !!s.is_verified)}
-                    className="text-xs"
-                  >
-                    {s.is_verified ? "Deactivate" : "Activate"}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="Search by shop, owner or city…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full max-w-xs"
+        />
+        <Select
+          value={statusFilter}
+          onValueChange={(v) =>
+            setStatusFilter(v as "all" | "active" | "inactive")
+          }
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      <DataTable columns={columns} data={filteredRows} isLoading={loading} />
     </div>
   );
 }

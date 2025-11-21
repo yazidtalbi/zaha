@@ -297,25 +297,25 @@ export default function MarketingPage() {
 
                   {/* Foreground text + CTA (stays above, like Klarna) */}
                   <div
-                    className="mt-24 relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center gap-10 px-4 pt-24 pb-[34vh] sm:pt-28 sm:pb-[36vh] md:flex-row md:items-center md:justify-end md:gap-12 md:px-8 lg:px-12 md:pb-24"
+                    className="mt-24 relative z-10 mx-auto flex h-full max-w-[90vw] flex-col items-center justify-center gap-10 px-4 pt-24 pb-[34vh] sm:pt-28 sm:pb-[36vh] md:flex-row md:items-center md:justify-end md:gap-12 md:px-8 lg:px-12 md:pb-24"
                     style={{
                       transform: `translateY(${contentOffset}px)`,
                       transformOrigin: "center center",
                     }}
                   >
                     {/* Left block */}
-                    <div className="w-full max-w-sm text-center md:flex-1 ">
+                    <div className="w-full max-w-sm text-center md:flex-1  mt-0 sm:mt-10 ">
                       <motion.div
                         className="mx-auto mb-4 flex items-center justify-center sm:mb-6"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.7, ease: EASE, delay: 0.3 }}
                       >
-                        <BrandStar className="h-8 w-8 text-[#C9B6A6] sm:h-10 sm:w-10" />
+                        <BrandStar className="h-8 w-8 text-[#C9B6A6] sm:h-8 sm:w-8" />
                       </motion.div>
 
                       <motion.h1
-                        className="text-[2.1rem] sm:text-[2.6rem] md:text-[2.8rem] font-semibold leading-tight text-neutral-900"
+                        className="text-[2.1rem] sm:text-[2.6rem] md:text-[2.8rem] font-semibold leading-13 text-[#1B1124] "
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, ease: EASE, delay: 0.35 }}
@@ -325,7 +325,9 @@ export default function MarketingPage() {
                         products made
                         <br />
                         with{" "}
-                        <span className={`${playfair.className} italic`}>
+                        <span
+                          className={`${playfair.className} italic font-normal`}
+                        >
                           Soul
                         </span>
                       </motion.h1>
@@ -335,38 +337,50 @@ export default function MarketingPage() {
                     <div className="hidden flex-1 md:block" />
 
                     {/* Right copy + CTA */}
+                    {/* Right copy + QR CTA card */}
                     <motion.div
                       className="w-full max-w-xs text-center md:flex-1"
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.85, ease: EASE, delay: 0.4 }}
                     >
-                      <p className="text-base sm:text-lg leading-relaxed text-neutral-900">
-                        Connect with Morocco&apos;s{" "}
+                      <p className="text-base sm:text-lg leading-relaxed text-[#1B1124] font-normal mt-0 sm:mt-7 ">
+                        Connect with Morocco&apos;s
                         <br className="hidden sm:block" />
-                        most talented artisans & discover pieces you won&apos;t
-                        find anywhere else.
+                        most talented artisans & discover{" "}
+                        <br className="hidden sm:block" />
+                        pieces you won&apos;t find anywhere else.
                       </p>
 
                       <motion.div
-                        className="mt-5 flex flex-col items-center justify-center gap-2 sm:mt-6"
+                        className="mt-5 flex justify-center sm:mt-10"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.7, ease: EASE, delay: 0.5 }}
                       >
-                        <button
-                          onClick={() =>
-                            window.dispatchEvent(new Event("amzy-install-pwa"))
-                          }
-                          className="inline-flex items-center gap-2 rounded-full bg-[#23102f] px-5 py-2.5 text-sm sm:text-base font-medium text-white"
-                        >
-                          <Download className="h-4 w-4" />
-                          <span>Install now</span>
-                        </button>
+                        <div className="inline-flex items-center gap-4 rounded-xl border-2 border-[#e5d6ff]   px-2 py-3   sm:px-2 sm:py-2 sm:pr-10">
+                          {/* QR block */}
+                          <div className="flex items-center justify-center rounded-lg bg-white  overflow-hidden">
+                            <div className="relative h-16 w-16 sm:h-20 sm:w-20">
+                              <Image
+                                src="/landing/qr.jpg" // <- put your final QR/card image here
+                                alt="Scan to download the Zaha app"
+                                fill
+                                className="object-contain"
+                                priority={false}
+                              />
+                            </div>
+                          </div>
 
-                        <span className="text-[11px] sm:text-xs text-[#2d183b]/40">
-                          No download required
-                        </span>
+                          {/* Text */}
+                          <div className="text-left">
+                            <p className="text-[11px] sm:text-lg font-semibold text-[#2a1335] leading-6">
+                              Scan to <br />
+                              download the <br />
+                              Zaha app
+                            </p>{" "}
+                          </div>
+                        </div>
                       </motion.div>
                     </motion.div>
                   </div>

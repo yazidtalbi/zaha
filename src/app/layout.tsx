@@ -33,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={instrumentSans.variable}>
-      <body className="font-sans text-ink min-h-screen overflow-x-hidden">
+      <body className="font-sans text-ink min-h-screen overflow-x-hidden  mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-neutral-50">
         <ServiceWorkerRegister /> {/* 👈 now valid */}
         <ClientChrome>{children}</ClientChrome>
       </body>

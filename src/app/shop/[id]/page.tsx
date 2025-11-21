@@ -676,7 +676,7 @@ export default function ShopPage() {
               : "opacity-0 -translate-y-4 pointer-events-none"
           }`}
         >
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto">
             <div className="flex items-center gap-3">
               <button
                 type="button"

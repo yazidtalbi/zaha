@@ -956,52 +956,55 @@ export default function ProductPage() {
     <>
       <main className="pb-10 bg-neutral-50 min-h-screen">
         {/* Floating overlays */}
-        <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
-          <button
-            onClick={handleBack}
-            className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
-          >
-            <ChevronLeft size={18} />
-          </button>
-        </div>
-        <div className="fixed z-10 top-3 right-3 flex items-center gap-2 p-2">
-          <button
-            onClick={async () => {
-              const url = window.location.href;
-              const title = p?.title ?? "Zaha";
-              try {
-                if (navigator.share) await navigator.share({ title, url });
-                else {
-                  await navigator.clipboard.writeText(url);
-                  toast.success("Link copied to clipboard");
-                }
-              } catch {
-                try {
-                  await navigator.clipboard.writeText(url);
-                  toast.success("Link copied to clipboard");
-                } catch {}
-              }
-            }}
-            className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
-          >
-            <Share2 size={16} />
-          </button>
-          <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
-            <FavButton
-              productId={p.id}
-              shopOwner={shop?.owner ?? p?.shop_owner ?? null}
-            />
-          </button>
-          {isOwner && (
-            <Link
-              href={`/seller/edit/${p.id}`}
-              className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
-              aria-label="Edit product"
-              title="Edit product"
+        <div className="fixed z-10 mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
+          {" "}
+          <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
+            <button
+              onClick={handleBack}
+              className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
             >
-              <Pencil size={16} />
-            </Link>
-          )}
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div className="fixed z-10 top-3 right-3 flex items-center gap-2 p-2 ">
+            <button
+              onClick={async () => {
+                const url = window.location.href;
+                const title = p?.title ?? "Zaha";
+                try {
+                  if (navigator.share) await navigator.share({ title, url });
+                  else {
+                    await navigator.clipboard.writeText(url);
+                    toast.success("Link copied to clipboard");
+                  }
+                } catch {
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    toast.success("Link copied to clipboard");
+                  } catch {}
+                }
+              }}
+              className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center"
+            >
+              <Share2 size={16} />
+            </button>
+            <button className="h-9 w-9 rounded-full bg-black/60 text-white grid place-items-center">
+              <FavButton
+                productId={p.id}
+                shopOwner={shop?.owner ?? p?.shop_owner ?? null}
+              />
+            </button>
+            {isOwner && (
+              <Link
+                href={`/seller/edit/${p.id}`}
+                className="h-9 w-9 rounded-full bg-white text-black grid place-items-center"
+                aria-label="Edit product"
+                title="Edit product"
+              >
+                <Pencil size={16} />
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Sticky top title bar */}
@@ -1012,7 +1015,7 @@ export default function ProductPage() {
               : "opacity-0 -translate-y-4 pointer-events-none"
           }`}
         >
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
             <div className="flex items-center gap-2">
               <button
                 type="button"

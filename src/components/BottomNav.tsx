@@ -390,7 +390,7 @@ export default function BottomNav() {
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        router.push("/home");
+                        router.push("/");
                       }}
                       className="w-full h-12 px-4 rounded-2xl flex items-center gap-3 bg-[#371837]/8 hover:bg-[#371837]/12 active:bg-[#371837]/16 text-gray-700"
                     >
@@ -583,7 +583,7 @@ export default function BottomNav() {
       <div className="max-w-screen-sm mx-auto rounded-t-2xl">
         <ul className="grid grid-cols-5 px-2 pb-[env(safe-area-inset-bottom)]">
           <li>
-            <Item href="/home" label="Home" match="/home" icon={Home} />
+            <Item href="/" label="Home" match="/" icon={Home} />
           </li>
           <li>
             <Item href="/search" label="Shop" match="/search" icon={Search} />
