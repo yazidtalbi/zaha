@@ -784,101 +784,74 @@ Options: ${opts}
                     {g.orders.map((o) => {
                       const img = o.products?.photos?.[0];
                       return (
-                        <Link
-                          href={`/seller/orders/${o.id}`}
-                          className="text-xs font-medium truncate underline decoration-ink/30 hover:decoration-ink"
+                        <li
+                          key={o.id}
+                          className="rounded-xl bg-white p-3 border border-black/5"
                         >
-                          {" "}
-                          <li
-                            key={o.id}
-                            className="rounded-xl bg-white p-3 border border-black/5"
+                          <Link
+                            href={`/seller/orders/${o.id}`}
+                            className="flex items-start gap-3"
                           >
-                            <div className="flex items-start gap-3">
-                              {/* Corner icon instead of checkbox */}
-                              <div className="pt-1 text-ink/50 shrink-0">
-                                <CornerDownRight className="h-4 w-4" />
-                              </div>
-
-                              <div className="w-10 h-10 rounded-md bg-neutral-100 overflow-hidden shrink-0">
-                                {img ? (
-                                  <img
-                                    src={img}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : null}
-                              </div>
-
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2">
-                                  #{o.id.slice(0, 6)}
-                                  <StatusBadge status={o.status} />
-                                </div>
-
-                                <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
-                                  <span className="font-medium">
-                                    MAD {o.amount_mad}
-                                  </span>
-                                  <span>·</span>
-                                  <span>Qty {o.qty}</span>
-                                  <span>·</span>
-                                  <span>
-                                    {new Date(o.created_at).toLocaleString()}
-                                  </span>
-                                </div>
-
-                                {(o.address || o.city) && (
-                                  <div className="mt-1 text-[11px] text-ink/70 flex flex-wrap items-center gap-2">
-                                    <span className="inline-flex items-center gap-1 min-w-0">
-                                      <MapPin className="h-3.5 w-3.5" />
-                                      <span className="truncate">
-                                        {(o.address ?? "") +
-                                          (o.city ? `, ${o.city}` : "")}
-                                      </span>
-                                    </span>
-                                    <button
-                                      onClick={async () => {
-                                        await navigator.clipboard.writeText(
-                                          `${o.address ?? ""}${
-                                            o.city ? ", " + o.city : ""
-                                          }`
-                                        );
-                                        toast.success("Address copied");
-                                      }}
-                                      className="underline shrink-0 inline-flex items-center gap-1"
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                      Copy
-                                    </button>
-                                    {o.address && (
-                                      <a
-                                        className="underline shrink-0"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                          `${o.address} ${o.city ?? ""}`
-                                        )}`}
-                                      >
-                                        Open map
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-
-                                {(o.personalization || o.options) && (
-                                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                                    {o.personalization && (
-                                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
-                                        With personalization
-                                      </span>
-                                    )}
-                                    <OptionChips options={o.options} />
-                                  </div>
-                                )}
-                              </div>
+                            {/* Corner icon instead of checkbox */}
+                            <div className="pt-1 text-ink/50 shrink-0">
+                              <CornerDownRight className="h-4 w-4" />
                             </div>
-                          </li>
-                        </Link>
+
+                            {/* Image */}
+                            <div className="w-10 h-10 rounded-md bg-neutral-100 overflow-hidden shrink-0">
+                              {img ? (
+                                <img
+                                  src={img}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : null}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                #{o.id.slice(0, 6)}
+                                <StatusBadge status={o.status} />
+                              </div>
+
+                              <div className="mt-0.5 text-xs text-ink/70 flex flex-wrap items-center gap-2">
+                                <span className="font-medium">
+                                  MAD {o.amount_mad}
+                                </span>
+                                <span>·</span>
+                                <span>Qty {o.qty}</span>
+                                <span>·</span>
+                                <span>
+                                  {new Date(o.created_at).toLocaleString()}
+                                </span>
+                              </div>
+
+                              {(o.address || o.city) && (
+                                <div className="mt-1 text-[11px] text-ink/70 flex flex-wrap items-center gap-2">
+                                  <span className="inline-flex items-center gap-1 min-w-0">
+                                    <MapPin className="h-3.5 w-3.5" />
+                                    <span className="truncate">
+                                      {(o.address ?? "") +
+                                        (o.city ? `, ${o.city}` : "")}
+                                    </span>
+                                  </span>
+                                </div>
+                              )}
+
+                              {(o.personalization || o.options) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  {o.personalization && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-400/10 font-semibold text-orange-600">
+                                      With personalization
+                                    </span>
+                                  )}
+                                  <OptionChips options={o.options} />
+                                </div>
+                              )}
+                            </div>
+                          </Link>
+                        </li>
                       );
                     })}
                   </ul>

@@ -159,8 +159,8 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
 }
 function VisibleAreaSkeleton() {
   return (
-    <main className="pb-24 bg-neutral-50 min-h-screen">
-      <div className="pt-4">
+    <main className="pb-10 bg-neutral-50 min-h-screen">
+      <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
         <div className="relative rounded-2xl bg-white">
           <div className="overflow-hidden rounded-xl">
             <div className="aspect-7/8 sm:aspect-4/3">
@@ -872,6 +872,60 @@ export default function ProductPage() {
   }, [p]);
 
   const [canGoBack, setCanGoBack] = useState(false);
+
+  const handleOpenShop = useCallback(() => {
+    if (!p?.shop_id) return;
+
+    if (typeof window !== "undefined") {
+      try {
+        const prevState = window.history.state || {};
+
+        // What we pass to /shop/[id] – match your Shop type shape
+        const shopPayload = {
+          id: shop?.id ?? p.shop_id,
+          title: shop?.title ?? p.shop_title ?? "Shop",
+          is_verified: shop?.is_verified ?? false,
+          bio: shop?.bio ?? null,
+          city: shop?.city ?? p.city ?? null,
+          owner: shop?.owner ?? p.shop_owner ?? null,
+          avatar_url: shop?.avatar_url ?? null,
+          cover_urls: shop?.cover_urls ?? null,
+          created_at: shop?.created_at ?? null,
+          custom_commissions: shop?.custom_commissions ?? null,
+          orders_count: shop?.orders_count ?? p.orders_count ?? null,
+          phone: shop?.phone ?? null,
+          whatsapp: shop?.whatsapp ?? null,
+          email: shop?.email ?? null,
+          website: shop?.website ?? null,
+          instagram: shop?.instagram ?? null,
+          facebook: shop?.facebook ?? null,
+        };
+
+        window.history.replaceState(
+          { ...prevState, zahaShop: shopPayload }, // 👈 key used in ShopPage
+          ""
+        );
+      } catch {
+        // ignore, just fall through to router.push
+      }
+    }
+
+    router.push(`/shop/${p.shop_id}`);
+  }, [router, p?.shop_id, p, shop]);
+
+  //est shipping
+  const shipping = p?.item_details?.shipping ?? null;
+
+  const estMin =
+    shipping?.estimate_days_min != null
+      ? Number(shipping.estimate_days_min)
+      : null;
+
+  const estMax =
+    shipping?.estimate_days_max != null
+      ? Number(shipping.estimate_days_max)
+      : null;
+
   useEffect(() => {
     try {
       const hasHistory = window.history.length > 1;
@@ -1116,12 +1170,13 @@ export default function ProductPage() {
               By{" "}
               {p.shop_id ? (
                 shop ? (
-                  <Link
-                    href={`/shop/${p.shop_id}`}
+                  <button
+                    type="button"
+                    onClick={handleOpenShop}
                     className="inline-flex items-center gap-2 hover:underline"
                   >
                     <span className="font-semibold">{shop.title}</span>
-                  </Link>
+                  </button>
                 ) : (
                   <span className="inline-flex items-center gap-2 align-middle">
                     <Skeleton className="h-4 w-24 rounded-full" />
@@ -1162,23 +1217,40 @@ export default function ProductPage() {
             <StatPill
               label="Est. Delivery"
               value={(() => {
-                const maxDays =
-                  p?.item_details?.estimate_days_max ??
-                  p?.item_details?.estimate_days_min ??
-                  null;
-                if (!maxDays || maxDays < 0) return "—";
-                const now = new Date();
-                const eta = new Date(
-                  now.getFullYear(),
-                  now.getMonth(),
-                  now.getDate() + maxDays
-                );
-                return eta.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+                if (estMin == null && estMax == null) return "—";
+
+                const today = new Date();
+                const addDays = (base: Date, days: number) =>
+                  new Date(
+                    base.getFullYear(),
+                    base.getMonth(),
+                    base.getDate() + days
+                  );
+
+                const minDate = estMin != null ? addDays(today, estMin) : null;
+                const maxDate =
+                  estMax != null ? addDays(today, estMax) : minDate;
+
+                const fmt = (d: Date | null) =>
+                  d
+                    ? d.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "";
+
+                if (
+                  minDate &&
+                  maxDate &&
+                  minDate.getTime() !== maxDate.getTime()
+                ) {
+                  return `${fmt(minDate)}–${fmt(maxDate)}`; // e.g. "Dec 3–7"
+                }
+
+                return fmt(maxDate || minDate);
               })()}
             />
+
             <StatPill
               label="Ratings"
               value={
@@ -1599,8 +1671,7 @@ export default function ProductPage() {
                 value="Free"
               />
             )}
-            {(p?.item_details?.estimate_days_min ||
-              p?.item_details?.estimate_days_max) && (
+            {(estMin != null || estMax != null) && (
               <li className="flex items-start gap-3">
                 <span className="mt-0.5">
                   <Truck className="h-4 w-4 text-neutral-500" />
@@ -1608,16 +1679,16 @@ export default function ProductPage() {
                 <div className="text-[15px] leading-relaxed">
                   <span className="font-medium">Estimated delivery: </span>
                   <span className="text-neutral-700">
-                    {p.item_details.estimate_days_min &&
-                    p.item_details.estimate_days_max
-                      ? `${p.item_details.estimate_days_min}–${p.item_details.estimate_days_max} days`
-                      : p.item_details.estimate_days_min
-                        ? `${p.item_details.estimate_days_min} days`
-                        : `${p.item_details.estimate_days_max} days`}
+                    {estMin != null && estMax != null
+                      ? `${estMin}–${estMax} days`
+                      : estMin != null
+                        ? `${estMin} days`
+                        : `${estMax} days`}
                   </span>
                 </div>
               </li>
             )}
+
             {p?.item_details?.returns && (
               <DetailRow
                 icon={<Undo2 className="h-4 w-4 text-neutral-500" />}
@@ -1647,12 +1718,13 @@ export default function ProductPage() {
                     />
                   ) : null}
                 </div>
-                <Link
-                  href={`/shop/${shop?.id ?? ""}`}
+                <button
+                  type="button"
+                  onClick={handleOpenShop}
                   className="ml-auto inline-flex items-center rounded-full border px-3 py-1 text-sm hover:bg-white"
                 >
                   View the shop
-                </Link>
+                </button>
               </div>
 
               <div className="min-w-0 grow my-3 mb-6 px-5">
@@ -1683,9 +1755,10 @@ export default function ProductPage() {
                       </div>
                     ))}
 
-                  <Link
-                    href={`/shop/${shop?.id ?? ""}`}
-                    className="min-w-[60%] xs:min-w-[60%] sm:min-w-[48%] flex flex-col items-center justify-center rounded-2xl  bg-white py-6"
+                  <button
+                    type="button"
+                    onClick={handleOpenShop}
+                    className="min-w-[60%] xs:min-w-[60%] sm:min-w-[48%] flex flex-col items-center justify-center rounded-2xl bg-white py-6"
                   >
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-12 w-12 rounded-full border  border-neutral-300 grid place-items-center">
@@ -1696,7 +1769,7 @@ export default function ProductPage() {
                         See more
                       </span>
                     </div>
-                  </Link>
+                  </button>
                 </div>
               </div>
             </div>

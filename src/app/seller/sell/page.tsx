@@ -171,7 +171,10 @@ export default function SellPage() {
   const [description, setDescription] = useState("");
 
   const [price, setPrice] = useState<string>("");
-  const [city, setCity] = useState("");
+
+  // This will mirror the shop city (read-only for seller, used for product.city)
+  const [city, setCity] = useState(""); // kept for compatibility
+  const [shopCity, setShopCity] = useState<string | null>(null);
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [categoryPath, setCategoryPath] = useState<string>("");
@@ -203,7 +206,10 @@ export default function SellPage() {
   const [width, setWidth] = useState<string>("");
   const [height, setHeight] = useState<string>("");
   const [weight, setWeight] = useState<string>("");
+
+  // shipsFrom is now auto-filled from shop.city and not editable
   const [shipsFrom, setShipsFrom] = useState("");
+
   const [shipsTo, setShipsTo] = useState("");
   const [materials, setMaterials] = useState("");
   const [returns, setReturns] = useState<"accepted" | "not_accepted">(
@@ -228,8 +234,6 @@ export default function SellPage() {
     null
   );
   const [redirectIn, setRedirectIn] = useState(4);
-
-  // at top of component
 
   const recordRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -256,6 +260,37 @@ export default function SellPage() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isDirty]);
+
+  /* ---------- Load existing shop city to show in UI ---------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from("shops")
+          .select("id, city")
+          .eq("owner", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error loading shop for sell page:", error);
+          return;
+        }
+
+        if (data?.city) {
+          setShopCity(data.city);
+          setCity(data.city);
+          setShipsFrom(data.city);
+        }
+      } catch (err) {
+        console.error("Unexpected error loading shop:", err);
+      }
+    })();
+  }, []);
 
   /* ---------- Options CRUD ---------- */
   function addGroup() {
@@ -505,7 +540,10 @@ export default function SellPage() {
   }
 
   /* ---------- Shop ---------- */
-  async function getOrCreateMyShop(): Promise<string> {
+  async function getOrCreateMyShop(): Promise<{
+    id: string;
+    city: string | null;
+  }> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -513,21 +551,38 @@ export default function SellPage() {
 
     const { data: existing, error: selErr } = await supabase
       .from("shops")
-      .select("id, owner")
+      .select("id, owner, city")
       .eq("owner", user.id)
       .maybeSingle();
 
     if (selErr) throw selErr;
-    if (existing?.id) return existing.id;
+
+    if (existing?.id) {
+      const shopCityVal = (existing as any).city as string | null;
+      if (shopCityVal) {
+        setShopCity(shopCityVal);
+        setCity(shopCityVal);
+        setShipsFrom(shopCityVal);
+      }
+      return { id: existing.id, city: shopCityVal ?? null };
+    }
 
     const { data: created, error: insErr } = await supabase
       .from("shops")
       .insert({ owner: user.id, title: "My shop" })
-      .select("id")
+      .select("id, city")
       .maybeSingle();
 
     if (insErr) throw insErr;
-    return created!.id;
+
+    const shopCityVal = (created as any).city as string | null;
+    if (shopCityVal) {
+      setShopCity(shopCityVal);
+      setCity(shopCityVal);
+      setShipsFrom(shopCityVal);
+    }
+
+    return { id: created!.id, city: shopCityVal ?? null };
   }
 
   /* ---------- Promo helpers ---------- */
@@ -625,14 +680,6 @@ export default function SellPage() {
 
       if (description.length > LIMITS.description)
         throw new Error(`Description must be ≤ ${LIMITS.description} chars`);
-      if (city.length > LIMITS.city)
-        throw new Error(`City must be ≤ ${LIMITS.city} chars`);
-      if (shipsFrom.length > LIMITS.shipsFrom)
-        throw new Error(`"Ships from" must be ≤ ${LIMITS.shipsFrom} chars`);
-      if (shipsTo.length > LIMITS.shipsTo)
-        throw new Error(`"Ships to" must be ≤ ${LIMITS.shipsTo} chars`);
-      if (materials.length > LIMITS.materials)
-        throw new Error(`Materials must be ≤ ${LIMITS.materials} chars`);
       if (shipNotes.length > LIMITS.shipNotes)
         throw new Error(`Shipping notes must be ≤ ${LIMITS.shipNotes} chars`);
 
@@ -648,13 +695,31 @@ export default function SellPage() {
         notes: shipNotes.trim() || null,
       };
 
+      setSaving(true);
+
+      // Get or create the shop, with its city
+      const { id: shopId, city: shopCityDb } = await getOrCreateMyShop();
+      const effectiveCity = shopCityDb ?? shopCity ?? null;
+
+      if (!effectiveCity) {
+        throw new Error(
+          "Please set your shop city in Shop settings before publishing a product."
+        );
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
       const item_details: ItemDetails = {
         type: itemType,
         width_cm: width !== "" ? Number(width) : null,
         height_cm: height !== "" ? Number(height) : null,
         weight_kg: weight !== "" ? Number(weight) : null,
         personalizable: personalization_enabled,
-        ships_from: shipsFrom || city || null,
+        // ships_from is now always the shop city (no manual override)
+        ships_from: effectiveCity,
         ships_to: shipsTo
           .split(",")
           .map((s) => s.trim())
@@ -667,20 +732,15 @@ export default function SellPage() {
         shipping,
       };
 
-      setSaving(true);
-
-      const shopId = await getOrCreateMyShop();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in");
-
       const payload: NewProductInsertWithOwner = {
         title: title.trim(),
         keywords: kw.length ? joinKeywordsForDB(kw) : null,
         description: description.trim() || null,
         price_mad: Math.round(Number(price)),
-        city: city.trim() || null,
+
+        // product city used in search/listings → from shop.city
+        city: effectiveCity,
+
         active: false,
         photos,
         shop_id: shopId,
@@ -725,12 +785,9 @@ export default function SellPage() {
         .eq("id", productId);
       if (actErr) throw actErr;
 
-      // alert("Product created!");
-
       // Success 🎉
       setPublishSuccess({ id: productId });
       setRedirectIn(4);
-      // router.push(`/product/${productId}`);
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -793,7 +850,6 @@ export default function SellPage() {
       return;
     }
     setStep((s) => s + 1);
-    // keep content scrolled to top of the pane, not the window
     const pane = document.getElementById("sell-scroll-pane");
     pane?.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -868,8 +924,6 @@ export default function SellPage() {
       </div>
 
       {/* Scrollable content pane */}
-      {/* Scrollable content pane */}
-      {/* Scrollable content pane */}
       <div
         id="sell-scroll-pane"
         className="min-h-0 flex-1 overflow-y-auto
@@ -891,72 +945,6 @@ export default function SellPage() {
                 {step === 0 && (
                   <>
                     <h1 className="text-xl font-semibold">Photos & Video</h1>
-
-                    {/* Preview rail (what buyers see) */}
-                    {/* <div className="rounded-xl border bg-white p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <div className="text-sm font-medium">Preview</div>
-                        <div className="text-xs text-neutral-600">
-                          First = cover • Video shows 2nd
-                        </div>
-                      </div>
-                      <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                     
-                        {(() => {
-                          const items: Array<{
-                            kind: "photo" | "video";
-                            src: string;
-                            i?: number;
-                          }> = [];
-                          if (photos[0])
-                            items.push({ kind: "photo", src: photos[0], i: 0 });
-                          if (videoPosterUrl)
-                            items.push({ kind: "video", src: videoPosterUrl });
-                          for (let idx = 1; idx < photos.length; idx++) {
-                            items.push({
-                              kind: "photo",
-                              src: photos[idx],
-                              i: idx,
-                            });
-                          }
-                          if (!items.length) {
-                            return (
-                              <div className="h-28 w-full grid place-items-center text-xs text-neutral-500 rounded-lg border bg-neutral-50">
-                                Add photos to see the preview
-                              </div>
-                            );
-                          }
-                          return items.map((m, k) => (
-                            <div
-                              key={`${m.kind}-${m.src}-${k}`}
-                              className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg border bg-white"
-                              title={
-                                m.kind === "video"
-                                  ? "Video appears second"
-                                  : "Photo"
-                              }
-                            >
-                             
-                              <img
-                                src={m.src}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                              {k === 0 && (
-                                <span className="absolute left-1 top-1 rounded-md bg-ink text-white text-[10px] px-1.5 py-0.5">
-                                  Cover
-                                </span>
-                              )}
-                              {m.kind === "video" && (
-                                <span className="absolute bottom-1 left-1 rounded-md bg-black/80 text-white text-[10px] px-1.5 py-0.5 flex items-center gap-1">
-                                  <Play className="h-3 w-3" /> Video
-                                </span>
-                              )}
-                            </div>
-                          ));
-                        })()}
-                      </div>
-                    </div> */}
 
                     {/* Photos uploader (camera or upload) */}
                     <div className="rounded-xl border bg-white p-4 space-y-3">
@@ -1301,7 +1289,6 @@ export default function SellPage() {
 
                     {/* Promo Section */}
                     <div className="rounded-lg border p-4 space-y-4 bg-white">
-                      {/* Header row with switch */}
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-medium">Promo</div>
                         <div className="flex items-center gap-2">
@@ -1315,7 +1302,6 @@ export default function SellPage() {
                         </div>
                       </div>
 
-                      {/* Only show promo fields if enabled */}
                       {promoEnabled && (
                         <>
                           <label className="block">
@@ -1460,25 +1446,23 @@ export default function SellPage() {
                         />
                       </div>
 
+                      {/* Ships from – read-only, from shop.city */}
                       <div className="space-y-1">
                         <Label>
                           Ships from{" "}
                           <span className="text-neutral-500">
-                            (shown to buyers)
+                            (comes from your shop)
                           </span>
                         </Label>
                         <Input
-                          value={shipsFrom}
-                          onChange={(e) =>
-                            setShipsFrom(
-                              e.target.value.slice(0, LIMITS.shipsFrom)
-                            )
-                          }
-                          placeholder="Casablanca"
-                          className="rounded-lg shadow-none"
+                          value={shopCity || ""}
+                          readOnly
+                          disabled
+                          placeholder="Set your shop city in Shop settings"
+                          className="rounded-lg shadow-none bg-neutral-100 text-neutral-700 cursor-not-allowed"
                         />
-                        <div className="text-xs text-neutral-500 text-right">
-                          {shipsFrom.length}/{LIMITS.shipsFrom}
+                        <div className="text-xs text-neutral-500">
+                          To change this, edit your shop city in Shop settings.
                         </div>
                       </div>
 
@@ -1557,7 +1541,6 @@ export default function SellPage() {
                         </div>
                       )}
 
-                      {/* Only under FREE shipping */}
                       {shipMode === "free" && (
                         <div className="space-y-1">
                           <Label>Free over (MAD)</Label>
@@ -1639,7 +1622,7 @@ export default function SellPage() {
                       Options & Personalization
                     </h1>
 
-                    {/* ---------- Options (custom dropdowns) ---------- */}
+                    {/* Options */}
                     <section className="rounded-lg border p-4 space-y-4 bg-white">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium">
@@ -1664,16 +1647,12 @@ export default function SellPage() {
                         </p>
                       )}
 
-                      {/* GROUPS */}
                       {groups.map((g, gi) => (
                         <div key={g.id} className="space-y-4">
-                          {/* Group Title */}
-
                           <div className="text-sm font-medium text-neutral-500">
                             Option {gi + 1}
                           </div>
 
-                          {/* Group Name + Remove Icon */}
                           <div className="flex items-center gap-2">
                             <Input
                               value={g.name}
@@ -1685,7 +1664,6 @@ export default function SellPage() {
                               maxLength={LIMITS.optionGroupName}
                             />
 
-                            {/* Remove icon only */}
                             <Button
                               type="button"
                               variant="destructive"
@@ -1697,7 +1675,6 @@ export default function SellPage() {
                             </Button>
                           </div>
 
-                          {/* Required Toggle on its own row */}
                           <div className="flex items-center gap-2">
                             <Label htmlFor={`req-${g.id}`} className="text-sm">
                               Required
@@ -1709,14 +1686,12 @@ export default function SellPage() {
                             />
                           </div>
 
-                          {/* Column headers (Name / Added price) */}
                           <div className="grid grid-cols-5 gap-2 text-[13px] text-neutral-500 mb-1">
                             <div className="col-span-3">Name</div>
                             <div className="col-span-1">Added price</div>
                             <div className="col-span-1" />
                           </div>
 
-                          {/* Values */}
                           <div className="space-y-2">
                             {g.values.map((v) => (
                               <div
@@ -1774,7 +1749,6 @@ export default function SellPage() {
                             Add value
                           </Button>
 
-                          {/* Separator between big option groups (not after last) */}
                           {gi < groups.length - 1 && (
                             <Separator className="my-4 bg-black" />
                           )}
@@ -1782,7 +1756,7 @@ export default function SellPage() {
                       ))}
                     </section>
 
-                    {/* ---------- Personalization ---------- */}
+                    {/* Personalization */}
                     <section className="rounded-lg border p-4 space-y-4 bg-white">
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-medium">
@@ -1866,7 +1840,6 @@ export default function SellPage() {
                       ) : (
                         <>
                           {(() => {
-                            // Build: cover photo → video poster → remaining photos
                             const items: Array<{
                               kind: "photo" | "video";
                               src: string;
@@ -1899,7 +1872,6 @@ export default function SellPage() {
                                     key={m.key}
                                     className="relative aspect-square overflow-hidden rounded-lg border bg-white"
                                   >
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                       src={m.src}
                                       alt=""
@@ -1972,9 +1944,7 @@ export default function SellPage() {
                         <div className="text-right">{weight || "—"} kg</div>
 
                         <div className="text-neutral-500">Ships from</div>
-                        <div className="text-right">
-                          {shipsFrom || city || "—"}
-                        </div>
+                        <div className="text-right">{shopCity || "—"}</div>
 
                         <div className="text-neutral-500">Ships to</div>
                         <div className="text-right truncate">
@@ -2011,7 +1981,6 @@ export default function SellPage() {
                     <section className="rounded-lg border bg-white p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-medium">
-                          {" "}
                           Options & personalization
                         </div>
                         <EditSection go={3} />
@@ -2063,7 +2032,7 @@ export default function SellPage() {
                       )}
 
                       {/* Personalization */}
-                      <div className="  gap-y-2 text-sm mt-6">
+                      <div className="gap-y-2 text-sm mt-6">
                         <div className="flex items-center gap-2 text-sm">
                           {persoEnabled ? (
                             <>
@@ -2220,7 +2189,7 @@ export default function SellPage() {
                 )}
               </motion.div>
             </AnimatePresence>
-          </div>{" "}
+          </div>
         </div>
       </div>
 

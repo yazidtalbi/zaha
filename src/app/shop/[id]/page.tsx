@@ -123,7 +123,20 @@ export default function ShopPage() {
 
   const shopId = (id ?? "").toString().trim();
 
-  const [shop, setShop] = useState<Shop | null>(null);
+  // try to read a pre-loaded shop from history.state (or whatever key you use)
+  function getInitialShopFromHistory(): Shop | null {
+    if (typeof window === "undefined") return null;
+    const state = window.history.state as any;
+    // 👇 use the same key you use for product → product page
+    return (state && state.zahaShop) ?? null;
+  }
+
+  const [shop, setShop] = useState<Shop | null>(() =>
+    getInitialShopFromHistory()
+  );
+
+  // if we already have a shop, don't show full skeletons
+  const [loading, setLoading] = useState(() => !getInitialShopFromHistory());
 
   // paginated products
   const [items, setItems] = useState<ProductEx[]>([]);
@@ -140,7 +153,6 @@ export default function ShopPage() {
     Record<string, Record<string, number | null>>
   >({});
 
-  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [stats, setStats] = useState<{ sales: number; years: number } | null>(
     null
@@ -272,12 +284,16 @@ export default function ShopPage() {
   }, [shopId]);
 
   // ---- INITIAL SHOP + AUX DATA, then first page of products ----
+  // ---- INITIAL SHOP + AUX DATA, then first page of products ----
   useEffect(() => {
     if (!shopId) return;
     let cancelled = false;
 
     (async () => {
-      setLoading(true);
+      // if we already have a shop from navigation, keep UI “warm”
+      if (!shop) {
+        setLoading(true);
+      }
 
       // 1) shop
       const { data: s } = await supabase
@@ -289,7 +305,15 @@ export default function ShopPage() {
         .maybeSingle();
 
       if (cancelled) return;
-      setShop((s as any) ?? null);
+
+      // if Supabase returns something, refresh the shop data
+      if (s) {
+        setShop(s as any);
+      } else if (!shop) {
+        // no server data and no prefetched data → show "not found"
+        setShop(null);
+      }
+
       if (!s) {
         setLoading(false);
         return;
@@ -684,7 +708,7 @@ export default function ShopPage() {
                   <div className="text-md font-semibold truncate">
                     {shop?.title ?? "Shop"}
                   </div>
-                  {shop?.is_verified && (
+                  {/* {shop?.is_verified && (
                     <Image
                       src="/icons/verified_zaha.svg"
                       alt="Verified"
@@ -692,7 +716,7 @@ export default function ShopPage() {
                       height={16}
                       className="opacity-90"
                     />
-                  )}
+                  )} */}
                 </div>
                 <div className="flex items-center gap-1 text-sm">
                   {Number.isFinite(avg) ? avg.toFixed(1) : "—"}
@@ -704,7 +728,7 @@ export default function ShopPage() {
               </div>
 
               <div className="ml-auto flex items-center gap-2">
-                <button
+                {/* <button
                   type="button"
                   onClick={() => searchInputRef.current?.focus()}
                   className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-700 grid place-items-center"
@@ -712,7 +736,7 @@ export default function ShopPage() {
                   title="Search in shop"
                 >
                   <Search className="h-4 w-4" />
-                </button>
+                </button> */}
                 <button
                   type="button"
                   onClick={shareShop}

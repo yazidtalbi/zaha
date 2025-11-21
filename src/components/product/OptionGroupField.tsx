@@ -22,7 +22,7 @@ export function OptionGroupField({ group, valueId, onChange }: Props) {
   const [open, setOpen] = React.useState(false);
 
   const values = group.values ?? [];
-  const manyValues = values.length > 8;
+  const manyValues = values.length > 3;
 
   React.useEffect(() => {
     // default select first if nothing is chosen
@@ -118,7 +118,7 @@ export function OptionGroupField({ group, valueId, onChange }: Props) {
           className="p-0 rounded-t-3xl border-none max-h-[80vh] overflow-hidden"
         >
           {/* handle + header */}
-          <div className="pt-2 pb-3 border-b border-neutral-200">
+          <div className="pt-2 pb-3  ">
             <div className="flex items-center justify-center">
               <div className="h-1.5 w-16 rounded-full bg-neutral-200" />
             </div>

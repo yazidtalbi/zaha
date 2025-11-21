@@ -318,6 +318,8 @@ export default function BottomNav() {
   if (path.startsWith("/seller/sell")) return null;
   if (path.startsWith("/shop")) return null;
 
+  if (path.startsWith("/seller/edit/")) return null;
+
   // ---------- SELLER NAV ----------
   if (isSeller) {
     const shopPath = shopSlug

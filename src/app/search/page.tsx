@@ -25,8 +25,9 @@ type Item = {
   city: string | null;
   active: boolean;
   created_at: string;
-  tags: string[] | null;
-  on_sale?: boolean;
+  promo_price_mad?: number | null;
+  personalization_enabled?: boolean | null;
+  free_shipping?: boolean | null;
 };
 
 const QUICK_FILTERS = [
@@ -56,6 +57,7 @@ type RecentView = {
 };
 
 const PAGE_SIZE = 24;
+const FETCH_TIMEOUT_MS = 15000; // 15s
 
 type CommittedState = {
   q: string;
@@ -100,15 +102,37 @@ function getCommittedFromLocation(): CommittedState {
   };
 }
 
+// timeout helper (clears timer + returns proper error)
+async function runWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error("Search timeout"));
+    }, ms);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result as T;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export default function SearchPage() {
   const router = useRouter();
 
-  // committed state that mirrors the URL
-  const [committed, setCommitted] = useState<CommittedState>(() =>
-    getCommittedFromLocation()
-  );
+  // static initial state to avoid hydration mismatch
+  const [committed, setCommitted] = useState<CommittedState>({
+    q: "",
+    city: "",
+    max: "",
+    sort: "new",
+    chips: { ...EMPTY_CHIPS },
+  });
 
-  // keep committed in sync with URL on first mount (for hard refresh / direct link)
+  // sync with URL after mount
   useEffect(() => {
     const next = getCommittedFromLocation();
     setCommitted(next);
@@ -149,7 +173,7 @@ export default function SearchPage() {
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
-  const pageRef = useRef(0); // guard for race conditions
+  const pageRef = useRef(0);
   pageRef.current = page;
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,26 +194,53 @@ export default function SearchPage() {
   async function load(reset: boolean) {
     if (!hasActiveQuery) return;
 
+    console.log("[search] load() start", {
+      reset,
+      committed,
+      page: pageRef.current,
+    });
+
     setLoading(true);
     try {
       let query = supabase
         .from("products")
         .select(
-          "id,title,photos,price_mad,city,active,created_at,tags,on_sale",
+          "id,title,photos,price_mad,city,active,created_at,promo_price_mad,personalization_enabled,free_shipping",
           { count: "exact" }
         )
-        .eq("active", true);
+        .eq("active", true)
+        .neq("unavailable", true);
 
-      if (committed.q) query = query.ilike("title", `%${committed.q}%`);
+      // ── FUZZY SEARCH (title + description + keywords)
+      const rawSearch = committed.q.trim();
+      if (rawSearch) {
+        const firstToken = rawSearch.split(/\s+/)[0];
+        const fuzzy =
+          firstToken.length > 3 ? firstToken.slice(0, 3) : firstToken;
+        const term = fuzzy || rawSearch;
+
+        query = query.or(
+          `title.ilike.%${term}%,description.ilike.%${term}%,keywords.ilike.%${term}%`
+        );
+      }
+
       if (committed.city) query = query.eq("city", committed.city);
       if (committed.max) query = query.lte("price_mad", Number(committed.max));
 
+      // chips → real columns
       if (committed.chips.under250) query = query.lte("price_mad", 250);
-      if (committed.chips.handmade)
-        query = query.contains("tags", ["handmade"]);
-      if (committed.chips.personalized)
-        query = query.contains("tags", ["personalized"]);
-      if (committed.chips.onsale) query = query.eq("on_sale", true);
+
+      if (committed.chips.onsale) {
+        query = query.not("promo_price_mad", "is", null);
+      }
+
+      if (committed.chips.handmade) {
+        query = query.ilike("keywords", "%handmade%");
+      }
+
+      if (committed.chips.personalized) {
+        query = query.eq("personalization_enabled", true);
+      }
 
       if (committed.sort === "new")
         query = query.order("created_at", { ascending: false });
@@ -201,7 +252,19 @@ export default function SearchPage() {
       const from = pageRef.current * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, error, count } = await query.range(from, to);
+      console.log("[search] sending supabase query", { from, to });
+
+      const { data, error, count } = await runWithTimeout(
+        query.range(from, to),
+        FETCH_TIMEOUT_MS
+      );
+
+      console.log("[search] supabase response", {
+        error,
+        count,
+        dataLength: (data as Item[] | null | undefined)?.length ?? 0,
+      });
+
       if (error) throw error;
 
       setItems((prev) =>
@@ -210,15 +273,26 @@ export default function SearchPage() {
           : [...prev, ...((data as Item[]) ?? [])]
       );
       if (reset) setTotal(count ?? 0);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      // Timeouts are expected sometimes → warn, don't blow up UI
+      if (e instanceof Error && e.message === "Search timeout") {
+        console.warn("[search] timeout after", FETCH_TIMEOUT_MS, "ms");
+      } else {
+        console.error("[search] error", e);
+      }
+
+      if (reset) {
+        setItems([]);
+        setTotal(0);
+      }
     } finally {
+      console.log("[search] load() done, turning loading=false");
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    setPage(0); // reset page when filters change
+    setPage(0);
     setItems([]);
     setTotal(null);
   }, [paramsKey]);
@@ -229,7 +303,7 @@ export default function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, paramsKey, hasActiveQuery]);
 
-  /* ==================== URL COMMIT / CLEAR ==================== */
+  /* ==================== URL / CLEAR ==================== */
   function pushUrlFromDrafts(
     resetPage = true,
     overrides?: Partial<{
@@ -256,7 +330,6 @@ export default function SearchPage() {
     const qs = p.toString();
     router.replace(`/search${qs ? `?${qs}` : ""}`);
 
-    // keep committed state in sync with what we just pushed
     setCommitted({
       q: qv,
       city: cityv,
@@ -292,7 +365,7 @@ export default function SearchPage() {
     pushUrlFromDrafts(true);
   }
 
-  /* ==================== AUTO-APPLY QUICK CHIPS ==================== */
+  /* ==================== AUTO-APPLY CHIPS ==================== */
   useEffect(() => {
     const t = setTimeout(() => pushUrlFromDrafts(true, { chips }), 220);
     return () => clearTimeout(t);
@@ -333,7 +406,7 @@ export default function SearchPage() {
     })();
   }, []);
 
-  /* ==================== SHEET OPEN STATE ==================== */
+  /* ==================== SHEET ==================== */
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const leftCount =
@@ -343,7 +416,7 @@ export default function SearchPage() {
   const rightCount = Object.values(committed.chips).filter(Boolean).length;
   const selectedCount = leftCount + rightCount;
 
-  /* ==================== INFINITE SCROLL SENTINEL ==================== */
+  /* ==================== INFINITE SCROLL ==================== */
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!sentinelRef.current) return;
@@ -370,7 +443,7 @@ export default function SearchPage() {
     return () => io.unobserve(el);
   }, [loading, items.length, hasActiveQuery, total]);
 
-  /* ==================== KEYBOARD: ESC TO CLEAR ==================== */
+  /* ==================== ESC TO CLEAR ==================== */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && document.activeElement === inputRef.current) {
