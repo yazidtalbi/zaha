@@ -535,8 +535,8 @@ export default function ShopPage() {
     return (
       <div className="inline-block w-full">
         {/* Card */}
-        <div className="rounded-lg border border-neutral-200 bg-white p-3">
-          <div className="grid grid-cols-12 gap-1 items-stretch">
+        <div className="rounded-lg border-0 border-neutral-200 bg-white">
+          <div className="grid grid-cols-12 gap-2 items-stretch">
             {/* LEFT SQUARE (real height via aspect-square) */}
             <div className="col-span-8">
               <div className="relative w-full aspect-square overflow-hidden rounded-l-lg bg-neutral-100">
@@ -555,7 +555,7 @@ export default function ShopPage() {
             </div>
 
             {/* RIGHT COLUMN – matches height perfectly */}
-            <div className="col-span-4 flex flex-col gap-1">
+            <div className="col-span-4 flex flex-col gap-2">
               <div className="relative flex-1 overflow-hidden rounded-tr-lg bg-neutral-100 aspect-square ">
                 {secondary && (
                   <img
@@ -1361,14 +1361,31 @@ function ContactSheet({
     >
       {/* Header */}
       <SheetHeader className="mb-4">
-        <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3 " />
-        <SheetTitle className="text-base text-center">
-          Contact this shop
-        </SheetTitle>
-        <SheetDescription className="text-xs text-neutral-500 px-10 pb-2 text-center">
-          You can get in touch with{" "}
-          <span className="font-medium text-neutral-800">{title}</span> using
-          the options below.
+        <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3" />
+
+        {/* Avatar + Name */}
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="h-10 w-10 rounded-md overflow-hidden bg-neutral-200 flex items-center justify-center text-xs font-semibold text-neutral-700">
+            {shop?.avatar_url ? (
+              <img
+                src={shop.avatar_url}
+                alt={shop.title ?? ""}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>{shop?.title?.slice(0, 1).toUpperCase() || "S"}</span>
+            )}
+          </div>
+
+          <SheetTitle className="text-base font-semibold hidden">
+            <span className="font-normal">Contact</span> {shop?.title}
+          </SheetTitle>
+        </div>
+
+        {/* Subtitle */}
+        <SheetDescription className="text-xs text-neutral-500 px-10 pb-2 text-center max-w-sm mx-auto">
+          Get in touch with <br />
+          <span className="font-medium text-neutral-800"> {title}</span>
         </SheetDescription>
       </SheetHeader>
 
@@ -1448,6 +1465,8 @@ function AboutSheet({
 }) {
   if (!shop) return null;
 
+  const firstLetter = shop.title?.trim()?.slice(0, 1).toUpperCase() || "S";
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -1456,9 +1475,28 @@ function AboutSheet({
       >
         <SheetHeader className="mb-4">
           <div className="mx-auto h-1 w-10 rounded-full bg-neutral-200 mb-3" />
-          <SheetTitle className="text-base text-left">
-            About this shop
-          </SheetTitle>
+
+          {/* Avatar + name */}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl overflow-hidden bg-neutral-200 flex items-center justify-center text-xs font-semibold text-neutral-700">
+              {shop.avatar_url ? (
+                <img
+                  src={shop.avatar_url}
+                  alt={shop.title ?? ""}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>{firstLetter}</span>
+              )}
+            </div>
+
+            <div className="flex flex-col">
+              <SheetTitle className="text-base text-left">
+                {shop.title}
+              </SheetTitle>
+              <p className="text-xs text-neutral-500">About this shop</p>
+            </div>
+          </div>
         </SheetHeader>
 
         <div className="text-sm text-ink/90 leading-relaxed whitespace-pre-line">

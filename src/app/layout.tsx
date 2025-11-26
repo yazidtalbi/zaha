@@ -12,19 +12,74 @@ const playfair = Playfair_Display({
   weight: ["600"], // or ["500","600","700"] if you want more options
 });
 
-export const metadata: Metadata = {
-  title: "Zaha",
-  description: "Crafted in Morocco",
-  manifest: "/manifest.json",
-  themeColor: "#0B0B0C",
-};
-
+// ---- Fonts ----
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-sans",
   display: "swap",
 });
+
+// ---- Global Metadata ----
+export const metadata: Metadata = {
+  metadataBase: new URL("https://zaha.ma"),
+
+  title: {
+    default: "Zaha – Discover products made with soul",
+    template: "%s • zaha.ma",
+  },
+
+  description:
+    "Zaha is a modern Moroccan marketplace for handmade and small-batch goods. Discover products made with soul from artisans, designers, and makers across Morocco.",
+
+  manifest: "/manifest.json",
+  themeColor: "#0B0B0C",
+
+  icons: {
+    icon: [
+      { url: "favicon.ico", sizes: "any" },
+      { url: "icon.png", type: "image/png", sizes: "32x32" },
+    ],
+    apple: [
+      {
+        url: "icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+
+  openGraph: {
+    type: "website",
+    url: "https://zaha.ma",
+    title: "zaha.ma – Discover products made with soul",
+    description:
+      "Connect with Morocco's most talented artisans. Explore handmade goods, home décor, jewelry, fashion, and more — crafted with soul.",
+    siteName: "zaha.ma",
+    images: [
+      {
+        url: "/og/zaha-og.jpg", // add this to /public/og/zaha-og.jpg
+        width: 1200,
+        height: 630,
+        alt: "zaha.ma marketplace preview",
+      },
+    ],
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "zaha.ma – Discover products made with soul",
+    description:
+      "A modern Moroccan marketplace for handmade goods and small-batch creations.",
+    images: ["/og/zaha-og.jpg"],
+  },
+
+  appleWebApp: {
+    capable: true,
+    title: "zaha.ma",
+    statusBarStyle: "black-translucent",
+  },
+};
 
 export default function RootLayout({
   children,
@@ -33,7 +88,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={instrumentSans.variable}>
-      <body className="font-sans text-ink min-h-screen overflow-x-hidden  mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-neutral-50">
+      <body className="font-sans text-ink min-h-screen overflow-x-hidden  ">
+        {/* mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl */}
         <ServiceWorkerRegister /> {/* 👈 now valid */}
         <ClientChrome>{children}</ClientChrome>
       </body>

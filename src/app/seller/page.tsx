@@ -530,7 +530,7 @@ function OverviewInner() {
       {
         key: "listing",
         done: orders.some((o) => !!o.products?.id),
-        label: "Add your first listing",
+        label: "Add your first product",
       },
       {
         key: "profile",
@@ -922,7 +922,7 @@ function OverviewInner() {
                 className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm bg-white hover:bg-neutral-50 transition"
               >
                 <Plus size={16} />
-                Add your first listing
+                Add your first product
               </Link>
             </div>
           </div>

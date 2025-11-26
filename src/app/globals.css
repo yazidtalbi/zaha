@@ -218,3 +218,32 @@ video::-webkit-media-controls-mute-button {
 video::-webkit-media-controls-overlay-play-button {
   display: none !important;
 }
+
+/* top-left + top-right concave bites */
+.manifesto-arabic-corners {
+  position: relative;
+}
+
+/* TOP-LEFT */
+.manifesto-arabic-corners::before,
+.manifesto-arabic-corners::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 56px; /* size of the bite */
+  height: 56px;
+  background: #fef3eb; /* <<< same as the section/page background */
+  z-index: 2;
+}
+
+/* top-left */
+.manifesto-arabic-corners::before {
+  left: 0;
+  border-bottom-right-radius: 56px;
+}
+
+/* top-right */
+.manifesto-arabic-corners::after {
+  right: 0;
+  border-bottom-left-radius: 56px;
+}

@@ -49,7 +49,7 @@ function StarPlaceholder({ fill }: { fill: string }) {
   );
 }
 
-export default function Onboarding() {
+export default function OnboardingIntro() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const total = slides.length;
@@ -59,10 +59,17 @@ export default function Onboarding() {
     [step, total]
   );
 
-  const onContinue = () => {
-    if (step < total - 1) setStep((s) => s + 1);
-    else router.push("/auth"); // final slide → auth
+  const onPrimaryClick = () => {
+    if (step < total - 1) {
+      setStep((s) => s + 1);
+    } else {
+      // last slide → go to auth (login/registration that you already have)
+      router.push("/auth");
+    }
   };
+
+  const isLastStep = step === total - 1;
+  const primaryLabel = isLastStep ? "Finalise setup" : "Next";
 
   return (
     <div
@@ -75,7 +82,7 @@ export default function Onboarding() {
             <span
               key={i}
               className={`h-[3px] w-10 rounded-full ${
-                i === step ? "bg-white" : "bg-white/40"
+                i <= step ? "bg-white" : "bg-white/40"
               }`}
             />
           ))}
@@ -108,20 +115,13 @@ export default function Onboarding() {
       {/* Actions */}
       <div className="w-full max-w-sm space-y-3">
         <Button
-          onClick={onContinue}
+          onClick={onPrimaryClick}
           className="w-full h-12 rounded-full bg-white text-black hover:bg-white/90"
         >
-          Continue
+          {primaryLabel}
         </Button>
 
-        <button
-          onClick={() => router.push("/auth")}
-          className="w-full h-12 rounded-full border border-white/70 text-white hover:bg-white/10 transition"
-        >
-          Skip to get Started
-        </button>
-
-        {/* (Optional) tiny linear progress bar under the bars if you still want it */}
+        {/* Tiny linear progress bar – still hidden */}
         <div className="sr-only">
           <div className="mx-auto h-1 w-40 overflow-hidden rounded-full bg-white/20">
             <div

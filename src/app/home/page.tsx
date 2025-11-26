@@ -107,7 +107,7 @@ const __homeStore: HomeStore = {
 const slides: Slide[] = [
   {
     img: "/home/a.png",
-    title: "Open your shop on Bazr",
+    title: "Open your shop on Zaha",
     ctaLabel: "Become a seller",
     ctaHref: "/onboarding/seller",
     bg: "#371836",

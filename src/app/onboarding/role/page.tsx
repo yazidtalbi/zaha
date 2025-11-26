@@ -15,7 +15,7 @@ export default function RolePicker() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Must be signed in, and fetch existing role if present
+  // Must be signed in, and prefill role from auth metadata if present
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.auth.getUser();
@@ -30,66 +30,41 @@ export default function RolePicker() {
         return;
       }
 
-      // Prefill role from profile if it exists
-      const { data: prof, error: profErr } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profErr) console.warn(profErr.message);
-      if (prof?.role === "buyer" || prof?.role === "seller") {
-        setRole(prof.role);
+      const metaRole = user.user_metadata?.role as Role | undefined;
+      if (metaRole === "buyer" || metaRole === "seller") {
+        setRole(metaRole);
       }
+
       setLoading(false);
     })();
   }, [router]);
 
-  // const finish = useCallback(async () => {
-  //   if (!role || saving) return;
-  //   setSaving(true);
+  const finish = useCallback(async () => {
+    if (!role || saving) return;
+    setSaving(true);
 
-  //   const { data, error } = await supabase.auth.getUser();
-  //   if (error || !data.user) {
-  //     toast.error("Please sign in again.");
-  //     router.replace("/auth");
-  //     return;
-  //   }
-  //   const uid = data.user.id;
-
-  //   const { error: upsertErr } = await supabase
-  //     .from("profiles")
-  //     .upsert(
-  //       { id: uid, role, updated_at: new Date().toISOString() },
-  //       { onConflict: "id" }
-  //     )
-  //     .select("id")
-  //     .maybeSingle();
-
-  //   if (upsertErr) {
-  //     console.error(upsertErr);
-  //     toast.error("Couldn’t save your choice. Try again.");
-  //     setSaving(false);
-  //     return;
-  //   }
-
-  //   // Optional: also mirror to auth metadata (handy for Edge Functions / RLS filters)
-  //   await supabase.auth.updateUser({ data: { role } }).catch(() => {});
-
-  //   // Route next
-  //   router.push(role === "seller" ? "/onboarding/seller" : "/home");
-  // }, [role, saving, router]);
-
-  async function finish() {
-    if (!role) return;
-
-    // Just navigate — no DB yet
-    if (role === "seller") {
-      router.push("/onboarding/seller");
-    } else {
-      router.push("/onboarding/buyer");
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) {
+      toast.error("Please sign in again.");
+      router.replace("/auth");
+      return;
     }
-  }
+
+    // Only write to auth metadata here – profiles are handled in /onboarding/profile
+    const { error: updateErr } = await supabase.auth.updateUser({
+      data: { role },
+    });
+
+    if (updateErr) {
+      console.error(updateErr);
+      toast.error("Couldn’t save your choice. Try again.");
+      setSaving(false);
+      return;
+    }
+
+    // After role → go to profile (full name + city)
+    router.push("/onboarding/profile");
+  }, [role, saving, router]);
 
   if (loading) {
     return (

@@ -1,15 +1,18 @@
 // app/onboarding/seller/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabaseClient";
+import { ChevronLeft, X } from "lucide-react";
 
-type Step = 0 | 1; // 0=Basics, 1=About
+type Step = 0 | 1 | 2; // 0=Name, 1=City, 2=About
+
+const STEPS = ["Shop name", "Location", "About"];
 
 const SELL_TYPES = [
   "Jewelry",
@@ -24,17 +27,35 @@ const SELL_TYPES = [
   "Personalized",
 ];
 
+const COUNTRY = "Morocco";
+
+const CITY_OPTIONS = [
+  { value: "Casablanca", label: "Casablanca", emoji: "🌊" },
+  { value: "Rabat", label: "Rabat", emoji: "🏛️" },
+  { value: "Tanger", label: "Tangier", emoji: "⚓️" },
+  { value: "Tétouan", label: "Tétouan", emoji: "🏔️" },
+  { value: "Marrakech", label: "Marrakech", emoji: "🌴" },
+  { value: "Fès", label: "Fès", emoji: "🕌" },
+  { value: "Agadir", label: "Agadir", emoji: "🏖️" },
+  { value: "Oujda", label: "Oujda", emoji: "🌅" },
+  { value: "Meknès", label: "Meknès", emoji: "🏰" },
+  { value: "Kénitra", label: "Kénitra", emoji: "🚆" },
+  { value: "Safi", label: "Safi", emoji: "⚓️" },
+  { value: "Nador", label: "Nador", emoji: "🌊" },
+  { value: "Laayoune", label: "Laayoune", emoji: "🏜️" },
+];
+
+const NAME_SUGGESTIONS = ["Maison Amina", "Studio Nour", "Atelier Rif"];
+
 export default function OnboardingSeller() {
   const router = useRouter();
 
   // stepper
   const [step, setStep] = useState<Step>(0);
-  const totalSteps = 2;
+  const isLast = step === STEPS.length - 1;
 
   // basics
   const [shopName, setShopName] = useState("");
-  const [handle, setHandle] = useState(""); // preview-only unless you persist it
-  const [country, setCountry] = useState("Morocco");
   const [city, setCity] = useState("");
 
   // about
@@ -50,14 +71,12 @@ export default function OnboardingSeller() {
   const [done, setDone] = useState(false);
   const [shopId, setShopId] = useState<string | null>(null);
 
-  const canNext = useMemo(() => {
-    if (step === 0) return shopName.trim() !== "" && handle.trim() !== "";
+  const canProceed = useMemo(() => {
+    if (step === 0) return shopName.trim() !== "";
+    if (step === 1) return city.trim() !== "";
     return true;
-  }, [step, shopName, handle]);
+  }, [step, shopName, city]);
 
-  function formatHandle(v: string) {
-    return v.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  }
   function toggleSelling(tag: string) {
     setSelling((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
@@ -69,8 +88,6 @@ export default function OnboardingSeller() {
     animate: { opacity: 1, y: 0, transition: { duration: 0.22 } },
     exit: { opacity: 0, y: -10, transition: { duration: 0.16 } },
   };
-
-  const progressPct = ((step + 1) / totalSteps) * 100;
 
   async function createOrUpdateShop() {
     setError(null);
@@ -136,15 +153,25 @@ export default function OnboardingSeller() {
     }
   }
 
-  function onNext() {
-    if (!canNext) return;
-    if (step === 0) setStep(1);
-    else createOrUpdateShop();
+  function goNext() {
+    if (isLast) {
+      createOrUpdateShop();
+      return;
+    }
+    if (!canProceed) return;
+    setStep((s) => (s + 1) as Step);
+    const pane = document.getElementById("onboarding-seller-pane");
+    pane?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function onBack() {
-    if (step === 0) router.push("/onboarding/role");
-    else setStep((s) => (s - 1) as Step);
+  function goBack() {
+    if (step === 0) {
+      router.push("/onboarding/role");
+    } else {
+      setStep((s) => (s - 1) as Step);
+      const pane = document.getElementById("onboarding-seller-pane");
+      pane?.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   // Safe navigation: clear overlay state before routing
@@ -166,245 +193,294 @@ export default function OnboardingSeller() {
   }
 
   return (
-    <div className="min-h-dvh mx-auto max-w-lg p-6 flex flex-col">
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="h-10 w-10 grid place-items-center rounded-full hover:bg-neutral-100"
-          aria-label="Back"
-        >
-          <span className="text-xl">‹</span>
-        </button>
+    <main
+      className="min-h-[100dvh] flex flex-col bg-white text-ink overflow-hidden
+                 [--h-header:56px] [--h-footer:72px]"
+    >
+      {/* Sticky header (same spirit as SellPage) */}
+      <div className="fixed top-0 left-0 right-0 z-40 bg-white h-[var(--h-header)]">
+        <div className="mx-auto max-w-lg flex items-center justify-between px-2 py-3">
+          {/* Back */}
+          <button
+            onClick={goBack}
+            className="p-2 rounded-full hover:bg-neutral-100"
+            aria-label="Back"
+          >
+            <ChevronLeft size={24} strokeWidth={2.5} />
+          </button>
 
-        <div className="flex-1 mx-2">
-          <div className="h-2 w-full rounded-full bg-neutral-200 overflow-hidden">
-            <motion.div
-              className="h-full bg-black"
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPct}%` }}
-              transition={{ type: "tween", duration: 0.25 }}
-            />
+          {/* Segmented progress */}
+          <div className="flex items-center gap-2">
+            {STEPS.map((_, i) => (
+              <span
+                key={i}
+                className={`h-1.5 w-10 sm:w-16 rounded-full ${
+                  i <= step ? "bg-ink" : "bg-neutral-200"
+                }`}
+              />
+            ))}
           </div>
-        </div>
 
-        <button
-          onClick={() => setClosing(true)}
-          className="h-10 w-10 grid place-items-center rounded-full hover:bg-neutral-100"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* Step label */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium">Seller onboarding</div>
-        <div className="text-sm text-neutral-500">
-          {step === 0 ? "Step 1 of 2" : "Step 2 of 2"}
+          {/* Close */}
+          <button
+            onClick={() => setClosing(true)}
+            className="p-2 rounded-full hover:bg-neutral-100"
+            aria-label="Close"
+          >
+            <X size={22} strokeWidth={2.25} />
+          </button>
         </div>
       </div>
 
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {step === 0 ? "Create your shop" : "Tell us about your shop"}
-        </h1>
-        <p className="text-neutral-600 mt-1">
-          {step === 0
-            ? "Start with the basics — you can edit these anytime."
-            : "A short description helps buyers connect with your craft."}
-        </p>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 relative mt-5">
-        <AnimatePresence mode="wait">
-          {step === 0 ? (
-            <motion.div
-              key="step-1"
-              variants={variants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-6"
-            >
-              <div>
-                <label className="text-sm font-medium">Shop name</label>
-                <Input
-                  className="mt-2 h-11"
-                  value={shopName}
-                  onChange={(e) => setShopName(e.target.value)}
-                  placeholder="Ex: Maison Amina"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Shop handle</label>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-sm text-neutral-500">
-                    zaha.ma/shop/
-                  </span>
-                  <Input
-                    className="h-11"
-                    value={handle}
-                    onChange={(e) => setHandle(formatHandle(e.target.value))}
-                    placeholder="maison-amina"
-                  />
-                </div>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Letters, numbers & hyphens only.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Country</label>
-                  <Input
-                    className="mt-2 h-11"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">City</label>
-                  <Input
-                    className="mt-2 h-11"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Casablanca"
-                  />
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="step-2"
-              variants={variants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-6"
-            >
-              <div>
-                <label className="text-sm font-medium">
-                  Description (what makes your work unique?)
-                </label>
-                <textarea
-                  className="mt-2 w-full h-28 rounded-xl border border-neutral-300 bg-white p-3 outline-none focus:ring-2 focus:ring-black/10"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ex: Hand-thrown ceramics inspired by Rif mountains, using local clay and lead-free glazes."
-                />
-                <div className="mt-1 text-xs text-neutral-500">
-                  A short paragraph is enough.
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm font-medium mb-2">
-                  What are you selling?
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {SELL_TYPES.map((t) => {
-                    const active = selling.includes(t);
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => toggleSelling(t)}
-                        className={[
-                          "px-3 h-9 rounded-full text-sm border transition",
-                          active
-                            ? "bg-black text-white border-black"
-                            : "bg-white text-black border-neutral-300 hover:border-neutral-400",
-                        ].join(" ")}
-                        aria-pressed={active}
-                      >
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selling.length > 0 && (
-                  <div className="mt-2 text-xs text-neutral-500">
-                    Selected: {selling.join(", ")}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-neutral-200 p-4">
-                <div className="text-sm font-medium mb-1">Preview</div>
-                <div className="text-base font-semibold">
-                  {shopName || "Your shop"}
-                </div>
-                <div className="text-sm text-neutral-500">
-                  zaha.ma/shop/{handle || "handle"}
-                </div>
-                {(description || selling.length > 0 || city) && (
-                  <div className="mt-3 text-sm text-neutral-700 space-y-1">
-                    {description && <p>{description}</p>}
-                    {selling.length > 0 && (
-                      <p>
-                        <span className="text-neutral-500">Selling:</span>{" "}
-                        {selling.join(", ")}
-                      </p>
-                    )}
-                    {city && (
-                      <p>
-                        <span className="text-neutral-500">Based in:</span>{" "}
-                        {city}, {country}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Footer actions */}
-      {error && (
-        <div className="mt-3 text-sm text-red-600" role="alert">
-          {error}
-        </div>
-      )}
-      <div className="mt-6 flex items-center gap-3">
-        <Button
-          variant="outline"
-          className="h-11 rounded-xl px-5"
-          onClick={onBack}
-          disabled={saving}
-        >
-          Back
-        </Button>
-        <Button
-          className="h-11 rounded-xl px-5 flex-1"
-          onClick={onNext}
-          disabled={!canNext || saving}
-        >
-          {step === 0 ? "Next" : saving ? "Saving…" : "Finish"}
-        </Button>
-      </div>
-
-      <button
-        onClick={() => router.push("/home")}
-        className="mt-3 w-full text-sm text-neutral-500 hover:text-neutral-700 transition"
-        disabled={saving}
+      {/* Scrollable content pane */}
+      <div
+        id="onboarding-seller-pane"
+        className="min-h-0 flex-1 overflow-y-auto pt-[var(--h-header)]
+                   pb-[calc(var(--h-footer)+env(safe-area-inset-bottom))]"
       >
-        Skip for now
-      </button>
+        <div className="mx-auto max-w-lg px-6 pb-6">
+          {/* Step label */}
+          {/* <div className="flex items-center justify-between mb-3 mt-4">
+            <div className="text-sm font-medium">Seller onboarding</div>
+            <div className="text-sm text-neutral-500">
+              Step {step + 1} of {STEPS.length}
+            </div>
+          </div> */}
+
+          {/* Title + subtitle (subtitle hidden on step 2) */}
+          <div>
+            <h1 className="text-2xl font-semibold mt-4">
+              {step === 0
+                ? "Name your shop"
+                : step === 1
+                  ? "Where are you based?"
+                  : "Tell us about your shop"}
+            </h1>
+            {step !== 1 && (
+              <p className="text-neutral-600 mt-1">
+                {step === 0
+                  ? "A beautiful name helps buyers remember you."
+                  : "A short description helps buyers connect with your craft."}
+              </p>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 relative mt-5">
+            <AnimatePresence mode="wait">
+              {/* STEP 0 – NAME */}
+              {step === 0 && (
+                <motion.div
+                  key="step-1-name"
+                  variants={variants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="space-y-6"
+                >
+                  <div className="flex flex-col items-center text-center mb-2">
+                    <div className="h-10 w-10 rounded-full border border-neutral-300 grid place-items-center mb-3">
+                      <span className="text-lg">★</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Shop name</label>
+                    <Input
+                      className="mt-2 h-11"
+                      value={shopName}
+                      onChange={(e) => setShopName(e.target.value)}
+                      placeholder="Shop name"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs text-neutral-500">
+                      Suggestions based on Moroccan shops
+                    </p>
+                    <ul className="space-y-1 text-sm">
+                      {NAME_SUGGESTIONS.map((name) => (
+                        <li key={name}>
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 text-left hover:text-black text-neutral-700"
+                            onClick={() => setShopName(name)}
+                          >
+                            <span className="text-xs">•</span>
+                            <span className="font-medium">{name}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* STEP 1 – CITY */}
+              {step === 1 && (
+                <motion.div
+                  key="step-2-city"
+                  variants={variants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="h-full flex flex-col space-y-4"
+                >
+                  {/* No extra labels/copy above grid per request */}
+
+                  {/* Big grid */}
+                  <div className="flex-1">
+                    <div className="grid grid-cols-3 gap-3 h-full">
+                      {CITY_OPTIONS.map((option) => {
+                        const active = city === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setCity(option.value)}
+                            className={[
+                              "flex flex-col items-start justify-between rounded-2xl border p-3 text-left transition h-full",
+                              active
+                                ? "bg-black text-white border-black"
+                                : "bg-white text-black border-neutral-200 hover:border-neutral-400",
+                            ].join(" ")}
+                            aria-pressed={active}
+                          >
+                            <div className="text-2xl mb-2">{option.emoji}</div>
+                            <div className="text-[13px] font-medium leading-snug">
+                              {option.label}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Manual input */}
+                  <div className="pt-1">
+                    <Input
+                      className="mt-1 h-10"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Or type another city"
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Shown to buyers as{" "}
+                      {city
+                        ? `"Based in ${city}, ${COUNTRY}".`
+                        : `"Based in ${COUNTRY}".`}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* STEP 2 – ABOUT */}
+              {step === 2 && (
+                <motion.div
+                  key="step-3-about"
+                  variants={variants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="space-y-6"
+                >
+                  <div>
+                    <label className="text-sm font-medium">
+                      Description (what makes your work unique?)
+                    </label>
+                    <textarea
+                      className="mt-2 w-full h-28 rounded-xl border border-neutral-300 bg-white p-3 outline-none focus:ring-2 focus:ring-black/10"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Ex: Hand-thrown ceramics inspired by Rif mountains, using local clay and lead-free glazes."
+                    />
+                    <div className="mt-1 text-xs text-neutral-500">
+                      A short paragraph is enough.
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium mb-2">
+                      What do you usually sell?{" "}
+                      <span className="text-xs text-neutral-500">
+                        (optional)
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {SELL_TYPES.map((t) => {
+                        const active = selling.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => toggleSelling(t)}
+                            className={[
+                              "px-3 h-9 rounded-full text-sm border transition",
+                              active
+                                ? "bg-black text-white border-black"
+                                : "bg-white text-black border-neutral-300 hover:border-neutral-400",
+                            ].join(" ")}
+                            aria-pressed={active}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selling.length > 0 && (
+                      <div className="mt-2 text-xs text-neutral-500">
+                        Selected: {selling.join(", ")}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview removed as requested */}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Error inline above footer spacing */}
+          {error && (
+            <div className="mt-4 text-sm text-red-600" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom sticky actions */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t h-[var(--h-footer)]">
+        <div className="mx-auto max-w-lg px-6 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+          <Button
+            className="w-full rounded-full h-11 font-medium"
+            onClick={goNext}
+            disabled={saving || (!isLast && !canProceed)}
+          >
+            {isLast ? (
+              saving ? (
+                "Saving…"
+              ) : (
+                "Finish"
+              )
+            ) : (
+              <>
+                <span className="opacity-60 mr-1">Next:</span> {STEPS[step + 1]}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
       {/* Exit confirmation drawer */}
       {closing && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-end justify-center"
+          className="fixed inset-0 bg-black/40 flex items-end justify-center z-100"
           onClick={() => setClosing(false)}
         >
           <div
-            className="bg-white w-full max-w-lg rounded-t-2xl p-6 space-y-4"
+            className="bg-white w-full max-w-lg rounded-t-2xl p-6 space-y-4 "
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-medium">Leave onboarding?</h2>
@@ -435,24 +511,27 @@ export default function OnboardingSeller() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4"
+            className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center p-6"
           >
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 10, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+              className="w-full max-w-sm text-center"
             >
-              <div className="text-2xl font-semibold">
-                Your shop is ready ✨
-              </div>
-              <p className="mt-1 text-neutral-600">
-                {shopName || "Your shop"} has been{" "}
-                {shopId ? "saved" : "created"}. Add your first product now or go
-                to your dashboard.
+              <div className="text-4xl mb-3">✨</div>
+
+              <h2 className="text-2xl font-semibold">
+                Your shop is live on Zaha
+              </h2>
+
+              <p className="mt-2 text-sm text-neutral-600">
+                {shopName || "Your shop"} was created successfully. Buyers can
+                now discover your brand on Zaha. Add your first product to start
+                showing up in searches and collections.
               </p>
 
-              <div className="mt-5 space-y-2">
+              <div className="mt-6 space-y-2">
                 <Button
                   className="w-full h-11 rounded-xl"
                   onClick={goAddFirstProduct}
@@ -467,18 +546,10 @@ export default function OnboardingSeller() {
                   Go to dashboard
                 </Button>
               </div>
-
-              <button
-                className="mt-3 w-full text-sm text-neutral-500 hover:text-neutral-700"
-                onClick={() => setDone(false)}
-                aria-label="Close"
-              >
-                Stay here
-              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </main>
   );
 }

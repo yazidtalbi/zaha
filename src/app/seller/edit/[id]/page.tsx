@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { v4 as uuidv4 } from "uuid";
@@ -12,7 +13,8 @@ import {
   MoveLeft,
   MoveRight,
   Play,
-  Pencil,
+  Camera,
+  ImagePlus,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { uploadCompressedToSupabase } from "@/lib/compressAndUpload";
 
 /* ---------------- Types (same as create) ---------------- */
 type OptionValue = { id: string; label: string; price_delta_mad?: number };
@@ -191,6 +194,7 @@ export default function EditProductPage() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   /* ---------- Load existing product (RLS-safe) ---------- */
   useEffect(() => {
@@ -406,6 +410,58 @@ export default function EditProductPage() {
     );
   }
 
+  /* ---------- Photo helpers (same logic as /sell) ---------- */
+  function removePhoto(i: number) {
+    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleSelect(e: ChangeEvent<HTMLInputElement>) {
+    const el = e.currentTarget;
+    const picked = Array.from(el.files ?? []);
+    el.value = "";
+    if (!picked.length) return;
+
+    if (photos.length >= MAX_PHOTOS) {
+      alert(`You already have ${photos.length}/${MAX_PHOTOS} photos.`);
+      return;
+    }
+
+    const remaining = MAX_PHOTOS - photos.length;
+    const toProcess = picked.slice(0, remaining);
+    if (picked.length > toProcess.length) {
+      alert(`Only ${remaining} more photo(s) allowed (max ${MAX_PHOTOS}).`);
+    }
+
+    setUploading(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const urls = await Promise.all(
+        toProcess.map(async (file) => {
+          if (!/^image\/(jpeg|png|webp|gif|bmp)$/i.test(file.type)) {
+            throw new Error(
+              `Unsupported image type: ${
+                file.type || file.name
+              }. Please use JPG/PNG/WEBP.`
+            );
+          }
+          // SAME pattern as /sell page
+          return uploadCompressedToSupabase(file, user.id, "products");
+        })
+      );
+
+      setPhotos((prev) => [...prev, ...urls.filter(Boolean)]);
+    } catch (err) {
+      console.error("Edit photo upload error:", err);
+      alert((err as Error).message || "Failed to upload one or more photos.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   /* ---------- Save (UPDATE) ---------- */
   async function handleSave() {
     try {
@@ -595,11 +651,6 @@ export default function EditProductPage() {
     }
   }
 
-  /* ---------- Photo helpers ---------- */
-  function removePhoto(i: number) {
-    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
   if (!loaded) {
     return (
       <main className="min-h-[100dvh] grid place-items-center">
@@ -653,113 +704,180 @@ export default function EditProductPage() {
               <AccordionTrigger className="py-4 text-base font-medium">
                 Photos & Video
               </AccordionTrigger>
-              <AccordionContent className="pb-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Photos</div>
-                  <div className="text-xs text-neutral-600">
-                    {photos.length}/{MAX_PHOTOS}
+              <AccordionContent className="pb-4 space-y-4">
+                {/* Photos uploader (camera or upload) */}
+                <div className="rounded-xl border bg-white p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Photos</div>
+                    <div className="text-xs text-neutral-600">
+                      {photos.length}/{MAX_PHOTOS}
+                    </div>
                   </div>
-                </div>
 
-                {!!photos.length && (
-                  <div className="grid grid-cols-3 gap-3">
-                    {photos.map((src, i) => (
-                      <div
-                        key={src + i}
-                        className="relative rounded-xl overflow-hidden border bg-white group"
-                        draggable
-                        onDragStart={() => setDragFrom(i)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (dragFrom === null || dragFrom === i) return;
-                          setPhotos((prev) => {
-                            const copy = [...prev];
-                            const [m] = copy.splice(dragFrom, 1);
-                            copy.splice(i, 0, m);
-                            return copy;
-                          });
-                          setDragFrom(null);
-                        }}
-                        title="Drag to reorder"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={src}
-                          alt=""
-                          className="w-full h-32 object-cover"
-                        />
-
-                        {i === 0 && (
-                          <div className="absolute left-1 top-1 rounded-md bg-ink text-white text-[10px] px-1.5 py-0.5">
-                            Cover
+                  {/* Actions */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Take photo (opens camera on mobile) */}
+                    <label className="block cursor-pointer rounded-2xl border px-4 py-3 bg-neutral-50 hover:bg-neutral-100 transition">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-xl border bg-white">
+                          <Camera className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">Take photo</div>
+                          <div className="text-xs text-neutral-500">
+                            Opens camera
                           </div>
-                        )}
-
-                        {i !== 0 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPhotos((prev) => {
-                                const copy = [...prev];
-                                const [m] = copy.splice(i, 1);
-                                copy.unshift(m);
-                                return copy;
-                              })
-                            }
-                            className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] shadow-sm opacity-0 group-hover:opacity-100 transition"
-                          >
-                            Make cover
-                          </button>
-                        )}
-
-                        <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
-                              onClick={() =>
-                                i > 0 &&
-                                setPhotos((prev) => {
-                                  const copy = [...prev];
-                                  const [m] = copy.splice(i, 1);
-                                  copy.splice(i - 1, 0, m);
-                                  return copy;
-                                })
-                              }
-                              aria-label="Move left"
-                            >
-                              <MoveLeft className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
-                              onClick={() =>
-                                i < photos.length - 1 &&
-                                setPhotos((prev) => {
-                                  const copy = [...prev];
-                                  const [m] = copy.splice(i, 1);
-                                  copy.splice(i + 1, 0, m);
-                                  return copy;
-                                })
-                              }
-                              aria-label="Move right"
-                            >
-                              <MoveRight className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removePhoto(i)}
-                            className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
-                            aria-label="Remove photo"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
                         </div>
                       </div>
-                    ))}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handleSelect}
+                        disabled={photos.length >= MAX_PHOTOS || uploading}
+                      />
+                    </label>
+
+                    {/* Upload from device (gallery/files) */}
+                    <label className="block cursor-pointer rounded-2xl border px-4 py-3 bg-neutral-50 hover:bg-neutral-100 transition">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-xl border bg-white">
+                          <ImagePlus className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">
+                            Upload from device
+                          </div>
+                          <div className="text-xs text-neutral-500">
+                            JPG/PNG/WEBP · up to {MAX_PHOTOS} photos
+                          </div>
+                        </div>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+                        multiple
+                        className="hidden"
+                        onChange={handleSelect}
+                        disabled={photos.length >= MAX_PHOTOS || uploading}
+                      />
+                    </label>
                   </div>
-                )}
+
+                  {/* Tips */}
+                  <ul className="text-xs text-neutral-600 space-y-1">
+                    <li>• Drag tiles or use arrows to reorder.</li>
+                    <li>• The first photo is your cover.</li>
+                    {videoUrl && (
+                      <li>• If a video is added, it shows as slide #2.</li>
+                    )}
+                  </ul>
+
+                  {!!photos.length && (
+                    <div className="grid grid-cols-3 gap-3">
+                      {photos.map((src, i) => (
+                        <div
+                          key={src + i}
+                          className="relative rounded-xl overflow-hidden border bg-white group"
+                          draggable
+                          onDragStart={() => setDragFrom(i)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragFrom === null || dragFrom === i) return;
+                            setPhotos((prev) => {
+                              const copy = [...prev];
+                              const [m] = copy.splice(dragFrom, 1);
+                              copy.splice(i, 0, m);
+                              return copy;
+                            });
+                            setDragFrom(null);
+                          }}
+                          title="Drag to reorder"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt=""
+                            className="w-full h-32 object-cover"
+                          />
+
+                          {i === 0 && (
+                            <div className="absolute left-1 top-1 rounded-md bg-ink text-white text-[10px] px-1.5 py-0.5">
+                              Cover
+                            </div>
+                          )}
+
+                          {i !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPhotos((prev) => {
+                                  const copy = [...prev];
+                                  const [m] = copy.splice(i, 1);
+                                  copy.unshift(m);
+                                  return copy;
+                                })
+                              }
+                              className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] shadow-sm opacity-0 group-hover:opacity-100 transition"
+                            >
+                              Make cover
+                            </button>
+                          )}
+
+                          <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                                onClick={() =>
+                                  i > 0 &&
+                                  setPhotos((prev) => {
+                                    const copy = [...prev];
+                                    const [m] = copy.splice(i, 1);
+                                    copy.splice(i - 1, 0, m);
+                                    return copy;
+                                  })
+                                }
+                                aria-label="Move left"
+                              >
+                                <MoveLeft className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                                onClick={() =>
+                                  i < photos.length - 1 &&
+                                  setPhotos((prev) => {
+                                    const copy = [...prev];
+                                    const [m] = copy.splice(i, 1);
+                                    copy.splice(i + 1, 0, m);
+                                    return copy;
+                                  })
+                                }
+                                aria-label="Move right"
+                              >
+                                <MoveRight className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePhoto(i)}
+                              className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs"
+                              aria-label="Remove photo"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {uploading && (
+                    <div className="text-sm text-neutral-600">Uploading…</div>
+                  )}
+                </div>
 
                 {/* Video preview (display-only) */}
                 <div className="rounded-xl border bg-white p-3">
