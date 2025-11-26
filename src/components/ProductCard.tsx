@@ -546,7 +546,7 @@ function CardCarousel({
             const isVideo = videoSrc && i === videoIndex;
 
             return (
-              <div className="min-w-0 flex-[0_0_100%]" key={i}>
+              <div className="min-w-0 flex-[0_0_100%] min-h-40" key={i}>
                 <div
                   className={
                     autoHeight

@@ -124,11 +124,7 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
    Page
 ========================= */
 export default function SettingsPage() {
-  return (
-    <RequireAuth>
-      <SettingsInner />
-    </RequireAuth>
-  );
+  return <SettingsInner />;
 }
 
 function SettingsInner() {

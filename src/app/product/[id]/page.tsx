@@ -160,8 +160,8 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
 function VisibleAreaSkeleton() {
   return (
     <main className="pb-10 bg-neutral-50 min-h-screen">
-      <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
-        <div className="relative rounded-2xl bg-white">
+      <div className="fixed z-10 mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
+        <div className=" ">
           <div className="overflow-hidden rounded-xl">
             <div className="aspect-7/8 sm:aspect-4/3">
               <Skeleton className="h-full w-full" />
@@ -957,7 +957,6 @@ export default function ProductPage() {
       <main className="pb-10 bg-neutral-50 min-h-screen">
         {/* Floating overlays */}
         <div className="fixed z-10 mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
-          {" "}
           <div className="fixed z-10 top-3 left-3 flex items-center gap-2 p-2">
             <button
               onClick={handleBack}

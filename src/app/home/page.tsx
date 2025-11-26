@@ -643,7 +643,7 @@ export default function HomePage(): JSX.Element {
 
   /* ---------- render ---------- */
   return (
-    <main className="pb-20 bg-neutral-50 min-h-screen">
+    <main className="pb-30 bg-neutral-50 min-h-screen">
       <div className="pt-4 opacity-0">
         <Header />
       </div>

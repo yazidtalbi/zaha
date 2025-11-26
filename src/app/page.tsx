@@ -82,8 +82,7 @@ const FAQ_ITEMS = [
 const FEATURE_ITEMS = [
   {
     title: "100% Moroccan",
-    description:
-      "Explore handmade pieces from independent sellers across Morocco.",
+    description: "Explore handmade pieces from independents across Morocco.",
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -108,14 +107,12 @@ const FEATURE_ITEMS = [
   },
   {
     title: "Built for mobile first",
-    description:
-      "Enjoy a smooth experience designed for discovering unique items.",
+    description: "Enjoy an experience designed for discovering unique items.",
     icon: <Smartphone className="h-6 w-6" />,
   },
   {
     title: "Favorites listings",
-    description:
-      "Save items you love and return anytime when you're ready to buy.",
+    description: "Save various items you love to access anytime.",
     icon: <ListChecks className="h-6 w-6" />,
   },
   {
@@ -386,12 +383,12 @@ export default function MarketingPage() {
                   </span>
 
                   {/* Center links */}
-                  <div className="hidden md:flex items-center gap-10">
+                  <div className="hidden md:flex items-center gap-10 ml-6">
                     {NAV_LINKS.map((item) => (
                       <a
                         key={item.label}
                         href={item.href}
-                        className="flex items-center gap-2 text-sm sm:text-base font-medium text-[#341339] hover:opacity-80"
+                        className="flex items-center gap-2 text-sm sm:text-base font-medium text-[#341339] hover:opacity-80 "
                       >
                         <span
                           className="flex h-3 w-3 items-center justify-center"
@@ -455,7 +452,7 @@ export default function MarketingPage() {
                       transition={{ duration: 3, ease: EASE, delay: 0.15 }}
                     >
                       <Image
-                        src="/landing/hands.png"
+                        src="/landing/handspremium2.png"
                         alt="zaha app in hand"
                         fill
                         className="object-contain object-bottom md:object-contain"
@@ -789,7 +786,7 @@ export default function MarketingPage() {
                                   {item.title}
                                 </h3>
 
-                                <p className="max-w-xs text-md sm:text-lg text-neutral-500 leading-relaxed">
+                                <p className="max-w-xs text-md sm:text-md text-neutral-500 leading-relaxed">
                                   {item.description}
                                 </p>
                               </div>
