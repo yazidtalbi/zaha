@@ -142,12 +142,12 @@ export default function ProductReviewStrip({
       </div>
 
       {/* ===== Horizontal strip ===== */}
-      <div className="-mx-4 mt-3 overflow-x-auto px-4">
+      <div className="-mx-4 mt-3 overflow-x-auto px-4 no-scrollbar ">
         <ul className="flex gap-4 snap-x snap-mandatory">
           {reviews.map((r) => (
             <li
               key={r.id}
-              className="snap-start shrink-0 w-[92%] sm:w-[520px] rounded-lg bg-white p-4   border border-neutral-200 cursor-pointer"
+              className="snap-start shrink-0 w-[92%] sm:w-[520px] rounded-lg bg-white p-4   border border-neutral-200 cursor-pointer "
               onClick={() => setOpenReview(r)} // open sheet when card clicked
             >
               {/* Stars + date (top line) */}

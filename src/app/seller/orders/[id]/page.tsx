@@ -790,7 +790,7 @@ export default function SellerOrderDetails() {
   }
 
   return (
-    <main className="pb-28 md:pb-6 p-4 mx-auto max-w-3xl space-y-6 print:bg-white">
+    <main className="  md:pb-6 p-4 mx-auto max-w-3xl space-y-6 print:bg-white pb-48">
       {/* Nav row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center justify-between w-full">

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Header from "@/components/Header";
+import Header3 from "@/components/Header3";
 import HeroCarousel from "@/components/HeroCarousel";
 import ProductCard from "@/components/ProductCard";
 import HeroCategoriesStrip from "@/components/home/HeroCategoriesStrip";
@@ -650,7 +651,7 @@ export default function HomePage(): JSX.Element {
 
       <header className="fixed inset-x-0 top-0 z-40 border-neutral-200 bg-neutral-50 ">
         <div className="px-3 pt-2 pb-2">
-          <Header />
+          <Header3 />
         </div>
       </header>
 

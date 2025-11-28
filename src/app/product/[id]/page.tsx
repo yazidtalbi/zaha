@@ -450,38 +450,47 @@ export default function ProductPage() {
 
   const popSeed = useProductSeed((s) => s.popSeed);
 
-  // 1) Try seed (from prior navigation)
+  // 1) Try seed (from prior navigation) – safe for SSR
   const seeded = id ? popSeed(id) : null;
 
-  // 2) Try sessionStorage cache (fast back/forward)
-  const cached = (() => {
-    if (typeof window === "undefined" || !id) return null;
-    try {
-      const raw = sessionStorage.getItem(`product_cache_${id}`);
-      if (!raw) return null;
-      const obj = JSON.parse(raw);
-      delete obj.__ts;
-      return obj;
-    } catch {
-      return null;
-    }
-  })();
-
-  const [p, setP] = useState<any>(seeded ?? cached ?? null);
+  // State: start only from seeded for SSR safety
+  const [p, setP] = useState<any>(seeded ?? null);
   const [shop, setShop] = useState<any>(null);
 
-  // availability controlled by parent first (seed/cache), then by DB fetch
+  // availability controlled by seed first, then by DB / cache
   const [availability, setAvailability] = useState<
     "loading" | "available" | "unavailable"
   >(() => {
-    const src: any = seeded ?? cached;
-    if (!src) return "loading";
+    if (!seeded) return "loading";
     const isUnavailable =
-      Boolean(src.unavailable) ||
-      src.active === false ||
-      Boolean(src.deleted_at);
+      Boolean(seeded.unavailable) ||
+      seeded.active === false ||
+      Boolean(seeded.deleted_at);
     return isUnavailable ? "unavailable" : "available";
   });
+
+  // 2) After hydration, try sessionStorage cache (fast back/forward)
+  useEffect(() => {
+    if (typeof window === "undefined" || !id) return;
+    if (seeded) return; // if we already had seeded data, don't override it
+
+    try {
+      const raw = sessionStorage.getItem(`product_cache_${id}`);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      delete obj.__ts;
+
+      setP(obj);
+
+      const isUnavailable =
+        Boolean(obj.unavailable) ||
+        obj.active === false ||
+        Boolean(obj.deleted_at);
+      setAvailability(isUnavailable ? "unavailable" : "available");
+    } catch {
+      // ignore
+    }
+  }, [id, seeded]);
 
   const [similar, setSimilar] = useState<any[]>([]);
   const [moreFromShop, setMoreFromShop] = useState<any[]>([]);
@@ -1480,78 +1489,6 @@ export default function ProductPage() {
 
         {/* Reviews */}
         <Section title="Reviews" collapsible defaultOpen>
-          {/* <div className="rounded-2xl bg-neutral-100 p-3 border">
-          
-            <div className="flex items-center">
-              <div className="text-2xl font-semibold">
-                {ratingAvg ? Number(ratingAvg).toFixed(2) : "—"}
-              </div>
-              <Star className="ml-1 h-4 w-4 fill-current text-amber-500" />
-
-              <button
-                onClick={() => {
-                  const el = document.getElementById("reviews-strip");
-                  if (el)
-                    el.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                className="ml-auto inline-flex items-center rounded-full border px-3 py-1 text-sm hover:bg-white"
-              >
-                View all reviews
-              </button>
-            </div>
- 
-            <div className="mt-1 text-sm text-neutral-500">
-              {ratingCount >= 1000
-                ? `${Math.floor(ratingCount / 100) / 10}k`
-                : String(ratingCount)}{" "}
-              ratings
-            </div>
-
-   
-            {Array.isArray(p.reviews_preview) &&
-              p.reviews_preview.length > 0 && (
-                <div className="mt-3 flex flex-col gap-3">
-                  {p.reviews_preview.slice(0, 3).map((r: any, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-3 rounded-xl bg-white p-3 border"
-                    >
-                    
-                      <div className="h-9 w-9 rounded-full bg-neutral-200 overflow-hidden shrink-0">
-                        {r.avatar_url ? (
-                          <img
-                            src={r.avatar_url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : null}
-                      </div>
-
-                 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 text-[13px] text-amber-600">
-                          {Array.from({ length: r.rating }).map((_, idx) => (
-                            <Star
-                              key={idx}
-                              className="h-3.5 w-3.5 fill-current text-amber-600"
-                            />
-                          ))}
-                        </div>
-
-                        <div className="text-sm font-medium text-neutral-900 mt-1">
-                          {r.username || "Anonymous"}
-                        </div>
-
-                        <div className="text-sm text-neutral-600 mt-1 line-clamp-2">
-                          {r.comment}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-          </div> */}
-
           <div id="reviews-strip" className="mt-3">
             <ProductReviewsStrip
               productId={p.id}

@@ -13,7 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   // read ?next=… from URL on the client only
-  const [next, setNext] = useState<string>("/home");
+  const [next, setNext] = useState<string>("/onboarding/role");
 
   useEffect(() => {
     if (typeof window === "undefined") return;

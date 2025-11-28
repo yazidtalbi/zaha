@@ -1,11 +1,9 @@
-// components/BottomNav.tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
-  Tag,
   Heart,
   ShoppingCart,
   Search,
@@ -15,12 +13,9 @@ import {
   Settings,
   MessageSquareText,
   ScrollText,
-  Bell,
-  User2,
   LifeBuoy,
   LogOut,
   LogIn,
-  ShoppingBag,
   LayoutGrid,
   Eye,
   Share2,
@@ -29,8 +24,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { toast } from "sonner";
 
 function clsx(...xs: (string | boolean | undefined | null)[]) {
@@ -39,15 +32,10 @@ function clsx(...xs: (string | boolean | undefined | null)[]) {
 
 type IconType = React.ComponentType<{ size?: number; className?: string }>;
 
-// Keys for localStorage
+// LocalStorage keys
 const LS_HAS_SHOP = "zaha_hasShop";
 const LS_SHOP_ID = "zaha_shopId";
 const LS_SHOP_SLUG = "zaha_shopSlug";
-
-// NEW – cache profile locally as well
-const LS_PROFILE_NAME = "zaha_profileName";
-const LS_PROFILE_EMAIL = "zaha_profileEmail";
-const LS_PROFILE_AVATAR = "zaha_profileAvatar";
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -58,26 +46,9 @@ export default function BottomNav() {
   const isSeller = mounted && path.startsWith("/seller");
 
   const [uid, setUid] = useState<string | null>(null);
-
-  // hydrate profile info instantly from localStorage
-  const [email, setEmail] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(LS_PROFILE_EMAIL) || null;
-  });
-
-  const [profileName, setProfileName] = useState<string>(() => {
-    if (typeof window === "undefined") return "Account";
-    return localStorage.getItem(LS_PROFILE_NAME) || "Account";
-  });
-
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(LS_PROFILE_AVATAR) || null;
-  });
-
   const [cartCount, setCartCount] = useState(0);
 
-  // --- SHOP STATE (with localStorage-backed initial values) ---
+  // shop state
   const [hasShop, setHasShop] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(LS_HAS_SHOP) === "1";
@@ -94,14 +65,10 @@ export default function BottomNav() {
   });
 
   const [menuOpen, setMenuOpen] = useState(false); // seller "More" sheet
-  const [userSheetOpen, setUserSheetOpen] = useState(false); // buyer "You" sheet
 
   useEffect(() => {
     if (menuOpen) setMenuOpen(false);
   }, [pathname, menuOpen]);
-
-  // unread notifications (for the avatar dot)
-  const unread = useUnreadNotifications();
 
   const refreshCartCount = useCallback(
     async (nextUid = uid) => {
@@ -124,55 +91,6 @@ export default function BottomNav() {
     [mounted, uid]
   );
 
-  // helper: update local profile state + localStorage in one place
-  const applyProfileState = useCallback(
-    (next: {
-      name?: string | null;
-      email?: string | null;
-      avatar?: string | null;
-    }) => {
-      // localStorage sync
-      if (typeof window !== "undefined") {
-        if (next.name !== undefined) {
-          if (next.name && next.name !== "Account") {
-            localStorage.setItem(LS_PROFILE_NAME, next.name);
-          } else {
-            localStorage.removeItem(LS_PROFILE_NAME);
-          }
-        }
-
-        if (next.email !== undefined) {
-          if (next.email) {
-            localStorage.setItem(LS_PROFILE_EMAIL, next.email);
-          } else {
-            localStorage.removeItem(LS_PROFILE_EMAIL);
-          }
-        }
-
-        if (next.avatar !== undefined) {
-          if (next.avatar) {
-            localStorage.setItem(LS_PROFILE_AVATAR, next.avatar);
-          } else {
-            localStorage.removeItem(LS_PROFILE_AVATAR);
-          }
-        }
-      }
-
-      // React state
-      if (next.name !== undefined) {
-        setProfileName(next.name || "Account");
-      }
-      if (next.email !== undefined) {
-        setEmail(next.email ?? null);
-      }
-      if (next.avatar !== undefined) {
-        setAvatarUrl(next.avatar ?? null);
-      }
-    },
-    []
-  );
-
-  // helper: update shop state + localStorage in one place
   const applyShopState = useCallback(
     (next: { id: string | null; slug: string | null }) => {
       const { id, slug } = next;
@@ -197,7 +115,6 @@ export default function BottomNav() {
     []
   );
 
-  // helper: load shop for current user (one shop per user)
   const loadShopForUser = useCallback(
     async (userId: string | null) => {
       if (!userId) {
@@ -213,7 +130,6 @@ export default function BottomNav() {
 
       if (error) {
         console.error("Error loading shop in BottomNav:", error);
-        // don’t wipe existing cached state on error
         return;
       }
 
@@ -229,7 +145,7 @@ export default function BottomNav() {
     [applyShopState]
   );
 
-  // initial load: profile + shop + cart
+  // initial load
   useEffect(() => {
     if (!mounted) return;
     (async () => {
@@ -239,46 +155,12 @@ export default function BottomNav() {
 
       setUid(userId);
 
-      const emailFromAuth = u?.email ?? null;
-      const metaName =
-        (u?.user_metadata?.full_name as string) ||
-        (u?.user_metadata?.name as string) ||
-        null;
-
-      if (userId) {
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("full_name, username, avatar_url")
-          .eq("id", userId)
-          .maybeSingle();
-
-        const display =
-          (p?.full_name as string) ||
-          (p?.username as string) ||
-          metaName ||
-          "Account";
-        const avatar = (p?.avatar_url as string) ?? null;
-
-        applyProfileState({
-          name: display,
-          email: emailFromAuth,
-          avatar,
-        });
-      } else {
-        applyProfileState({
-          name: "Account",
-          email: null,
-          avatar: null,
-        });
-      }
-
-      // This will refresh the cached shop info, but UI already has last-known
       await loadShopForUser(userId);
       await refreshCartCount(userId);
     })();
-  }, [mounted, loadShopForUser, refreshCartCount, applyProfileState]);
+  }, [mounted, loadShopForUser, refreshCartCount]);
 
-  // if we’re on seller surface, ensure shop id/slug are loaded (for “Preview my shop”)
+  // seller surface: ensure shop loaded
   useEffect(() => {
     if (!mounted || !isSeller) return;
     (async () => {
@@ -288,7 +170,7 @@ export default function BottomNav() {
     })();
   }, [mounted, isSeller, loadShopForUser]);
 
-  // auth change: keep cart + shop + profile in sync
+  // auth change
   useEffect(() => {
     if (!mounted) return;
     const { data: sub } = supabase.auth.onAuthStateChange(
@@ -296,47 +178,12 @@ export default function BottomNav() {
         const nextUid = session?.user?.id ?? null;
         setUid(nextUid);
 
-        const nextEmail = session?.user?.email ?? null;
-        const nextName =
-          (session?.user?.user_metadata?.full_name as string) ||
-          (session?.user?.user_metadata?.name as string) ||
-          undefined;
-
-        applyProfileState({
-          email: nextEmail,
-          // only override name if we actually have one
-          ...(nextName ? { name: nextName } : {}),
-        });
-
         await refreshCartCount(nextUid);
         await loadShopForUser(nextUid);
       }
     );
     return () => sub.subscription.unsubscribe();
-  }, [mounted, refreshCartCount, loadShopForUser, applyProfileState]);
-
-  // whenever the buyer drawer opens, re-check if user has a shop (keeps cache fresh)
-  useEffect(() => {
-    if (!mounted || !userSheetOpen || !uid) return;
-    loadShopForUser(uid);
-  }, [mounted, userSheetOpen, uid, loadShopForUser]);
-
-  // listen for app-level event (from onboarding) to instantly update nav
-  useEffect(() => {
-    if (!mounted) return;
-
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail || {};
-      const id = detail.id ?? null;
-      const slug = detail.slug ?? null;
-      if (!id) return;
-      applyShopState({ id, slug });
-    };
-
-    window.addEventListener("shop:updated", handler as EventListener);
-    return () =>
-      window.removeEventListener("shop:updated", handler as EventListener);
-  }, [mounted, applyShopState]);
+  }, [mounted, refreshCartCount, loadShopForUser]);
 
   // cart realtime + events
   useEffect(() => {
@@ -449,18 +296,13 @@ export default function BottomNav() {
   );
 
   const onLogout = async () => {
-    // clear cached data
     if (typeof window !== "undefined") {
       localStorage.removeItem(LS_HAS_SHOP);
       localStorage.removeItem(LS_SHOP_ID);
       localStorage.removeItem(LS_SHOP_SLUG);
-      localStorage.removeItem(LS_PROFILE_NAME);
-      localStorage.removeItem(LS_PROFILE_EMAIL);
-      localStorage.removeItem(LS_PROFILE_AVATAR);
     }
 
     applyShopState({ id: null, slug: null });
-    applyProfileState({ name: "Account", email: null, avatar: null });
     setUid(null);
 
     await supabase.auth.signOut();
@@ -470,10 +312,9 @@ export default function BottomNav() {
   if (!mounted) return null;
   if (path.startsWith("/marketing")) return null;
   if (path === "/") return null;
-  // hide bottom nav on the sell flow
+  // hide nav on specific routes
   if (path.startsWith("/seller/sell")) return null;
   if (path.startsWith("/shop")) return null;
-
   if (path.startsWith("/seller/edit/")) return null;
   if (path.startsWith("/admin")) return null;
   if (path.startsWith("/become-seller")) return null;
@@ -704,22 +545,7 @@ export default function BottomNav() {
   }
 
   // ---------- BUYER NAV ----------
-  const initials = (profileName || "U").slice(0, 2).toUpperCase();
-  const manageStoreLabel = hasShop
-    ? "Go to seller mode"
-    : "Become a Zaha seller";
-  const manageStoreHref = uid
-    ? hasShop
-      ? "/seller"
-      : "/become-seller"
-    : "/login?next=%2Fbecome-seller";
-
-  const manageStoreClasses = hasShop
-    ? "bg-[#371837]/10 text-gray-700"
-    : "bg-emerald-50 text-emerald-800";
-
   const ordersHref = uid ? "/orders" : "/login";
-  const youHref = uid ? "/you" : "/login";
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-xl">
@@ -731,7 +557,6 @@ export default function BottomNav() {
           <li>
             <Item href="/search" label="Shop" match="/search" icon={Search} />
           </li>
-
           <li>
             <Item
               href="/favorites"
@@ -742,219 +567,20 @@ export default function BottomNav() {
           </li>
           <li>
             <Item
+              href={ordersHref}
+              label="Orders"
+              match="/orders"
+              icon={Package}
+            />
+          </li>
+          <li>
+            <Item
               href="/cart"
               label="Cart"
               match="/cart"
               icon={ShoppingCart}
               badge={cartCount || undefined}
             />
-          </li>
-
-          {/* Avatar / More sheet */}
-          <li>
-            <Sheet open={userSheetOpen} onOpenChange={setUserSheetOpen}>
-              <SheetTrigger asChild>
-                <button className="block w-full">
-                  <div className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-ink">
-                    <div className="relative grid place-items-center w-10 h-9">
-                      <Avatar className="h-8 w-8 ring-1 ring-black/5">
-                        {avatarUrl ? (
-                          <AvatarImage
-                            src={avatarUrl}
-                            alt={profileName}
-                            referrerPolicy="no-referrer"
-                            onError={() => {
-                              applyProfileState({ avatar: null });
-                            }}
-                          />
-                        ) : (
-                          <AvatarFallback className="text-[11px]">
-                            {initials}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      {unread > 0 && (
-                        <span className="absolute top-0 -right-1 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
-                      )}
-                    </div>
-                    <span className="leading-none">You</span>
-                  </div>
-                </button>
-              </SheetTrigger>
-
-              <SheetContent
-                side="bottom"
-                className="max-w-screen-sm mx-auto rounded-t-2xl bg-white shadow-2xl border-ink/10 px-0 pt-2 pb-[env(safe-area-inset-bottom)]"
-              >
-                <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-ink/15" />
-
-                {/* header with name + email */}
-                <div className="px-4 pb-3 flex items-center gap-3">
-                  <Avatar className="h-9 w-9 ring-1 ring-black/5">
-                    {avatarUrl ? (
-                      <AvatarImage
-                        src={avatarUrl}
-                        alt={profileName}
-                        referrerPolicy="no-referrer"
-                        onError={() => {
-                          applyProfileState({ avatar: null });
-                        }}
-                      />
-                    ) : (
-                      <AvatarFallback className="text-[11px]">
-                        {initials}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium truncate">
-                      {profileName}
-                    </span>
-                    {email && (
-                      <span className="text-xs text-neutral-500 truncate">
-                        {email}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="my-1 h-px bg-ink/10" />
-
-                <div className="px-1">
-                  <ul>
-                    <li>
-                      <Link
-                        href={youHref}
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <User2 size={20} />
-                        <span className="text-[15px] font-medium">Account</span>
-                      </Link>
-                    </li>
-
-                    <li>
-                      <Link
-                        href="/notifications"
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <div className="relative">
-                          <Bell size={20} />
-                          {unread > 0 && (
-                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-600" />
-                          )}
-                        </div>
-                        <span className="text-[15px] font-medium">
-                          Notifications
-                        </span>
-                        {unread > 0 && (
-                          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600">
-                            {unread}
-                          </span>
-                        )}
-                      </Link>
-                    </li>
-
-                    <li>
-                      <Link
-                        href={ordersHref}
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <ShoppingBag size={20} />
-                        <span className="text-[15px] font-medium">
-                          Purchases
-                        </span>
-                      </Link>
-                    </li>
-
-                    <li>
-                      <Link
-                        href="/deals"
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <Tag size={20} />
-                        <span className="text-[15px] font-medium">Deals</span>
-                      </Link>
-                    </li>
-
-                    <li>
-                      <Link
-                        href={manageStoreHref}
-                        onClick={() => setUserSheetOpen(false)}
-                        className={clsx(
-                          "w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand",
-                          manageStoreClasses
-                        )}
-                      >
-                        <Store size={20} />
-                        <span className="text-[15px] font-medium">
-                          {manageStoreLabel}
-                        </span>
-                      </Link>
-                    </li>
-                  </ul>
-
-                  <div className="my-2 h-px bg-ink/10" />
-
-                  <ul>
-                    <li>
-                      <Link
-                        href="/settings"
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <Settings size={20} />
-                        <span className="text-[15px] font-medium">
-                          Settings
-                        </span>
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/help"
-                        onClick={() => setUserSheetOpen(false)}
-                        className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                      >
-                        <LifeBuoy size={20} />
-                        <span className="text-[15px] font-medium">
-                          Help &amp; Support
-                        </span>
-                      </Link>
-                    </li>
-                    <li>
-                      {uid ? (
-                        <button
-                          onClick={async () => {
-                            setUserSheetOpen(false);
-                            await onLogout();
-                          }}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand text-left"
-                        >
-                          <LogOut size={20} />
-                          <span className="text-[15px] font-medium">
-                            Logout
-                          </span>
-                        </button>
-                      ) : (
-                        <Link
-                          href="/login"
-                          onClick={() => setUserSheetOpen(false)}
-                          className="w-full h-12 px-4 rounded-xl flex items-center gap-3 hover:bg-sand/50 active:bg-sand"
-                        >
-                          <LogIn size={20} />
-                          <span className="text-[15px] font-medium">
-                            Sign in
-                          </span>
-                        </Link>
-                      )}
-                    </li>
-                  </ul>
-                </div>
-              </SheetContent>
-            </Sheet>
           </li>
         </ul>
       </div>
