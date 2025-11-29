@@ -1,3 +1,4 @@
+// components/Header.tsx (Header3 updated to use AuthContext)
 "use client";
 
 import Link from "next/link";
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useAuth } from "@/lib/AuthContext";
 
 /* =========
    LocalStorage keys (shared with BottomNav)
@@ -47,6 +49,7 @@ type Mode = "buyer" | "seller" | null;
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user, loading: authLoading } = useAuth();
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -54,10 +57,11 @@ export default function Header() {
   const unread = useUnreadNotifications();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [uid, setUid] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>(null);
 
-  // hydrate profile from localStorage
+  const userId = user?.id ?? null;
+
+  // hydrate profile from localStorage (for fast first paint)
   const [email, setEmail] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(LS_PROFILE_EMAIL) || null;
@@ -118,26 +122,34 @@ export default function Header() {
     []
   );
 
-  // initial load
+  /* =========================
+     Sync with AuthContext user
+  ========================== */
   useEffect(() => {
     if (!mounted) return;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
-      const userId = user?.id ?? null;
 
-      setUid(userId);
+    // No user => guest
+    if (!userId) {
+      setMode(null);
 
-      if (!userId) {
-        setMode(null);
-        applyProfileState({
-          name: "Account",
-          email: null,
-          avatar: null,
-        });
-        return;
+      // clear profile cache for a clean guest state
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(LS_PROFILE_NAME);
+        localStorage.removeItem(LS_PROFILE_EMAIL);
+        localStorage.removeItem(LS_PROFILE_AVATAR);
       }
 
+      applyProfileState({
+        name: "Account",
+        email: null,
+        avatar: null,
+      });
+
+      return;
+    }
+
+    // Logged in: fetch profile
+    (async () => {
       const authEmail = user?.email ?? null;
       const metaName =
         (user?.user_metadata?.full_name as string) ||
@@ -165,58 +177,11 @@ export default function Header() {
         avatar,
       });
     })();
-  }, [mounted, applyProfileState]);
+  }, [mounted, userId, user, applyProfileState]);
 
-  // auth change
-  useEffect(() => {
-    if (!mounted) return;
-
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const nextUid = session?.user?.id ?? null;
-        setUid(nextUid);
-
-        const nextEmail = session?.user?.email ?? null;
-        const nextName =
-          (session?.user?.user_metadata?.full_name as string) ||
-          (session?.user?.user_metadata?.name as string) ||
-          undefined;
-
-        applyProfileState({
-          email: nextEmail,
-          ...(nextName ? { name: nextName } : {}),
-        });
-
-        if (!nextUid) {
-          setMode(null);
-          return;
-        }
-
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("full_name, username, avatar_url, mode")
-          .eq("id", nextUid)
-          .maybeSingle();
-
-        if (p) {
-          const display =
-            (p.full_name as string) ||
-            (p.username as string) ||
-            nextName ||
-            "Account";
-          const avatar = (p.avatar_url as string) ?? null;
-
-          setMode((p.mode as Mode) ?? "buyer");
-          applyProfileState({
-            name: display,
-            avatar,
-          });
-        }
-      }
-    );
-
-    return () => sub.subscription.unsubscribe();
-  }, [mounted, applyProfileState]);
+  /* =========================
+     Actions
+  ========================== */
 
   const logout = async () => {
     if (typeof window !== "undefined") {
@@ -228,7 +193,6 @@ export default function Header() {
       localStorage.removeItem(LS_PROFILE_AVATAR);
     }
 
-    setUid(null);
     setMode(null);
     applyProfileState({
       name: "Account",
@@ -236,51 +200,64 @@ export default function Header() {
       avatar: null,
     });
 
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
   };
 
   const switchMode = async () => {
-    if (!uid) return;
+    if (!userId) return;
     const newMode: Mode = mode === "seller" ? "buyer" : "seller";
     setMode(newMode);
 
-    await supabase.from("profiles").update({ mode: newMode }).eq("id", uid);
+    await supabase.from("profiles").update({ mode: newMode }).eq("id", userId);
 
     router.push(newMode === "seller" ? "/seller" : "/home");
   };
 
+  /* =========================
+     Marketing pages: no header
+  ========================== */
   const isMarketing = pathname?.startsWith("/marketing");
   if (isMarketing) return null;
 
+  /* =========================
+     Derived display values
+  ========================== */
+
   const displayName =
-    profileName && profileName !== "Account" && uid
+    profileName && profileName !== "Account" && userId
       ? profileName
-      : uid
+      : userId
         ? "Account"
         : "Guest";
 
   const initials = (displayName || "U").slice(0, 2).toUpperCase();
   const homeHref = mode === "seller" ? "/seller" : "/home";
 
-  if (!mounted) {
+  /* =========================
+     Skeleton while mounting
+  ========================== */
+  if (!mounted || authLoading) {
     return (
-      <header className="sticky top-0 z-40   ">
-        <div className="mx-auto flex h-14 max-w-screen-sm items-center justify-between  ">
-          <div className="w-8 h-8 rounded-full bg-sand/80" />
+      <header className="sticky top-0 z-40">
+        <div className="mx-auto flex h-14 max-w-screen-sm items-center justify-between">
+          <div className="h-8 w-8 rounded-full bg-sand/80" />
           <div className="h-4 w-16 rounded bg-sand/80" />
           <div className="flex gap-2">
-            <div className="w-8 h-8 rounded-full bg-sand/80" />
-            <div className="w-8 h-8 rounded-full bg-sand/80" />
+            <div className="h-8 w-8 rounded-full bg-sand/80" />
+            <div className="h-8 w-8 rounded-full bg-sand/80" />
           </div>
         </div>
       </header>
     );
   }
 
+  /* =========================
+     Actual header
+  ========================== */
   return (
-    <header className="sticky top-0 z-40  ">
-      <div className="mx-auto flex h-10 max-w-screen-sm items-center justify-between  ">
+    <header className="sticky top-0 z-40">
+      <div className="mx-auto flex h-10 max-w-screen-sm items-center justify-between">
         {/* LEFT: Avatar = Menu trigger */}
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
@@ -302,9 +279,6 @@ export default function Header() {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                {/* {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-600" />
-                )} */}
               </div>
             </button>
           </SheetTrigger>
@@ -334,12 +308,16 @@ export default function Header() {
                   </AvatarFallback>
                 )}
               </Avatar>
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-medium truncate">
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-medium">
                   {displayName}
                 </span>
-                <span className="text-xs text-neutral-500 truncate">
-                  {email ? email : uid ? "Welcome back" : "Browsing as guest"}
+                <span className="truncate text-xs text-neutral-500">
+                  {email
+                    ? email
+                    : userId
+                      ? "Welcome back"
+                      : "Browsing as guest"}
                 </span>
               </div>
             </div>
@@ -353,7 +331,7 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <Home className="w-4 h-4" />
+                <Home className="h-4 w-4" />
                 <span>Home</span>
               </Link>
 
@@ -362,7 +340,7 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <ShoppingBag className="w-4 h-4" />
+                <ShoppingBag className="h-4 w-4" />
                 <span>Shop all</span>
               </Link>
 
@@ -371,16 +349,16 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <Heart className="w-4 h-4" />
+                <Heart className="h-4 w-4" />
                 <span>Favorites</span>
               </Link>
 
               <Link
-                href={uid ? "/orders" : "/login"}
+                href={userId ? "/orders" : "/login"}
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <Package className="w-4 h-4" />
+                <Package className="h-4 w-4" />
                 <span>Orders</span>
               </Link>
 
@@ -389,35 +367,16 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <ShoppingCart className="w-4 h-4" />
+                <ShoppingCart className="h-4 w-4" />
                 <span>Cart</span>
               </Link>
-
-              {/* <Link
-                href="/notifications"
-                onClick={() => setMenuOpen(false)}
-                className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
-              >
-                <div className="relative">
-                  <Bell className="w-4 h-4" />
-                  {unread > 0 && (
-                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-600" />
-                  )}
-                </div>
-                <span>Notifications</span>
-                {unread > 0 && (
-                  <span className="ml-auto rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-600">
-                    {unread}
-                  </span>
-                )}
-              </Link> */}
             </nav>
 
             <Separator className="my-4" />
 
             {/* Seller / mode switch */}
             <div className="space-y-1 px-2">
-              {uid ? (
+              {userId ? (
                 <button
                   onClick={() => {
                     setMenuOpen(false);
@@ -425,7 +384,7 @@ export default function Header() {
                   }}
                   className="flex h-11 w-full items-center gap-3 rounded-xl bg-emerald-50 px-3 text-sm text-emerald-800 hover:bg-emerald-100"
                 >
-                  <Store className="w-4 h-4" />
+                  <Store className="h-4 w-4" />
                   <span>
                     {mode === "seller"
                       ? "Switch to buyer mode"
@@ -438,7 +397,7 @@ export default function Header() {
                   onClick={() => setMenuOpen(false)}
                   className="flex h-11 items-center gap-3 rounded-xl bg-emerald-50 px-3 text-sm text-emerald-800 hover:bg-emerald-100"
                 >
-                  <Store className="w-4 h-4" />
+                  <Store className="h-4 w-4" />
                   <span>Become a Zaha seller</span>
                 </Link>
               )}
@@ -453,7 +412,7 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="h-4 w-4" />
                 <span>Settings</span>
               </Link>
 
@@ -462,11 +421,11 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
               >
-                <LifeBuoy className="w-4 h-4" />
+                <LifeBuoy className="h-4 w-4" />
                 <span>Help &amp; Support</span>
               </Link>
 
-              {uid ? (
+              {userId ? (
                 <button
                   onClick={async () => {
                     setMenuOpen(false);
@@ -474,7 +433,7 @@ export default function Header() {
                   }}
                   className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm text-red-600 hover:bg-red-50"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="h-4 w-4" />
                   <span>Logout</span>
                 </button>
               ) : (
@@ -483,7 +442,7 @@ export default function Header() {
                   onClick={() => setMenuOpen(false)}
                   className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-sand/70"
                 >
-                  <LogIn className="w-4 h-4" />
+                  <LogIn className="h-4 w-4" />
                   <span>Sign in</span>
                 </Link>
               )}
@@ -507,7 +466,7 @@ export default function Header() {
           onClick={() => router.push("/notifications")}
         >
           <div className="relative">
-            <Bell className="w-5 h-5 " />
+            <Bell className="h-5 w-5" />
             {unread > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-600" />
             )}

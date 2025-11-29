@@ -1,10 +1,10 @@
 {
   "name": "Zaha",
   "short_name": "Zaha",
-  "start_url": "/",
+  "start_url": "/home",
   "display": "standalone",
-  "background_color": "#0B0B0C",
-  "theme_color": "#0B0B0C",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
   "icons": [
     {
       "src": "/icons/verified_zaha.svg",

@@ -2,17 +2,17 @@
 import ClientChrome from "@/components/ClientChrome";
 import "./globals.css";
 import type { Metadata } from "next";
-import { Instrument_Sans } from "next/font/google";
-import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"; // 👈 add this
 
-import { Playfair_Display } from "next/font/google";
-
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["600"], // or ["500","600","700"] if you want more options
-});
+import { Instrument_Sans, Playfair_Display } from "next/font/google";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { AuthProvider } from "@/lib/AuthContext"; // 👈 added
 
 // ---- Fonts ----
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["600"],
+});
+
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
     siteName: "zaha.ma",
     images: [
       {
-        url: "/og/zaha-og.jpg", // add this to /public/og/zaha-og.jpg
+        url: "/og/zaha-og.jpg",
         width: 1200,
         height: 630,
         alt: "zaha.ma marketplace preview",
@@ -88,10 +88,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={instrumentSans.variable}>
-      <body className="font-sans text-ink min-h-screen overflow-x-hidden  ">
-        {/* mx-auto sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl */}
-        <ServiceWorkerRegister /> {/* 👈 now valid */}
-        <ClientChrome>{children}</ClientChrome>
+      <body className="font-sans text-ink min-h-screen overflow-x-hidden">
+        <ServiceWorkerRegister />
+
+        {/* 👇 GLOBAL AUTH CONTEXT WRAPPER */}
+        <AuthProvider>
+          {/* Your entire client-side app */}
+          <ClientChrome>{children}</ClientChrome>
+        </AuthProvider>
       </body>
     </html>
   );
