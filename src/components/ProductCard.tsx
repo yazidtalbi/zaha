@@ -199,30 +199,37 @@ export default function ProductCard({
     city: p.city ?? null,
   };
 
+  // 💾 Session cache writer (used by ProductPage on reload)
   function writeCache() {
     try {
       sessionStorage.setItem(
         `product_cache_${p.id}`,
-        JSON.stringify({ ...slim, __ts: Date.now() })
+        JSON.stringify({ ...slim, __ts: Date.now(), v: 1 })
       );
-    } catch {}
+    } catch {
+      // ignore quota / serialization errors
+    }
   }
+
+  const handlePrefetch = () => {
+    setSeed(p.id, slim);
+    writeCache();
+    router.prefetch(`/product/${p.id}`);
+    if (imgs[0]) new Image().src = imgs[0];
+  };
+
+  const handleClickSeed = () => {
+    setSeed(p.id, slim);
+    writeCache();
+  };
 
   return variant === "love" ? (
     // LOVE VARIANT — horizontal, clean, no overlay/infos inside the image
     <Link
       href={`/product/${p.id}`}
       prefetch
-      onMouseEnter={() => {
-        setSeed(p.id, slim);
-        writeCache();
-        router.prefetch(`/product/${p.id}`);
-        if (imgs[0]) new Image().src = imgs[0];
-      }}
-      onClick={() => {
-        setSeed(p.id, slim);
-        writeCache();
-      }}
+      onMouseEnter={handlePrefetch}
+      onClick={handleClickSeed}
       className={`block ${className}`}
     >
       <div className="group relative overflow-hidden rounded-2xl   transition-all active:scale-[0.99] ">
@@ -309,16 +316,8 @@ export default function ProductCard({
     <Link
       href={`/product/${p.id}`}
       prefetch
-      onMouseEnter={() => {
-        setSeed(p.id, slim);
-        writeCache();
-        router.prefetch(`/product/${p.id}`);
-        if (imgs[0]) new Image().src = imgs[0];
-      }}
-      onClick={() => {
-        setSeed(p.id, slim);
-        writeCache();
-      }}
+      onMouseEnter={handlePrefetch}
+      onClick={handleClickSeed}
       className={`block overflow-hidden ${className}`}
     >
       <div className="relative ">
@@ -354,16 +353,8 @@ export default function ProductCard({
     <Link
       href={`/product/${p.id}`}
       prefetch
-      onMouseEnter={() => {
-        setSeed(p.id, slim);
-        writeCache();
-        router.prefetch(`/product/${p.id}`);
-        if (imgs[0]) new Image().src = imgs[0];
-      }}
-      onClick={() => {
-        setSeed(p.id, slim);
-        writeCache();
-      }}
+      onMouseEnter={handlePrefetch}
+      onClick={handleClickSeed}
       className={`block overflow-hidden ${className}`}
     >
       {useCarousel || useCarouselAuto ? (

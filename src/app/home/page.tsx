@@ -645,9 +645,9 @@ export default function HomePage(): JSX.Element {
   /* ---------- render ---------- */
   return (
     <main className="pb-30 bg-neutral-50 min-h-screen">
-      <div className="pt-4 opacity-0">
+      {/* <div className="pt-4 opacity-0">
         <Header />
-      </div>
+      </div> */}
 
       <header className="fixed inset-x-0 top-0 z-40 border-neutral-200 bg-neutral-50 ">
         <div className="px-3 pt-2 pb-2">
@@ -685,7 +685,7 @@ export default function HomePage(): JSX.Element {
       </section> */}
 
       {/* Hero */}
-      <div className="pt-2 px-1">
+      <div className="pt-16 px-1">
         <HeroCarousel slides={slides} />
       </div>
 

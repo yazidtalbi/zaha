@@ -450,47 +450,25 @@ export default function ProductPage() {
 
   const popSeed = useProductSeed((s) => s.popSeed);
 
-  // 1) Try seed (from prior navigation) – safe for SSR
+  // 1) Try seed (from prior navigation)
   const seeded = id ? popSeed(id) : null;
 
-  // State: start only from seeded for SSR safety
+  // main product + shop
   const [p, setP] = useState<any>(seeded ?? null);
   const [shop, setShop] = useState<any>(null);
 
-  // availability controlled by seed first, then by DB / cache
+  // availability controlled by parent first (seed/cache), then by DB fetch
   const [availability, setAvailability] = useState<
     "loading" | "available" | "unavailable"
   >(() => {
-    if (!seeded) return "loading";
+    const src: any = seeded ?? null;
+    if (!src) return "loading";
     const isUnavailable =
-      Boolean(seeded.unavailable) ||
-      seeded.active === false ||
-      Boolean(seeded.deleted_at);
+      Boolean(src.unavailable) ||
+      src.active === false ||
+      Boolean(src.deleted_at);
     return isUnavailable ? "unavailable" : "available";
   });
-
-  // 2) After hydration, try sessionStorage cache (fast back/forward)
-  useEffect(() => {
-    if (typeof window === "undefined" || !id) return;
-    if (seeded) return; // if we already had seeded data, don't override it
-
-    try {
-      const raw = sessionStorage.getItem(`product_cache_${id}`);
-      if (!raw) return;
-      const obj = JSON.parse(raw);
-      delete obj.__ts;
-
-      setP(obj);
-
-      const isUnavailable =
-        Boolean(obj.unavailable) ||
-        obj.active === false ||
-        Boolean(obj.deleted_at);
-      setAvailability(isUnavailable ? "unavailable" : "available");
-    } catch {
-      // ignore
-    }
-  }, [id, seeded]);
 
   const [similar, setSimilar] = useState<any[]>([]);
   const [moreFromShop, setMoreFromShop] = useState<any[]>([]);
@@ -532,6 +510,40 @@ export default function ProductPage() {
   const [showStickyTop, setShowStickyTop] = useState(false);
   const [showStickyAdd, setShowStickyAdd] = useState(false);
   const mainCtaRef = useRef<HTMLDivElement | null>(null);
+
+  // 2) On client, if no seed, try sessionStorage cache (fast reload)
+  useEffect(() => {
+    if (!id) return;
+    if (p) return; // already have seed or DB data
+
+    try {
+      const raw = sessionStorage.getItem(`product_cache_${id}`);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+
+      // basic validation
+      if (!obj || typeof obj !== "object" || obj.id !== id) return;
+
+      setP((prev) => prev ?? obj);
+
+      const isUnavailable =
+        Boolean(obj.unavailable) ||
+        obj.active === false ||
+        Boolean(obj.deleted_at);
+
+      setAvailability((prev) =>
+        prev === "loading"
+          ? isUnavailable
+            ? "unavailable"
+            : "available"
+          : prev
+      );
+
+      setLoading((prev) => (prev && !seeded ? false : prev));
+    } catch {
+      // ignore bad cache
+    }
+  }, [id, p, seeded]);
 
   // Fetch: if we already have p, revalidate in background without flipping loading=true.
   useEffect(() => {
@@ -580,10 +592,11 @@ export default function ProductPage() {
         Boolean((prod as any).deleted_at);
       setAvailability(dbUnavailable ? "unavailable" : "available");
 
+      // 💾 Refresh cache with full fresh product
       try {
         sessionStorage.setItem(
           `product_cache_${_id}`,
-          JSON.stringify({ ...prod, __ts: Date.now() })
+          JSON.stringify({ ...prod, __ts: Date.now(), v: 1 })
         );
       } catch {}
 
@@ -1297,7 +1310,7 @@ export default function ProductPage() {
             <Section key={g.id} title={g.name}>
               <OptionGroupField
                 group={g}
-                valueId={selected[g.id]}
+                valueId={valueId}
                 onChange={(id) =>
                   setSelected((s) => ({
                     ...s,

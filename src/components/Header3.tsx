@@ -266,7 +266,7 @@ export default function Header() {
   if (!mounted) {
     return (
       <header className="sticky top-0 z-40   ">
-        <div className="mx-auto flex h-14 max-w-screen-sm items-center justify-between px-3">
+        <div className="mx-auto flex h-14 max-w-screen-sm items-center justify-between  ">
           <div className="w-8 h-8 rounded-full bg-sand/80" />
           <div className="h-4 w-16 rounded bg-sand/80" />
           <div className="flex gap-2">
@@ -280,7 +280,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40  ">
-      <div className="mx-auto flex h-14 max-w-screen-sm items-center justify-between px-3">
+      <div className="mx-auto flex h-10 max-w-screen-sm items-center justify-between  ">
         {/* LEFT: Avatar = Menu trigger */}
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
@@ -496,7 +496,7 @@ export default function Header() {
           href={homeHref}
           className="flex-1 text-center text-lg font-semibold tracking-tight text-ink"
         >
-          Zaha
+          zaha
         </Link>
 
         {/* RIGHT: Notifications icon */}
@@ -507,7 +507,7 @@ export default function Header() {
           onClick={() => router.push("/notifications")}
         >
           <div className="relative">
-            <Bell className="w-5 h-5" />
+            <Bell className="w-5 h-5 " />
             {unread > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-600" />
             )}
