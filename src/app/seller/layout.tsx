@@ -1,10 +1,11 @@
- 
 "use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { PropsWithChildren, useEffect } from "react";
 import { useRequireShop } from "@/hooks/useRequireShop";
+
+export const dynamic = "force-dynamic";
 
 // tiny helper; you likely already have cn() in "@/lib/utils"
 function cn(...xs: (string | false | undefined)[]) {

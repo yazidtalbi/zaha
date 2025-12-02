@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ProductCard from "@/components/ProductCard";
 import EmptyState from "@/components/EmptyState";
+
+import CategoriesStrip from "@/components/home/CategoriesStrip";
+
 import {
   Sheet,
   SheetContent,
@@ -689,6 +692,17 @@ export default function SearchPage() {
           {recentViews.length > 0 && (
             <div>
               <div className="text-sm font-medium mb-2 text-neutral-700">
+                Browse categories
+              </div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                <CategoriesStrip variant="default" />
+              </div>
+            </div>
+          )}{" "}
+          {/* Recently viewed */}
+          {recentViews.length > 0 && (
+            <div>
+              <div className="text-sm font-medium mb-2 text-neutral-700">
                 Recently viewed
               </div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -714,7 +728,6 @@ export default function SearchPage() {
               </div>
             </div>
           )}
-
           {/* Popular right now */}
           <div>
             <div className="text-sm font-medium mb-2 text-neutral-700">

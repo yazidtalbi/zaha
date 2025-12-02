@@ -43,6 +43,7 @@ type Order = {
   amount_mad: number;
   status: "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";
   product_id: string | null;
+  shop_id?: string | null; // might exist, but we don't rely on it
   products?: {
     id: string;
     title: string;
@@ -302,44 +303,65 @@ function OverviewInner() {
 
   /* -------- Fetch orders for current & previous periods -------- */
   useEffect(() => {
+    if (!shop?.id) return; // wait for shop
+
     let cancelled = false;
+
     (async () => {
       setLoading(true);
       try {
-        // current
+        // current period – get all accessible orders + joined product
         let q = supabase
           .from("orders")
           .select("*, products:products(*)")
           .order("created_at", { ascending: false });
+
         if (currentRange.from && currentRange.to) {
           q = q
             .gte("created_at", currentRange.from)
             .lte("created_at", currentRange.to);
         }
-        const { data: nowData, error: nowErr } = await q;
-        if (!cancelled && !nowErr && nowData) setOrders(nowData as any[]);
 
-        // previous
+        const { data: nowData, error: nowErr } = await q;
+
+        if (!cancelled && !nowErr && nowData) {
+          // 👇 keep only orders where the product belongs to THIS shop
+          const sellerOrders = (nowData as any[]).filter(
+            (o) => o.products?.shop_id === shop.id
+          );
+          setOrders(sellerOrders as Order[]);
+        }
+
+        // previous period – same idea for deltas
         if (previousRange.from && previousRange.to) {
           const { data: prevData } = await supabase
             .from("orders")
-            .select("id, amount_mad, status, created_at")
+            .select("*, products:products(*)")
             .gte("created_at", previousRange.from!)
             .lte("created_at", previousRange.to!)
             .order("created_at", { ascending: false });
-          if (!cancelled && prevData) setPrevOrders(prevData as any[]);
+
+          if (!cancelled && prevData) {
+            const sellerPrev = (prevData as any[]).filter(
+              (o) => o.products?.shop_id === shop.id
+            );
+            setPrevOrders(sellerPrev as Order[]);
+          }
         } else {
           setPrevOrders([]);
         }
+
         setPage(0);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [
+    shop?.id,
     range,
     currentRange.from,
     currentRange.to,
@@ -349,30 +371,54 @@ function OverviewInner() {
 
   /* -------- Realtime: ping on new/updated orders -------- */
   useEffect(() => {
+    if (!shop?.id) return;
+
     const ch = supabase
       .channel("seller_orders_live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
-        (payload: any) => {
+        async (payload: any) => {
           const rec = payload.new as Order;
-          setNewOrderBanner(rec);
+
+          // We need the product to know which shop it belongs to
+          if (!rec.product_id) return;
+
+          const { data: product } = await supabase
+            .from("products")
+            .select("id, title, photos, shop_id")
+            .eq("id", rec.product_id)
+            .maybeSingle();
+
+          if (!product || product.shop_id !== shop.id) {
+            // not this seller's order -> ignore
+            return;
+          }
+
+          const enriched: Order = {
+            ...rec,
+            products: product as any,
+          };
+
+          setNewOrderBanner(enriched);
           setOrders((prev) => {
-            if (!rec?.id) return prev;
-            const idx = prev.findIndex((o) => o.id === rec.id);
-            if (idx === -1) return [rec, ...prev].slice(0, 200);
+            if (!enriched?.id) return prev;
+            const idx = prev.findIndex((o) => o.id === enriched.id);
+            if (idx === -1) return [enriched, ...prev].slice(0, 200);
             const next = [...prev];
-            next[idx] = { ...next[idx], ...rec };
+            next[idx] = { ...next[idx], ...enriched };
             return next;
           });
+
           setTimeout(() => setNewOrderBanner(null), 4000);
         }
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(ch);
     };
-  }, []);
+  }, [shop?.id]);
 
   /* -------- Metrics -------- */
   const clean = useMemo(

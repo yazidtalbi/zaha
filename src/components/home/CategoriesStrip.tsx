@@ -255,8 +255,8 @@ export default function CategoriesStrip({
 
   /* ---------- DEFAULT VARIANT (your original cards) ---------- */
   return (
-    <section className="py-5">
-      <h2 className="text-lg font-semibold mb-3">{title}</h2>
+    <section className="">
+      {/* <h2 className="text-lg font-semibold mb-3">{titletitle}</h2> */}
 
       {empty && (
         <div className="text-sm text-neutral-700 mb-3">

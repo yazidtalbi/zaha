@@ -6,6 +6,9 @@ import type { Metadata } from "next";
 import { Instrument_Sans, Playfair_Display } from "next/font/google";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { AuthProvider } from "@/lib/AuthContext"; // 👈 added
+import CacheVersionGuard from "@/components/CacheVersionGuard";
+
+export const dynamic = "force-dynamic";
 
 // ---- Fonts ----
 const playfair = Playfair_Display({
@@ -89,12 +92,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={instrumentSans.variable}>
       <body className="font-sans text-ink min-h-screen overflow-x-hidden">
-        <ServiceWorkerRegister />
+        {/* <ServiceWorkerRegister /> */}
 
         {/* 👇 GLOBAL AUTH CONTEXT WRAPPER */}
         <AuthProvider>
-          {/* Your entire client-side app */}
-          <ClientChrome>{children}</ClientChrome>
+          <CacheVersionGuard>
+            <ClientChrome>{children}</ClientChrome>
+          </CacheVersionGuard>
         </AuthProvider>
       </body>
     </html>

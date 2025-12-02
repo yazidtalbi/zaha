@@ -328,6 +328,63 @@ export default function MarketingPage() {
 
   return (
     <main className="min-h-screen bg-[#f6f3ec] tracking-tight ">
+      <nav
+        className={`
+    hidden md:block fixed left-1/2 -translate-x-1/2
+    z-[9999]          /* ✅ real z-index, above hero */
+    pointer-events-none
+    top-4 w-full
+  `}
+      >
+        {/* Inner wrapper = actual navbar pill + invisible bottom space */}
+        <div
+          className={`
+      mx-auto  
+      flex items-center justify-between
+      px-4 sm:px-6 lg:px-8 lg:pr-4 py-3
+      transition-all duration-300 ease-[cubic-bezier(0.19,1,0.22,1)]
+      pointer-events-auto
+      ${
+        scrolled
+          ? "max-w-5xl  bg-white  rounded-full border border-[#f3e3d9]"
+          : "max-w-[1400px] bg-transparent shadow-none rounded-none  border-none "
+      }
+    `}
+          style={{
+            marginBottom: "18px", // ✅ invisible space under the navbar
+          }}
+        >
+          {/* Logo / wordmark */}
+          <span className="text-sm sm:text-xl font-medium text-[#2a1335]">
+            Fazar
+          </span>
+
+          {/* Center links */}
+          <div className="hidden md:flex items-center gap-10 ml-6">
+            {NAV_LINKS.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="flex items-center gap-2 text-sm sm:text-base font-medium text-[#341339] hover:opacity-80"
+              >
+                <span
+                  className="flex h-3 w-3 items-center justify-center"
+                  style={{ color: item.color }}
+                >
+                  <BrandStar className="h-2.5 w-2.5" />
+                </span>
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <button className="inline-flex items-center gap-1.5 rounded-full bg-[#23102f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d183b]">
+            <span>Open the app</span>
+          </button>
+        </div>
+      </nav>
+
       <div
         id="scroll-animate"
         style={{
@@ -365,48 +422,6 @@ export default function MarketingPage() {
               }}
             >
               {/* NAVBAR */}
-              <nav
-                className={`
-    hidden md:block fixed z-100 left-1/2 -translate-x-1/2
-    transition-all duration-300 ease-[cubic-bezier(0.19,1,0.22,1)] 
-    ${
-      scrolled
-        ? "top-4 w-4xl bg-white/90   shadow-[0_6px_24px_rgba(0,0,0,0.08)] rounded-full"
-        : "top-4 w-full bg-transparent shadow-none rounded-none px-8"
-    }
-  `}
-              >
-                <div className="mx-auto flex container items-center justify-between px-4 sm:px-6 lg:px-8 lg:pr-4 py-3">
-                  {/* Logo / wordmark */}
-                  <span className="text-sm sm:text-2xl font-semibold text-[#2a1335]">
-                    fazar
-                  </span>
-
-                  {/* Center links */}
-                  <div className="hidden md:flex items-center gap-10 ml-6">
-                    {NAV_LINKS.map((item) => (
-                      <a
-                        key={item.label}
-                        href={item.href}
-                        className="flex items-center gap-2 text-sm sm:text-base font-medium text-[#341339] hover:opacity-80 "
-                      >
-                        <span
-                          className="flex h-3 w-3 items-center justify-center"
-                          style={{ color: item.color }}
-                        >
-                          <BrandStar className="h-2.5 w-2.5" />
-                        </span>
-                        <span>{item.label}</span>
-                      </a>
-                    ))}
-                  </div>
-
-                  {/* CTA */}
-                  <button className="inline-flex items-center gap-1.5 rounded-full bg-[#23102f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d183b]">
-                    <span>Open the app</span>
-                  </button>
-                </div>
-              </nav>
 
               {/* Huge zaha.MA */}
               <div
@@ -562,7 +577,7 @@ export default function MarketingPage() {
               <div className="mx-auto flex w-full container flex-col gap-1 px-4 sm:pb-10 sm:px-6 lg:px-4">
                 {/* Manifesto card */}
                 <RevealOnScroll>
-                  <div className="mx-auto w-full max-w-4xl rounded-3xl bg-white pt-10 pb-2 sm:pb-4 shadow-xl sm:pt-12 arabic-corners">
+                  <div className="mx-auto w-full max-w-4xl rounded-3xl bg-white pt-10 pb-2 sm:pb-4  sm:pt-12 arabic-corners  border border-[#f3e3d9]">
                     <div className="mb-10 flex justify-center sm:mb-12">
                       <motion.span
                         className="mt-10 inline-flex items-center rounded-full border border-neutral-200 px-4 py-1.5 text-sm sm:px-5 sm:text-bas e font-normal tracking-tight text-neutral-700"
@@ -963,7 +978,7 @@ export default function MarketingPage() {
                 {/* Brand footer bar */}
                 <RevealOnScroll>
                   <section className="mt-6 mb-8 px-1 sm:px-0">
-                    <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 rounded-3xl bg-white px-5 py-4 text-center shadow-xl sm:flex-row sm:gap-0 sm:text-left">
+                    <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 rounded-3xl bg-white px-5 py-4 text-center  border border-[#f3e3d9] sm:flex-row sm:gap-0 sm:text-left">
                       {/* Left: star + text */}
                       <div className="flex items-center gap-3">
                         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100/50 text-[#23102f]">

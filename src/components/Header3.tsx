@@ -1,4 +1,4 @@
-// components/Header.tsx (Header3 updated to use AuthContext)
+// components/Header.tsx (Header3 updated with avatar from profile OR Google)
 "use client";
 
 import Link from "next/link";
@@ -18,6 +18,7 @@ import {
   Bell,
   ShoppingCart,
   Package,
+  User,
 } from "lucide-react";
 
 import {
@@ -60,6 +61,7 @@ export default function Header() {
   const [mode, setMode] = useState<Mode>(null);
 
   const userId = user?.id ?? null;
+  const isGuest = !userId;
 
   // hydrate profile from localStorage (for fast first paint)
   const [email, setEmail] = useState<string | null>(() => {
@@ -148,12 +150,18 @@ export default function Header() {
       return;
     }
 
-    // Logged in: fetch profile
+    // Logged in: fetch profile + use Google avatar as fallback
     (async () => {
       const authEmail = user?.email ?? null;
+
       const metaName =
         (user?.user_metadata?.full_name as string) ||
         (user?.user_metadata?.name as string) ||
+        null;
+
+      const metaAvatar =
+        (user?.user_metadata?.avatar_url as string) ||
+        (user?.user_metadata?.picture as string) ||
         null;
 
       const { data: p } = await supabase
@@ -167,7 +175,11 @@ export default function Header() {
         (p?.username as string) ||
         metaName ||
         "Account";
-      const avatar = (p?.avatar_url as string) ?? null;
+
+      // 🔥 MAIN PART:
+      // 1. Use avatar_url from profiles if present
+      // 2. Else use Google avatar from user_metadata
+      const avatar = (p?.avatar_url as string | null) || metaAvatar || null;
 
       setMode((p?.mode as Mode) ?? "buyer");
 
@@ -270,12 +282,17 @@ export default function Header() {
                       alt={displayName}
                       referrerPolicy="no-referrer"
                       onError={() => {
+                        // if image fails, drop back to initials / icon
                         applyProfileState({ avatar: null });
                       }}
                     />
                   ) : (
                     <AvatarFallback className="text-[11px]">
-                      {initials}
+                      {isGuest ? (
+                        <User className="h-4 w-4 opacity-60" />
+                      ) : (
+                        initials
+                      )}
                     </AvatarFallback>
                   )}
                 </Avatar>
@@ -304,7 +321,11 @@ export default function Header() {
                   />
                 ) : (
                   <AvatarFallback className="text-[11px]">
-                    {initials}
+                    {isGuest ? (
+                      <User className="h-4 w-4 opacity-60" />
+                    ) : (
+                      initials
+                    )}
                   </AvatarFallback>
                 )}
               </Avatar>

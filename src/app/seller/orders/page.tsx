@@ -39,6 +39,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
+import { useRequireShop } from "@/hooks/useRequireShop";
 
 /* ───────────────── Types ───────────────── */
 type Order = {
@@ -65,6 +66,11 @@ type Order = {
 
 type RangeKey = "7d" | "30d" | "90d" | "all";
 type SortKey = "new" | "old" | "amount_desc" | "amount_asc";
+
+type Shop = {
+  id: string;
+  owner?: string | null;
+};
 
 const MAIN_CLASS = "px-4 pt-4 pb-24 max-w-screen-sm mx-auto";
 
@@ -380,6 +386,9 @@ function OrdersHeaderCompact({
 
 /* ───────────────── Page ───────────────── */
 export default function SellerOrdersPage() {
+  // ensure user actually has a shop (same behavior as dashboard)
+  useRequireShop();
+
   return (
     <RequireAuth>
       <OrdersInner />
@@ -391,6 +400,8 @@ function OrdersInner() {
   const [rows, setRows] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [shop, setShop] = useState<Shop | null>(null);
 
   // filters / UI state
   const [status, setStatus] = useState<"all" | Order["status"]>("all");
@@ -417,20 +428,52 @@ function OrdersInner() {
     []
   );
 
-  // load
+  // bootstrap shop
+  useEffect(() => {
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) return;
+      const { data: shopRow } = await supabase
+        .from("shops")
+        .select("*")
+        .eq("owner", uid)
+        .maybeSingle();
+      if (shopRow) setShop(shopRow as Shop);
+    })();
+  }, []);
+
+  // load orders for THIS shop only
   const load = useCallback(async () => {
+    if (!shop?.id) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from("orders")
       .select("*, products(*)")
       .order("created_at", { ascending: false });
 
-    if (!error) setRows((data as any[]) ?? []);
+    if (!error && data) {
+      const sellerOrders = (data as any[]).filter(
+        (o) => o.products?.shop_id === shop.id
+      );
+      setRows(sellerOrders as Order[]);
+    }
     setLoading(false);
-  }, []);
+  }, [shop?.id]);
 
   useEffect(() => {
+    if (!shop?.id) return;
     load();
+  }, [load, shop?.id]);
+
+  useEffect(() => {
+    if (!shop?.id) return;
+
     const ch = supabase
       .channel("orders-seller-rt-v2")
       .on(
@@ -442,7 +485,7 @@ function OrdersInner() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [load]);
+  }, [load, shop?.id]);
 
   // actions
   async function updateStatus(id: string, next: Order["status"]) {
@@ -764,11 +807,12 @@ Options: ${opts}
                         {g.title}
                       </h3>
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100">
-                        {g.orders.length} order{g.orders.length > 1 ? "s" : ""}
+                        {g.orders.length} order
+                        {g.orders.length > 1 ? "s" : ""}
                       </span>
                     </div>
                     <div className="text-xs text-ink/70 mt-0.5">
-                      {/* Total qty {g.totalQty} ·*/} MAD {g.totalAmount}
+                      MAD {g.totalAmount}
                     </div>
                   </div>
                   <ChevronDown
@@ -875,7 +919,7 @@ Options: ${opts}
               >
                 <Link href={`/seller/orders/${o.id}`} className="flex gap-3">
                   {/* Image */}
-                  <div className="w-16 h-16 rounded-md bg-white overflow-hidden mb-0  ">
+                  <div className="w-16 h-16 rounded-md bg-white overflow-hidden mb-0">
                     {img ? (
                       <img
                         src={img}

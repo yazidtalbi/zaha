@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import RequireAuth from "@/components/RequireAuth";
+import { uploadCompressedToSupabase } from "@/lib/compressAndUpload";
 
 import {
   Loader2,
@@ -17,7 +17,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// shadcn/ui
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,11 +48,11 @@ type Profile = {
   notif_marketing?: boolean | null;
   updated_at?: string | null;
   created_at?: string | null;
-  email?: string | null; // derived from auth
+  email?: string | null;
 };
 
 /* =========================
-   Utils
+   Helpers
 ========================= */
 const slugify = (s: string) =>
   s
@@ -62,7 +61,7 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
-const isEqual = (a: unknown, b: unknown) => {
+const isEqual = (a: any, b: any) => {
   try {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch {
@@ -70,49 +69,13 @@ const isEqual = (a: unknown, b: unknown) => {
   }
 };
 
-// Client-side image resize to keep uploads light
-async function resizeImage(file: File, maxSize = 1024): Promise<Blob> {
-  const img = document.createElement("img");
-  const reader = new FileReader();
-
-  const dataUrl: string = await new Promise((res, rej) => {
-    reader.onerror = () => rej("read error");
-    reader.onload = () => res(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-
-  await new Promise((res, rej) => {
-    img.onerror = () => rej("image error");
-    img.onload = () => res(null);
-    img.src = dataUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d")!;
-  const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
-  const w = Math.round(img.width * ratio);
-  const h = Math.round(img.height * ratio);
-  canvas.width = w;
-  canvas.height = h;
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const type = file.type || "image/jpeg";
-  const quality = type.includes("png") ? 0.92 : 0.85;
-
-  const blob: Blob = await new Promise((res) =>
-    canvas.toBlob((b) => res(b as Blob), type, quality)
-  );
-  return blob;
-}
-
-// Simple debounce
 function useDebouncedCallback<T extends (...args: any[]) => void>(
   fn: T,
   ms = 800
 ) {
-  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const t = useRef<NodeJS.Timeout | null>(null);
   return useCallback(
-    (...args: Parameters<T>) => {
+    (...args: any[]) => {
       if (t.current) clearTimeout(t.current);
       t.current = setTimeout(() => fn(...args), ms);
     },
@@ -141,16 +104,13 @@ function SettingsInner() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Password
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
 
-  // Username availability
   const [usernameBusy, setUsernameBusy] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
-  // Email change
   const [newEmail, setNewEmail] = useState("");
   const [emailSaving, setEmailSaving] = useState(false);
 
@@ -161,56 +121,56 @@ function SettingsInner() {
     return !isEqual(comparableCurrent, comparableInitial);
   }, [profile, initial, email]);
 
-  /* ------------ Load auth + profile ------------ */
+  /* --- Load user & profile --- */
   useEffect(() => {
     (async () => {
-      setAuthLoading(true);
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth.user;
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+
       if (!user) {
         setAuthLoading(false);
         setLoading(false);
         return;
       }
+
       setUid(user.id);
       setEmail(user.email ?? null);
       setAuthLoading(false);
 
-      setLoading(true);
-      const { data, error } = await supabase
+      const { data: p } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (error) toast.error("Failed to load profile");
+      const googleAvatar = user.user_metadata?.avatar_url || "";
 
-      const base: Profile = data
+      const base: Profile = p
         ? {
-            id: data.id,
-            full_name: data.full_name ?? "",
-            username: data.username ?? "",
-            bio: data.bio ?? "",
-            phone: data.phone ?? "",
-            city: data.city ?? "",
-            address: data.address ?? "",
-            avatar_url: data.avatar_url ?? "",
-            language: data.language ?? "en",
-            notif_orders: data.notif_orders ?? true,
-            notif_marketing: data.notif_marketing ?? false,
-            updated_at: data.updated_at ?? null,
-            created_at: data.created_at ?? null,
+            id: p.id,
+            full_name: p.full_name,
+            username: p.username,
+            bio: p.bio,
+            phone: p.phone,
+            city: p.city,
+            address: p.address,
+            avatar_url: p.avatar_url || googleAvatar,
+            language: p.language || "en",
+            notif_orders: p.notif_orders ?? true,
+            notif_marketing: p.notif_marketing ?? false,
+            updated_at: p.updated_at,
+            created_at: p.created_at,
             email: user.email ?? null,
           }
         : {
             id: user.id,
-            full_name: user.user_metadata?.full_name ?? "",
+            full_name: user.user_metadata?.full_name || "",
             username: "",
             bio: "",
             phone: "",
             city: "",
             address: "",
-            avatar_url: user.user_metadata?.avatar_url ?? "",
+            avatar_url: googleAvatar,
             language: "en",
             notif_orders: true,
             notif_marketing: false,
@@ -223,9 +183,8 @@ function SettingsInner() {
     })();
   }, []);
 
-  /* ------------ Autosave (debounced) ------------ */
+  /* --- Autosave --- */
   const debouncedSave = useDebouncedCallback(async () => {
-    if (!uid || !profile) return;
     if (!dirty) return;
     await handleSave();
   }, 1200);
@@ -233,7 +192,6 @@ function SettingsInner() {
   useEffect(() => {
     if (!profile || !initial) return;
     debouncedSave();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profile?.full_name,
     profile?.bio,
@@ -247,79 +205,59 @@ function SettingsInner() {
     profile?.username,
   ]);
 
-  /* ------------ Actions ------------ */
+  /* --- Save profile --- */
   const handleSave = useCallback(async () => {
     if (!uid || !profile) return;
     setSaving(true);
+
     try {
       const payload = {
         id: uid,
-        full_name: (profile.full_name ?? "").trim(),
-        username: (profile.username ?? "").trim() || null,
-        bio: (profile.bio ?? "").trim() || null,
-        phone: (profile.phone ?? "").trim() || null,
-        city: (profile.city ?? "").trim() || null,
-        address: (profile.address ?? "").trim() || null,
-        avatar_url: profile.avatar_url ?? null,
-        language: profile.language ?? "en",
+        full_name: profile.full_name?.trim() || "",
+        username: profile.username?.trim() || null,
+        bio: profile.bio?.trim() || null,
+        phone: profile.phone?.trim() || null,
+        city: profile.city?.trim() || null,
+        address: profile.address?.trim() || null,
+        avatar_url: profile.avatar_url || null,
+        language: profile.language || "en",
         notif_orders: !!profile.notif_orders,
         notif_marketing: !!profile.notif_marketing,
         updated_at: new Date().toISOString(),
       };
 
-      const { error, data } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .upsert(payload, { onConflict: "id" })
         .select()
         .maybeSingle();
 
-      if (error) throw error;
-
-      const merged = { ...(profile as Profile), ...(data ?? {}) };
-      setInitial(merged);
-      toast.success("Settings saved ✅");
-    } catch (e: any) {
-      toast.error("Couldn’t save settings");
+      setInitial(data as Profile);
+      toast.success("Saved");
+    } catch {
+      toast.error("Failed to save");
     } finally {
       setSaving(false);
     }
   }, [uid, profile]);
 
+  /* --- Avatar upload (SHOPS bucket) --- */
   const handleAvatarSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.files?.[0];
       if (!raw || !uid) return;
 
-      if (raw.size > 8 * 1024 * 1024) {
-        toast.error("Image too large (max 8MB)");
-        return;
-      }
       try {
-        const blob = await resizeImage(raw, 1024);
-        const extGuess =
-          raw.name.split(".").pop()?.toLowerCase() ||
-          (raw.type.includes("png") ? "png" : "jpg");
-        const key = `avatars/${uid}-${Date.now()}.${extGuess}`;
+        const url = await uploadCompressedToSupabase(raw, uid, "shops");
 
-        const { error: upErr } = await supabase.storage
-          .from("avatars")
-          .upload(key, blob, {
-            upsert: false,
-            contentType: raw.type || "image/jpeg",
-          });
-        if (upErr) throw upErr;
+        if (!url) throw new Error("Upload failed");
 
-        const { data: pub } = supabase.storage
-          .from("avatars")
-          .getPublicUrl(key);
-        const url = pub?.publicUrl;
-        if (!url) throw new Error("No public URL");
-
-        // cache-bust
         const finalUrl = `${url}?v=${Date.now()}`;
+
         setProfile((p) => (p ? { ...p, avatar_url: finalUrl } : p));
         toast.success("Avatar updated");
-      } catch {
+      } catch (err) {
+        console.error(err);
         toast.error("Avatar upload failed");
       } finally {
         if (fileRef.current) fileRef.current.value = "";
@@ -328,113 +266,90 @@ function SettingsInner() {
     [uid]
   );
 
+  /* --- Password --- */
   const handlePasswordChange = useCallback(async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    if (newPassword !== confirm) {
-      toast.error("Passwords do not match");
-      return;
-    }
+    if (!newPassword || newPassword.length < 6)
+      return toast.error("Password too short");
+
+    if (newPassword !== confirm) return toast.error("Passwords do not match");
+
     setPwSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    await supabase.auth.updateUser({ password: newPassword });
     setPwSaving(false);
-    if (error) {
-      toast.error(error.message || "Couldn’t change password");
-      return;
-    }
+
     setNewPassword("");
     setConfirm("");
-    toast.success("Password updated ✅");
+    toast.success("Password updated");
   }, [newPassword, confirm]);
 
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    router.replace("/login");
-  }, [router]);
+  /* --- Email change --- */
+  const handleEmailChange = useCallback(async () => {
+    if (!newEmail || newEmail === email)
+      return toast.message("Nothing to update");
 
-  async function checkUsernameAvailability(name: string) {
-    if (!name) {
+    setEmailSaving(true);
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    setEmailSaving(false);
+
+    if (error) return toast.error(error.message);
+
+    setEmail(newEmail);
+    setNewEmail("");
+    toast.success("Verification sent");
+  }, [newEmail, email]);
+
+  /* --- Username check --- */
+  const checkUsernameAvailability = async (u: string) => {
+    if (!u) {
       setUsernameError(null);
       return;
     }
     setUsernameBusy(true);
-    setUsernameError(null);
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("id")
-      .eq("username", name)
+      .eq("username", u)
       .limit(1);
 
     setUsernameBusy(false);
-    if (error) return; // silent
-    const taken = !!(data && data.length && data[0]?.id !== uid);
-    setUsernameError(taken ? "Username is already taken" : null);
-  }
+
+    if (data?.length && data[0].id !== uid)
+      setUsernameError("Username already taken");
+    else setUsernameError(null);
+  };
   const debouncedUsernameCheck = useDebouncedCallback(
     checkUsernameAvailability,
     600
   );
 
-  const handleEmailChange = useCallback(async () => {
-    if (!newEmail || newEmail === email) {
-      toast.message("Nothing to change");
-      return;
-    }
-    setEmailSaving(true);
-    const { error } = await supabase.auth.updateUser({ email: newEmail });
-    setEmailSaving(false);
-    if (error) {
-      toast.error(error.message || "Couldn’t update email");
-      return;
-    }
-    toast.success("Verification email sent. Please confirm to finish.");
-    setEmail(newEmail);
-    setNewEmail("");
-  }, [newEmail, email]);
+  /* --- Sign out --- */
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    router.replace("/login");
+  };
 
-  /* ------------ Render ------------ */
-  if (authLoading || loading) {
+  /* --- Render --- */
+  if (authLoading || loading)
     return (
       <main className="p-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading settings…
-        </div>
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </main>
     );
-  }
 
-  if (!profile) {
-    return (
-      <main className="p-4">
-        <p className="text-sm text-muted-foreground">No profile found.</p>
-      </main>
-    );
-  }
+  if (!profile) return <main className="p-4">No profile found.</main>;
 
   return (
     <main className="mx-auto w-full max-w-3xl p-4 pb-28 md:p-6">
       {/* Header */}
       <header className="mb-5 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Profile & Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your info, preferences, and security.
-          </p>
-        </div>
-        <div className="hidden gap-2 md:flex">
-          <Button variant="outline" onClick={signOut} aria-label="Sign out">
+        <h1 className="text-2xl font-semibold">Profile & Settings</h1>
+        <div className="hidden md:flex gap-2">
+          <Button variant="outline" onClick={signOut}>
             <LogOut className="mr-2 size-4" />
             Sign out
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving || !!usernameError}
-            aria-label="Save settings"
-          >
+          <Button onClick={handleSave} disabled={saving || !!usernameError}>
             {saving ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
@@ -445,24 +360,20 @@ function SettingsInner() {
         </div>
       </header>
 
-      {/* Profile */}
+      {/* Profile Section */}
       <section className="rounded-2xl border p-4 md:p-6">
         <h2 className="text-lg font-medium">Profile</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          This shows on your orders and messages.
-        </p>
 
         <div className="grid gap-6 md:grid-cols-[160px_1fr]">
           {/* Avatar */}
           <div className="flex flex-col items-start gap-3">
             <div className="relative size-28 overflow-hidden rounded-lg border bg-muted">
               {profile.avatar_url ? (
-                <Image
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
                   src={profile.avatar_url}
                   alt="Avatar"
-                  fill
-                  className="object-cover"
-                  sizes="112px"
+                  className="h-full w-full object-cover"
                 />
               ) : (
                 <div className="grid size-full place-items-center text-xs text-muted-foreground">
@@ -470,33 +381,30 @@ function SettingsInner() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex gap-2">
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/*"
-                className="hidden"
                 onChange={handleAvatarSelect}
+                className="hidden"
               />
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => fileRef.current?.click()}
-                aria-label="Upload avatar"
               >
-                <Upload className="mr-2 size-4" />
-                Upload
+                <Upload className="mr-2 size-4" /> Upload
               </Button>
             </div>
           </div>
 
-          {/* Fields */}
+          {/* Profile Inputs */}
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="full_name">Full name</Label>
+              <Label>Full name</Label>
               <Input
-                id="full_name"
-                placeholder="Your name"
                 value={profile.full_name ?? ""}
                 onChange={(e) =>
                   setProfile((p) =>
@@ -507,24 +415,23 @@ function SettingsInner() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="username">Username</Label>
+              <Label>Username</Label>
+
               <div className="relative">
                 <Input
-                  id="username"
-                  placeholder="e.g. yazid"
                   value={profile.username ?? ""}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    setProfile((p) => (p ? { ...p, username: value } : p));
-                    setUsernameError(null);
-                    debouncedUsernameCheck(value);
+                    const v = e.target.value;
+                    setProfile((p) => (p ? { ...p, username: v } : p));
+                    debouncedUsernameCheck(v);
                   }}
                   onBlur={(e) => {
-                    const s = slugify(e.target.value);
-                    setProfile((p) => (p ? { ...p, username: s } : p));
-                    if (s) debouncedUsernameCheck(s);
+                    const clean = slugify(e.target.value);
+                    setProfile((p) => (p ? { ...p, username: clean } : p));
+                    debouncedUsernameCheck(clean);
                   }}
                 />
+
                 {usernameBusy ? (
                   <Loader2 className="absolute right-2 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
                 ) : usernameError ? (
@@ -533,25 +440,20 @@ function SettingsInner() {
                   <Check className="absolute right-2 top-1/2 size-4 -translate-y-1/2 text-green-600" />
                 ) : null}
               </div>
-              {usernameError ? (
-                <p className="text-xs text-red-600">{usernameError}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Letters & numbers only. We’ll slug it automatically.
-                </p>
+
+              {usernameError && (
+                <p className="text-xs text-red-500">{usernameError}</p>
               )}
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="bio">Bio</Label>
+              <Label>Bio</Label>
               <Textarea
-                id="bio"
-                placeholder="A short description about you"
+                rows={4}
                 value={profile.bio ?? ""}
                 onChange={(e) =>
                   setProfile((p) => (p ? { ...p, bio: e.target.value } : p))
                 }
-                rows={4}
               />
             </div>
           </div>
@@ -560,20 +462,18 @@ function SettingsInner() {
 
       <Separator className="my-6" />
 
-      {/* Contact */}
+      {/* Contact Section */}
       <section className="rounded-2xl border p-4 md:p-6">
         <h2 className="text-lg font-medium">Contact & Address</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Used for delivery and seller contact.
-        </p>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" value={email ?? ""} readOnly />
-            <div className="mt-2 flex gap-2">
+            <Label>Email</Label>
+            <Input readOnly value={email ?? ""} />
+
+            <div className="flex gap-2 mt-2">
               <Input
-                placeholder="New email (optional)"
+                placeholder="New email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
               />
@@ -581,7 +481,6 @@ function SettingsInner() {
                 variant="secondary"
                 onClick={handleEmailChange}
                 disabled={emailSaving || !newEmail}
-                aria-label="Update email"
               >
                 {emailSaving ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -589,16 +488,11 @@ function SettingsInner() {
                 Update
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Changing email sends a verification link.
-            </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="phone">Phone</Label>
+            <Label>Phone</Label>
             <Input
-              id="phone"
-              placeholder="+212 ..."
               value={profile.phone ?? ""}
               onChange={(e) =>
                 setProfile((p) => (p ? { ...p, phone: e.target.value } : p))
@@ -607,10 +501,8 @@ function SettingsInner() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="city">City</Label>
+            <Label>City</Label>
             <Input
-              id="city"
-              placeholder="Tetouan"
               value={profile.city ?? ""}
               onChange={(e) =>
                 setProfile((p) => (p ? { ...p, city: e.target.value } : p))
@@ -619,10 +511,8 @@ function SettingsInner() {
           </div>
 
           <div className="grid gap-2 md:col-span-2">
-            <Label htmlFor="address">Address</Label>
+            <Label>Address</Label>
             <Input
-              id="address"
-              placeholder="Street, building, apartment"
               value={profile.address ?? ""}
               onChange={(e) =>
                 setProfile((p) => (p ? { ...p, address: e.target.value } : p))
@@ -637,21 +527,18 @@ function SettingsInner() {
       {/* Preferences */}
       <section className="rounded-2xl border p-4 md:p-6">
         <h2 className="text-lg font-medium">Preferences</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Language and notifications.
-        </p>
 
         <div className="grid gap-6 md:grid-cols-2">
           <div className="grid gap-2">
             <Label>Language</Label>
             <Select
               value={profile.language ?? "en"}
-              onValueChange={(val) =>
-                setProfile((p) => (p ? { ...p, language: val } : p))
+              onValueChange={(v) =>
+                setProfile((p) => (p ? { ...p, language: v } : p))
               }
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose language" />
+              <SelectTrigger>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="en">English</SelectItem>
@@ -666,7 +553,7 @@ function SettingsInner() {
               <div>
                 <p className="font-medium">Order updates</p>
                 <p className="text-sm text-muted-foreground">
-                  Get notifications about order status.
+                  Get notifications for your orders.
                 </p>
               </div>
               <Switch
@@ -681,7 +568,7 @@ function SettingsInner() {
               <div>
                 <p className="font-medium">Marketing</p>
                 <p className="text-sm text-muted-foreground">
-                  Receive promotions and news.
+                  Receive news & offers.
                 </p>
               </div>
               <Switch
@@ -700,49 +587,41 @@ function SettingsInner() {
       {/* Security */}
       <section className="rounded-2xl border p-4 md:p-6">
         <h2 className="text-lg font-medium">Security</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Change your account password.
-        </p>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="new_password">New password</Label>
+            <Label>New password</Label>
             <Input
-              id="new_password"
               type="password"
-              placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
           </div>
+
           <div className="grid gap-2">
-            <Label htmlFor="confirm_password">Confirm password</Label>
+            <Label>Confirm password</Label>
             <Input
-              id="confirm_password"
               type="password"
-              placeholder="••••••••"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="mt-4">
-          <Button
-            onClick={handlePasswordChange}
-            disabled={pwSaving || !newPassword}
-          >
-            {pwSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-            Update password
-          </Button>
-        </div>
+        <Button
+          className="mt-4"
+          onClick={handlePasswordChange}
+          disabled={pwSaving || !newPassword}
+        >
+          {pwSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+          Update password
+        </Button>
       </section>
 
-      {/* Bottom actions (mobile) */}
+      {/* Mobile actions */}
       <div className="mt-6 flex justify-end gap-2 md:hidden">
         <Button variant="outline" onClick={signOut}>
-          <LogOut className="mr-2 size-4" />
-          Sign out
+          <LogOut className="mr-2 size-4" /> Sign out
         </Button>
         <Button onClick={handleSave} disabled={saving || !!usernameError}>
           {saving ? (
@@ -754,25 +633,22 @@ function SettingsInner() {
         </Button>
       </div>
 
-      {/* Sticky Save Bar when there are unsaved changes */}
+      {/* Sticky save bar */}
       {dirty && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 p-3">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex size-2 rounded-lg bg-amber-500" />
-              You have unsaved changes
-            </div>
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center justify-between p-3">
+            <span className="text-sm">Unsaved changes</span>
+
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setProfile(initial!)}>
+              <Button
+                variant="secondary"
+                onClick={() => profile && initial && setProfile(initial)}
+              >
                 Discard
               </Button>
-              <Button onClick={handleSave} disabled={saving || !!usernameError}>
-                {saving ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 size-4" />
-                )}
-                Save changes
+
+              <Button onClick={handleSave} disabled={saving}>
+                Save
               </Button>
             </div>
           </div>
