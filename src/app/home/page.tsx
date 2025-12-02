@@ -143,23 +143,54 @@ const slides: Slide[] = [
 ========================= */
 
 // Add a timeout around any Supabase call
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const id = setTimeout(
-      () =>
-        reject(new Error("Request timed out. Please check your connection.")),
-      ms
-    );
-    promise.then(
-      (value) => {
-        clearTimeout(id);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(id);
-        reject(err);
+// Returns the promise result on success, or a safe error result on timeout
+// This prevents cache corruption by avoiding thrown exceptions
+// Always returns a Supabase-style { data, error } result
+async function withTimeout<T extends { data: any; error: any }>(
+  promise: Promise<T> | { then: (onFulfilled: (value: T) => void) => any },
+  ms: number
+): Promise<T> {
+  let timeoutFired = false;
+  let resolved = false;
+
+  // Convert thenable to Promise if needed
+  const promiseLike = Promise.resolve(promise as Promise<T>);
+
+  return new Promise<T>((resolve) => {
+    const id = setTimeout(() => {
+      if (!resolved) {
+        timeoutFired = true;
+        resolved = true;
+        // Return a safe error result instead of throwing
+        // This matches Supabase's { data, error } pattern
+        resolve({
+          data: null,
+          error: { message: "Request timed out. Please check your connection." },
+        } as T);
       }
-    );
+    }, ms);
+
+    promiseLike
+      .then((value) => {
+        if (!timeoutFired) {
+          clearTimeout(id);
+          resolved = true;
+          resolve(value);
+        }
+        // If timeout already fired, ignore the late resolution to prevent cache corruption
+      })
+      .catch((err) => {
+        if (!timeoutFired) {
+          clearTimeout(id);
+          resolved = true;
+          // Wrap unexpected errors in Supabase format for consistency
+          resolve({
+            data: null,
+            error: err instanceof Error ? err : { message: String(err) },
+          } as T);
+        }
+        // If timeout already fired, ignore the late rejection to prevent cache corruption
+      });
   });
 }
 
